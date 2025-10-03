@@ -1,0 +1,148 @@
+syntax = "proto3";
+
+package pokerchain.poker.v1;
+
+import "amino/amino.proto";
+import "cosmos/msg/v1/msg.proto";
+import "cosmos_proto/cosmos.proto";
+import "gogoproto/gogo.proto";
+import "pokerchain/poker/v1/params.proto";
+
+option go_package = "github.com/block52/pokerchain/x/poker/types";
+
+// Msg defines the Msg service.
+service Msg {
+  option (cosmos.msg.v1.service) = true;
+
+  // UpdateParams defines a (governance) operation for updating the module
+  // parameters. The authority defaults to the x/gov module account.
+  rpc UpdateParams(MsgUpdateParams) returns (MsgUpdateParamsResponse);
+
+  // CreateGame defines the CreateGame RPC.
+  rpc CreateGame(MsgCreateGame) returns (MsgCreateGameResponse);
+
+  // JoinGame defines the JoinGame RPC.
+  rpc JoinGame(MsgJoinGame) returns (MsgJoinGameResponse);
+
+  // LeaveGame defines the LeaveGame RPC.
+  rpc LeaveGame(MsgLeaveGame) returns (MsgLeaveGameResponse);
+
+  // DealCards defines the DealCards RPC.
+  rpc DealCards(MsgDealCards) returns (MsgDealCardsResponse);
+
+  // PerformAction defines the PerformAction RPC.
+  rpc PerformAction(MsgPerformAction) returns (MsgPerformActionResponse);
+
+  // Mint defines the Mint RPC.
+  rpc Mint(MsgMint) returns (MsgMintResponse);
+
+  // Burn defines the Burn RPC.
+  rpc Burn(MsgBurn) returns (MsgBurnResponse);
+}
+
+// MsgUpdateParams is the Msg/UpdateParams request type.
+message MsgUpdateParams {
+  option (cosmos.msg.v1.signer) = "authority";
+  option (amino.name) = "pokerchain/x/poker/MsgUpdateParams";
+
+  // authority is the address that controls the module (defaults to x/gov unless overwritten).
+  string authority = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+
+  // params defines the module parameters to update.
+
+  // NOTE: All parameters must be supplied.
+  Params params = 2 [
+    (gogoproto.nullable) = false,
+    (amino.dont_omitempty) = true
+  ];
+}
+
+// MsgUpdateParamsResponse defines the response structure for executing a
+// MsgUpdateParams message.
+message MsgUpdateParamsResponse {}
+
+// MsgCreateGame defines the MsgCreateGame message.
+message MsgCreateGame {
+  option (cosmos.msg.v1.signer) = "creator";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string game_id = 2;
+  uint64 min_buy_in = 3;
+  uint64 max_buy_in = 4;
+  int64 min_players = 5;
+  int64 max_players = 6;
+  uint64 small_blind = 7;
+  uint64 big_blind = 8;
+  int64 timeout = 9;
+  string game_type = 10;
+}
+
+// MsgCreateGameResponse defines the MsgCreateGameResponse message.
+message MsgCreateGameResponse {}
+
+// MsgJoinGame defines the MsgJoinGame message.
+message MsgJoinGame {
+  option (cosmos.msg.v1.signer) = "creator";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string game_id = 2;
+  uint64 seat = 3;
+  uint64 buy_in = 4;
+}
+
+// MsgJoinGameResponse defines the MsgJoinGameResponse message.
+message MsgJoinGameResponse {}
+
+// MsgLeaveGame defines the MsgLeaveGame message.
+message MsgLeaveGame {
+  option (cosmos.msg.v1.signer) = "creator";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string game_id = 2;
+}
+
+// MsgLeaveGameResponse defines the MsgLeaveGameResponse message.
+message MsgLeaveGameResponse {}
+
+// MsgDealCards defines the MsgDealCards message.
+message MsgDealCards {
+  option (cosmos.msg.v1.signer) = "creator";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string game_id = 2;
+}
+
+// MsgDealCardsResponse defines the MsgDealCardsResponse message.
+message MsgDealCardsResponse {}
+
+// MsgPerformAction defines the MsgPerformAction message.
+message MsgPerformAction {
+  option (cosmos.msg.v1.signer) = "creator";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string game_id = 2;
+  string action = 3;
+  uint64 amount = 4;
+}
+
+// MsgPerformActionResponse defines the MsgPerformActionResponse message.
+message MsgPerformActionResponse {}
+
+// MsgMint defines the MsgMint message.
+message MsgMint {
+  option (cosmos.msg.v1.signer) = "creator";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string recipient = 2;
+  uint64 amount = 3;
+  string eth_tx_hash = 4;
+  uint64 nonce = 5;
+}
+
+// MsgMintResponse defines the MsgMintResponse message.
+message MsgMintResponse {}
+
+// MsgBurn defines the MsgBurn message.
+message MsgBurn {
+  option (cosmos.msg.v1.signer) = "creator";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 amount = 2;
+  string eth_recipient = 3;
+}
+
+// MsgBurnResponse defines the MsgBurnResponse message.
+message MsgBurnResponse {}

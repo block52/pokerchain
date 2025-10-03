@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package pokerchain.poker.v1;
+
+import "amino/amino.proto";
+import "cosmos/base/query/v1beta1/pagination.proto";
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+import "pokerchain/poker/v1/params.proto";
+
+option go_package = "github.com/block52/pokerchain/x/poker/types";
+
+// Query defines the gRPC querier service.
+service Query {
+  // Parameters queries the parameters of the module.
+  rpc Params(QueryParamsRequest) returns (QueryParamsResponse) {
+    option (google.api.http).get = "/block52/pokerchain/poker/v1/params";
+  }
+
+  // Game Queries a list of Game items.
+  rpc Game(QueryGameRequest) returns (QueryGameResponse) {
+    option (google.api.http).get = "/block52/pokerchain/poker/v1/game/{game_id}";
+  }
+
+  // ListGames Queries a list of ListGames items.
+  rpc ListGames(QueryListGamesRequest) returns (QueryListGamesResponse) {
+    option (google.api.http).get = "/block52/pokerchain/poker/v1/list_games";
+  }
+
+  // PlayerGames Queries a list of PlayerGames items.
+  rpc PlayerGames(QueryPlayerGamesRequest) returns (QueryPlayerGamesResponse) {
+    option (google.api.http).get = "/block52/pokerchain/poker/v1/player_games/{player_address}";
+  }
+
+  // LegalActions Queries a list of LegalActions items.
+  rpc LegalActions(QueryLegalActionsRequest) returns (QueryLegalActionsResponse) {
+    option (google.api.http).get = "/block52/pokerchain/poker/v1/legal_actions/{game_id}/{player_address}";
+  }
+}
+
+// QueryParamsRequest is request type for the Query/Params RPC method.
+message QueryParamsRequest {}
+
+// QueryParamsResponse is response type for the Query/Params RPC method.
+message QueryParamsResponse {
+  // params holds all the parameters of this module.
+  Params params = 1 [
+    (gogoproto.nullable) = false,
+    (amino.dont_omitempty) = true
+  ];
+}
+
+// QueryGameRequest defines the QueryGameRequest message.
+message QueryGameRequest {
+  string game_id = 1;
+}
+
+// QueryGameResponse defines the QueryGameResponse message.
+message QueryGameResponse {
+  string game = 1;
+}
+
+// QueryListGamesRequest defines the QueryListGamesRequest message.
+message QueryListGamesRequest {}
+
+// QueryListGamesResponse defines the QueryListGamesResponse message.
+message QueryListGamesResponse {
+  string games = 1;
+}
+
+// QueryPlayerGamesRequest defines the QueryPlayerGamesRequest message.
+message QueryPlayerGamesRequest {
+  string player_address = 1;
+}
+
+// QueryPlayerGamesResponse defines the QueryPlayerGamesResponse message.
+message QueryPlayerGamesResponse {
+  string games = 1;
+}
+
+// QueryLegalActionsRequest defines the QueryLegalActionsRequest message.
+message QueryLegalActionsRequest {
+  string game_id = 1;
+  string player_address = 2;
+}
+
+// QueryLegalActionsResponse defines the QueryLegalActionsResponse message.
+message QueryLegalActionsResponse {
+  string actions = 1;
+}

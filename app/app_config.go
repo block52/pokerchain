@@ -36,6 +36,8 @@ import (
 	_ "cosmossdk.io/x/nft/module" // import for side-effects
 	_ "cosmossdk.io/x/upgrade"    // import for side-effects
 	upgradetypes "cosmossdk.io/x/upgrade/types"
+	_ "github.com/block52/pokerchain/x/poker/module"
+	pokermoduletypes "github.com/block52/pokerchain/x/poker/types"
 	_ "github.com/block52/pokerchain/x/pokerchain/module"
 	pokerchainmoduletypes "github.com/block52/pokerchain/x/pokerchain/types"
 	"github.com/cosmos/cosmos-sdk/runtime"
@@ -83,6 +85,7 @@ var (
 		{Account: nft.ModuleName},
 		{Account: ibctransfertypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner}},
 		{Account: icatypes.ModuleName},
+		{Account: pokermoduletypes.ModuleName, Permissions: []string{authtypes.Minter, authtypes.Burner, authtypes.Staking}},
 		// this line is used by starport scaffolding # stargate/app/maccPerms
 	}
 
@@ -127,6 +130,7 @@ var (
 						ibcexported.ModuleName,
 						// chain modules
 						pokerchainmoduletypes.ModuleName,
+						pokermoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/beginBlockers
 					},
 					EndBlockers: []string{
@@ -136,6 +140,7 @@ var (
 						group.ModuleName,
 						// chain modules
 						pokerchainmoduletypes.ModuleName,
+						pokermoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/endBlockers
 					},
 					// The following is mostly only needed when ModuleName != StoreKey name.
@@ -173,6 +178,7 @@ var (
 						icatypes.ModuleName,
 						// chain modules
 						pokerchainmoduletypes.ModuleName,
+						pokermoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/initGenesis
 					},
 				}),
@@ -272,6 +278,10 @@ var (
 			{
 				Name:   pokerchainmoduletypes.ModuleName,
 				Config: appconfig.WrapAny(&pokerchainmoduletypes.Module{}),
+			},
+			{
+				Name:   pokermoduletypes.ModuleName,
+				Config: appconfig.WrapAny(&pokermoduletypes.Module{}),
 			},
 			// this line is used by starport scaffolding # stargate/app/moduleConfig
 		},

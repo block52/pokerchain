@@ -46,6 +46,7 @@ import (
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
 
 	"github.com/block52/pokerchain/docs"
+	pokermodulekeeper "github.com/block52/pokerchain/x/poker/keeper"
 	pokerchainmodulekeeper "github.com/block52/pokerchain/x/pokerchain/keeper"
 )
 
@@ -99,6 +100,7 @@ type App struct {
 	TransferKeeper      ibctransferkeeper.Keeper
 
 	PokerchainKeeper pokerchainmodulekeeper.Keeper
+	PokerKeeper      pokermodulekeeper.Keeper
 	// this line is used by starport scaffolding # stargate/app/keeperDeclaration
 
 	// simulation manager
@@ -179,6 +181,7 @@ func New(
 		&app.CircuitBreakerKeeper,
 		&app.ParamsKeeper,
 		&app.PokerchainKeeper,
+		&app.PokerKeeper,
 	); err != nil {
 		panic(err)
 	}

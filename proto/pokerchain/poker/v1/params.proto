@@ -1,0 +1,13 @@
+syntax = "proto3";
+package pokerchain.poker.v1;
+
+import "amino/amino.proto";
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/block52/pokerchain/x/poker/types";
+
+// Params defines the parameters for the module.
+message Params {
+  option (amino.name) = "pokerchain/x/poker/Params";
+  option (gogoproto.equal) = true;
+}
