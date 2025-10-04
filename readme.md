@@ -39,12 +39,64 @@ git push origin v0.1
 After a draft release is created, make your final changes from the release page and publish it.
 
 ### Install
+
+#### Option 1: Install from Release (Recommended)
 To install the latest version of your blockchain node's binary, execute the following command on your machine:
 
-```
+```bash
 curl https://get.ignite.com/block52/pokerchain@latest! | sudo bash
 ```
+
+Or install a specific version:
+```bash
+curl https://get.ignite.com/block52/pokerchain@v0.1.0! | sudo bash
+```
+
+#### Option 2: Install from Source
+If the above doesn't work or you want to build from source:
+
+```bash
+git clone https://github.com/block52/pokerchain.git
+cd pokerchain
+make install
+```
+
+#### Option 3: Quick Install Script
+For remote nodes, you can use the provided installation script:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/block52/pokerchain/main/install-from-source.sh | bash
+```
+
 `block52/pokerchain` should match the `username` and `repo_name` of the Github repository to which the source code was pushed. Learn more about [the install process](https://github.com/allinbits/starport-installer).
+
+## Troubleshooting
+
+### Installation Issues
+
+If you encounter "not found" errors with the curl installer:
+
+1. **Wait for Release Processing**: After tagging a new version, GitHub Actions needs time to build and publish the release.
+
+2. **Use Source Installation**: 
+   ```bash
+   git clone https://github.com/block52/pokerchain.git
+   cd pokerchain
+   make install
+   ```
+
+3. **Manual Binary Copy**: If you have the binary on another machine:
+   ```bash
+   # Use the provided script
+   ./install-binary.sh <remote-host> [remote-user]
+   ```
+
+### Network Configuration
+
+For multi-node setups, ensure your nodes can communicate:
+- Configure proper firewall rules
+- Use the provided `second-node.sh` script for node setup
+- Verify genesis configuration matches across nodes
 
 ## Learn more
 
