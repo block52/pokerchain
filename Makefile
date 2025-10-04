@@ -57,7 +57,14 @@ install:
 	@echo "--> installing $(APPNAME)d"
 	@go install $(BUILD_FLAGS) -mod=readonly ./cmd/$(APPNAME)d
 
-.PHONY: all install
+clean:
+	@echo "--> cleaning build cache and binaries"
+	@go clean -cache
+	@go clean -modcache 2>/dev/null || true
+	@rm -f $(shell go env GOPATH)/bin/$(APPNAME)d 2>/dev/null || true
+	@echo "Build cache and binaries cleaned"
+
+.PHONY: all install clean
 
 ##################
 ###  Protobuf  ###

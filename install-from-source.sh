@@ -16,7 +16,7 @@ fi
 
 # Check Go version
 GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
-REQUIRED_VERSION="1.21"
+REQUIRED_VERSION="1.23"
 
 if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$GO_VERSION" | sort -V | head -n1)" != "$REQUIRED_VERSION" ]; then
     echo "Error: Go version $REQUIRED_VERSION or higher is required. Found: $GO_VERSION"
@@ -30,7 +30,7 @@ if [ -d "$REPO_DIR" ]; then
 fi
 
 echo "Cloning repository..."
-git clone https://github.com/block52/pokerchain.git "$REPO_DIR"
+git clone git://github.com/block52/pokerchain.git "$REPO_DIR"
 cd "$REPO_DIR"
 
 # Checkout the latest tag
