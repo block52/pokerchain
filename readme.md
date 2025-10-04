@@ -13,6 +13,11 @@ ignite chain serve
 
 Your blockchain in development can be configured with `config.yml`. To learn more, see the [Ignite CLI docs](https://docs.ignite.com).
 
+Chain ID:
+```text
+c4def329d68084abf24c63a1a2bb2055d9935d27
+```
+
 ### Web Frontend
 
 Additionally, Ignite CLI offers a frontend scaffolding feature (based on Vue) to help you quickly build a web frontend for your blockchain:
