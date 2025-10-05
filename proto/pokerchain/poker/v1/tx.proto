@@ -6,6 +6,7 @@ import "amino/amino.proto";
 import "cosmos/msg/v1/msg.proto";
 import "cosmos_proto/cosmos.proto";
 import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
 import "pokerchain/poker/v1/params.proto";
 
 option go_package = "github.com/block52/pokerchain/x/poker/types";
@@ -16,28 +17,52 @@ service Msg {
 
   // UpdateParams defines a (governance) operation for updating the module
   // parameters. The authority defaults to the x/gov module account.
-  rpc UpdateParams(MsgUpdateParams) returns (MsgUpdateParamsResponse);
+  rpc UpdateParams(MsgUpdateParams) returns (MsgUpdateParamsResponse) {
+    option (google.api.http).post = "/block52/pokerchain/poker/v1/update_params";
+    option (google.api.http).body = "*";
+  }
 
   // CreateGame defines the CreateGame RPC.
-  rpc CreateGame(MsgCreateGame) returns (MsgCreateGameResponse);
+  rpc CreateGame(MsgCreateGame) returns (MsgCreateGameResponse) {
+    option (google.api.http).post = "/block52/pokerchain/poker/v1/create_game";
+    option (google.api.http).body = "*";
+  }
 
   // JoinGame defines the JoinGame RPC.
-  rpc JoinGame(MsgJoinGame) returns (MsgJoinGameResponse);
+  rpc JoinGame(MsgJoinGame) returns (MsgJoinGameResponse) {
+    option (google.api.http).post = "/block52/pokerchain/poker/v1/join_game";
+    option (google.api.http).body = "*";
+  }
 
   // LeaveGame defines the LeaveGame RPC.
-  rpc LeaveGame(MsgLeaveGame) returns (MsgLeaveGameResponse);
+  rpc LeaveGame(MsgLeaveGame) returns (MsgLeaveGameResponse) {
+    option (google.api.http).post = "/block52/pokerchain/poker/v1/leave_game";
+    option (google.api.http).body = "*";
+  }
 
   // DealCards defines the DealCards RPC.
-  rpc DealCards(MsgDealCards) returns (MsgDealCardsResponse);
+  rpc DealCards(MsgDealCards) returns (MsgDealCardsResponse) {
+    option (google.api.http).post = "/block52/pokerchain/poker/v1/deal_cards";
+    option (google.api.http).body = "*";
+  }
 
   // PerformAction defines the PerformAction RPC.
-  rpc PerformAction(MsgPerformAction) returns (MsgPerformActionResponse);
+  rpc PerformAction(MsgPerformAction) returns (MsgPerformActionResponse) {
+    option (google.api.http).post = "/block52/pokerchain/poker/v1/perform_action";
+    option (google.api.http).body = "*";
+  }
 
   // Mint defines the Mint RPC.
-  rpc Mint(MsgMint) returns (MsgMintResponse);
+  rpc Mint(MsgMint) returns (MsgMintResponse) {
+    option (google.api.http).post = "/block52/pokerchain/poker/v1/mint";
+    option (google.api.http).body = "*";
+  }
 
   // Burn defines the Burn RPC.
-  rpc Burn(MsgBurn) returns (MsgBurnResponse);
+  rpc Burn(MsgBurn) returns (MsgBurnResponse) {
+    option (google.api.http).post = "/block52/pokerchain/poker/v1/burn";
+    option (google.api.http).body = "*";
+  }
 }
 
 // MsgUpdateParams is the Msg/UpdateParams request type.
