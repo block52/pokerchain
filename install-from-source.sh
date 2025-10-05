@@ -23,6 +23,26 @@ if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$GO_VERSION" | sort -V | head -n1)" !
     exit 1
 fi
 
+# Check if make is installed
+if ! command -v make &> /dev/null; then
+    echo "Error: make is not installed. Please install make first."
+    echo "On Ubuntu/Debian: sudo apt update && sudo apt install build-essential"
+    echo "On CentOS/RHEL: sudo yum groupinstall 'Development Tools'"
+    echo "On Fedora: sudo dnf groupinstall 'Development Tools'"
+    echo "On macOS: xcode-select --install"
+    exit 1
+fi
+
+# Check if git is installed
+if ! command -v git &> /dev/null; then
+    echo "Error: git is not installed. Please install git first."
+    echo "On Ubuntu/Debian: sudo apt update && sudo apt install git"
+    echo "On CentOS/RHEL: sudo yum install git"
+    echo "On Fedora: sudo dnf install git"
+    echo "On macOS: git is included with Xcode Command Line Tools"
+    exit 1
+fi
+
 # Clone repository
 REPO_DIR="/tmp/pokerchain-install"
 if [ -d "$REPO_DIR" ]; then
