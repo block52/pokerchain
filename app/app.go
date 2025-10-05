@@ -47,7 +47,6 @@ import (
 
 	"github.com/block52/pokerchain/docs"
 	pokermodulekeeper "github.com/block52/pokerchain/x/poker/keeper"
-	pokerchainmodulekeeper "github.com/block52/pokerchain/x/pokerchain/keeper"
 )
 
 const (
@@ -99,8 +98,7 @@ type App struct {
 	ICAHostKeeper       icahostkeeper.Keeper
 	TransferKeeper      ibctransferkeeper.Keeper
 
-	PokerchainKeeper pokerchainmodulekeeper.Keeper
-	PokerKeeper      pokermodulekeeper.Keeper
+	PokerKeeper pokermodulekeeper.Keeper
 	// this line is used by starport scaffolding # stargate/app/keeperDeclaration
 
 	// simulation manager
@@ -180,7 +178,6 @@ func New(
 		&app.ConsensusParamsKeeper,
 		&app.CircuitBreakerKeeper,
 		&app.ParamsKeeper,
-		&app.PokerchainKeeper,
 		&app.PokerKeeper,
 	); err != nil {
 		panic(err)
