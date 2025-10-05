@@ -23,6 +23,8 @@ type Keeper struct {
 	Params collections.Item[types.Params]
 	// ProcessedEthTxs tracks processed Ethereum transaction hashes to prevent double minting
 	ProcessedEthTxs collections.KeySet[string]
+	// Games stores all poker games
+	Games collections.Map[string, types.Game]
 
 	bankKeeper    types.BankKeeper
 	stakingKeeper types.StakingKeeper
@@ -53,6 +55,7 @@ func NewKeeper(
 		stakingKeeper:   stakingKeeper,
 		Params:          collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 		ProcessedEthTxs: collections.NewKeySet(sb, types.ProcessedEthTxsKey, "processed_eth_txs", collections.StringKey),
+		Games:           collections.NewMap(sb, types.GamesKey, "games", collections.StringKey, codec.CollValue[types.Game](cdc)),
 	}
 
 	schema, err := sb.Build()
