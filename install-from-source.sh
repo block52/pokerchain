@@ -30,7 +30,7 @@ if [ -d "$REPO_DIR" ]; then
 fi
 
 echo "Cloning repository..."
-git clone git://github.com/block52/pokerchain.git "$REPO_DIR"
+git clone git@github.com:block52/pokerchain.git "$REPO_DIR"
 cd "$REPO_DIR"
 
 # Checkout the latest tag
