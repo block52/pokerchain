@@ -8,5 +8,8 @@ import (
 
 // x/poker module sentinel errors
 var (
-	ErrInvalidSigner = errors.Register(ModuleName, 1100, "expected gov account as only signer for proposal message")
+	ErrInvalidSigner      = errors.Register(ModuleName, 1100, "expected gov account as only signer for proposal message")
+	ErrTxAlreadyProcessed = errors.Register(ModuleName, 1101, "ethereum transaction already processed")
+	ErrInvalidAmount      = errors.Register(ModuleName, 1102, "invalid mint amount")
+	ErrInvalidRecipient   = errors.Register(ModuleName, 1103, "invalid recipient address")
 )
