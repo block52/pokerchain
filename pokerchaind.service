@@ -1,0 +1,32 @@
+[Unit]
+Description=Pokerchain Validator Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+ExecStart=/usr/local/bin/pokerchaind start --home /root/.pokerchain
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pokerchaind
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/root/.pokerchain
+
+# Environment
+Environment=DAEMON_NAME=pokerchaind
+Environment=DAEMON_HOME=/root/.pokerchain
+Environment=DAEMON_RESTART_AFTER_UPGRADE=true
+
+[Install]
+WantedBy=multi-user.target
