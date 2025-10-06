@@ -65,16 +65,21 @@ func (bs *BridgeService) Start(ctx context.Context) {
 	ticker := time.NewTicker(bs.pollingInterval)
 	defer ticker.Stop()
 
-	bs.logger.Info("Starting Ethereum bridge service", "contract", bs.depositContract.Hex())
+	bs.logger.Info("🌉 Bridge Service Starting",
+		"contract", bs.depositContract.Hex(),
+		"usdc", bs.usdcContract.Hex(),
+		"polling_interval", bs.pollingInterval.String(),
+	)
 
 	for {
 		select {
 		case <-ctx.Done():
-			bs.logger.Info("Bridge service stopped")
+			bs.logger.Info("🌉 Bridge service stopped")
 			return
 		case <-ticker.C:
+			bs.logger.Debug("🔍 Checking for new deposits...")
 			if err := bs.processNewDeposits(ctx); err != nil {
-				bs.logger.Error("Error processing deposits", "error", err)
+				bs.logger.Error("❌ Error processing deposits", "error", err)
 			}
 		}
 	}
@@ -91,6 +96,10 @@ func (bs *BridgeService) processNewDeposits(ctx context.Context) error {
 	// If this is the first run, start from recent blocks
 	if bs.lastProcessedBlock == 0 {
 		bs.lastProcessedBlock = latestBlock - 10 // Start from 10 blocks ago
+		bs.logger.Info("📊 Starting from recent blocks",
+			"starting_block", bs.lastProcessedBlock,
+			"latest_block", latestBlock,
+		)
 	}
 
 	// Query for deposit events
@@ -108,10 +117,15 @@ func (bs *BridgeService) processNewDeposits(ctx context.Context) error {
 		return fmt.Errorf("failed to filter logs: %w", err)
 	}
 
+	if len(logs) > 0 {
+		bs.logger.Info("📋 Found deposit events", "count", len(logs))
+	}
+
 	// Process each deposit event
 	for _, vLog := range logs {
+		bs.logger.Info("🔍 Processing deposit event", "txHash", vLog.TxHash.Hex())
 		if err := bs.processDepositEvent(ctx, vLog); err != nil {
-			bs.logger.Error("Failed to process deposit event", "error", err, "txHash", vLog.TxHash.Hex())
+			bs.logger.Error("❌ Failed to process deposit event", "error", err, "txHash", vLog.TxHash.Hex())
 		}
 	}
 
@@ -205,7 +219,7 @@ func (bs *BridgeService) executeMint(ctx context.Context, event DepositEvent) er
 		return fmt.Errorf("failed to mark transaction as processed: %w", err)
 	}
 
-	bs.logger.Info("Successfully bridged USDC",
+	bs.logger.Info("✅ Successfully bridged USDC",
 		"recipient", event.Recipient,
 		"amount", amountMicroUSDC,
 		"txHash", event.TxHash,

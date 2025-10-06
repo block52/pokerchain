@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"io"
 
 	clienthelpers "cosmossdk.io/client/v2/helpers"
@@ -220,7 +221,89 @@ func New(
 		panic(err)
 	}
 
+	// Initialize and start the Ethereum bridge service
+	bridgeConfig := loadBridgeConfig(appOpts)
+	logger.Info("Bridge config loaded",
+		"enabled", bridgeConfig.Enabled,
+		"rpc_url", bridgeConfig.EthereumRPCURL,
+		"deposit_contract", bridgeConfig.DepositContractAddress,
+	)
+
+	if bridgeConfig.Enabled {
+		logger.Info("🌉 Initializing Ethereum Bridge Service",
+			"rpc_url", bridgeConfig.EthereumRPCURL,
+			"deposit_contract", bridgeConfig.DepositContractAddress,
+			"usdc_contract", bridgeConfig.USDCContractAddress,
+			"starting_block", bridgeConfig.StartingBlock,
+		)
+
+		bridgeService, err := pokermodulekeeper.NewBridgeService(
+			&app.PokerKeeper,
+			bridgeConfig.EthereumRPCURL,
+			bridgeConfig.DepositContractAddress,
+			bridgeConfig.USDCContractAddress,
+			logger.With("module", "bridge"),
+		)
+		if err != nil {
+			logger.Error("❌ Failed to create bridge service", "error", err)
+		} else {
+			// Set starting block if configured
+			if bridgeConfig.StartingBlock > 0 {
+				bridgeService.SetLastProcessedBlock(bridgeConfig.StartingBlock - 1)
+			}
+
+			// Start bridge service in background
+			go bridgeService.Start(context.Background())
+			logger.Info("✅ Bridge service started successfully")
+		}
+	} else {
+		logger.Info("⏸️  Bridge service disabled in config")
+	}
+
 	return app
+}
+
+// loadBridgeConfig loads bridge configuration from app options
+func loadBridgeConfig(appOpts servertypes.AppOptions) BridgeConfig {
+	bridgeConfig := DefaultBridgeConfig()
+
+	// Load from app config if available
+	if enabled := appOpts.Get("bridge.enabled"); enabled != nil {
+		if val, ok := enabled.(bool); ok {
+			bridgeConfig.Enabled = val
+		}
+	}
+	if rpcURL := appOpts.Get("bridge.ethereum_rpc_url"); rpcURL != nil {
+		if val, ok := rpcURL.(string); ok {
+			bridgeConfig.EthereumRPCURL = val
+		}
+	}
+	if depositAddr := appOpts.Get("bridge.deposit_contract_address"); depositAddr != nil {
+		if val, ok := depositAddr.(string); ok {
+			bridgeConfig.DepositContractAddress = val
+		}
+	}
+	if usdcAddr := appOpts.Get("bridge.usdc_contract_address"); usdcAddr != nil {
+		if val, ok := usdcAddr.(string); ok {
+			bridgeConfig.USDCContractAddress = val
+		}
+	}
+	if interval := appOpts.Get("bridge.polling_interval_seconds"); interval != nil {
+		if val, ok := interval.(int64); ok {
+			bridgeConfig.PollingIntervalSeconds = int(val)
+		} else if val, ok := interval.(float64); ok {
+			bridgeConfig.PollingIntervalSeconds = int(val)
+		}
+	}
+	if startBlock := appOpts.Get("bridge.starting_block"); startBlock != nil {
+		if val, ok := startBlock.(int64); ok {
+			bridgeConfig.StartingBlock = uint64(val)
+		} else if val, ok := startBlock.(float64); ok {
+			bridgeConfig.StartingBlock = uint64(val)
+		}
+	}
+
+	return bridgeConfig
 }
 
 // GetSubspace returns a param subspace for a given module name.
