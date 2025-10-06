@@ -29,6 +29,11 @@ else
     exit 1
 fi
 
+# Fix minimum gas prices in app.toml
+echo "Configuring minimum gas prices..."
+sed -i 's/minimum-gas-prices = ""/minimum-gas-prices = "0stake"/' "$NODE_HOME/config/app.toml"
+echo "Minimum gas prices set to '0stake'"
+
 # Configure node settings
 echo "Configuring node settings..."
 
