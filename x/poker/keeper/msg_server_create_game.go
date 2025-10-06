@@ -68,7 +68,6 @@ func (k msgServer) CreateGame(ctx context.Context, msg *types.MsgCreateGame) (*t
 		BigBlind:   msg.BigBlind,
 		Timeout:    msg.Timeout,
 		GameType:   msg.GameType,
-		Status:     types.GameStatusWaiting,
 		Players:    []string{}, // Empty initially, players join separately
 		CreatedAt:  now,
 		UpdatedAt:  now,
