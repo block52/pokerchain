@@ -78,6 +78,45 @@ func (k msgServer) CreateGame(ctx context.Context, msg *types.MsgCreateGame) (*t
 		return nil, errorsmod.Wrap(err, "failed to store game")
 	}
 
+	// Create and store default game state for frontend compatibility
+	minBuyInStr := fmt.Sprintf("%d", msg.MinBuyIn)
+	maxBuyInStr := fmt.Sprintf("%d", msg.MaxBuyIn)
+	smallBlindStr := fmt.Sprintf("%d", msg.SmallBlind)
+	bigBlindStr := fmt.Sprintf("%d", msg.BigBlind)
+	minPlayersInt := int(msg.MinPlayers)
+	maxPlayersInt := int(msg.MaxPlayers)
+	gameType := types.GameTypeTexasHoldem
+
+	defaultGameState := types.TexasHoldemStateDTO{
+		Type:        types.GameTypeTexasHoldem,
+		Address:     gameId,
+		HandNumber:  1,
+		Round:       types.RoundAnte,
+		ActionCount: 0,
+		GameOptions: types.GameOptionsDTO{
+			MinBuyIn:   &minBuyInStr,
+			MaxBuyIn:   &maxBuyInStr,
+			SmallBlind: &smallBlindStr,
+			BigBlind:   &bigBlindStr,
+			MinPlayers: &minPlayersInt,
+			MaxPlayers: &maxPlayersInt,
+			Type:       &gameType,
+		},
+		Players:         []types.PlayerDTO{},
+		CommunityCards:  []string{},
+		Deck:            "",
+		Pots:            []string{},
+		NextToAct:       0,
+		PreviousActions: []types.ActionDTO{},
+		Winners:         []types.WinnerDTO{},
+		Results:         []types.ResultDTO{},
+		Signature:       "",
+	}
+
+	if err := k.GameStates.Set(ctx, gameId, defaultGameState); err != nil {
+		return nil, errorsmod.Wrap(err, "failed to store game state")
+	}
+
 	// Emit events
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	sdkCtx.EventManager().EmitEvents(sdk.Events{

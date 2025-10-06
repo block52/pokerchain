@@ -44,3 +44,67 @@ func TestMsgCreateGame(t *testing.T) {
 		})
 	}
 }
+
+func TestGameStateStorage(t *testing.T) {
+	f := initFixture(t)
+
+	// Test that the GameStates collection is properly configured
+	gameId := "test_game_123"
+
+	// Create string pointers for the test
+	minBuyIn := "1000"
+	maxBuyIn := "10000"
+	smallBlind := "50"
+	bigBlind := "100"
+	minPlayers := 2
+	maxPlayers := 6
+	gameType := types.GameTypeTexasHoldem
+
+	// Create a sample game state
+	gameState := types.TexasHoldemStateDTO{
+		Type:        types.GameTypeTexasHoldem,
+		Address:     gameId,
+		HandNumber:  1,
+		Round:       types.RoundAnte,
+		ActionCount: 0,
+		GameOptions: types.GameOptionsDTO{
+			MinBuyIn:   &minBuyIn,
+			MaxBuyIn:   &maxBuyIn,
+			SmallBlind: &smallBlind,
+			BigBlind:   &bigBlind,
+			MinPlayers: &minPlayers,
+			MaxPlayers: &maxPlayers,
+			Type:       &gameType,
+		},
+		Players:         []types.PlayerDTO{},
+		CommunityCards:  []string{},
+		Deck:            "",
+		Pots:            []string{},
+		NextToAct:       0,
+		PreviousActions: []types.ActionDTO{},
+		Winners:         []types.WinnerDTO{},
+		Results:         []types.ResultDTO{},
+		Signature:       "",
+	}
+
+	// Store the game state
+	err := f.keeper.GameStates.Set(f.ctx, gameId, gameState)
+	require.NoError(t, err)
+
+	// Retrieve the game state
+	retrievedState, err := f.keeper.GameStates.Get(f.ctx, gameId)
+	require.NoError(t, err)
+
+	// Verify the stored data matches
+	require.Equal(t, gameState.Type, retrievedState.Type)
+	require.Equal(t, gameState.Address, retrievedState.Address)
+	require.Equal(t, gameState.HandNumber, retrievedState.HandNumber)
+	require.Equal(t, gameState.Round, retrievedState.Round)
+	require.Equal(t, gameState.ActionCount, retrievedState.ActionCount)
+	require.Equal(t, gameState.GameOptions.MinBuyIn, retrievedState.GameOptions.MinBuyIn)
+	require.Equal(t, gameState.GameOptions.MaxBuyIn, retrievedState.GameOptions.MaxBuyIn)
+	require.Equal(t, gameState.GameOptions.SmallBlind, retrievedState.GameOptions.SmallBlind)
+	require.Equal(t, gameState.GameOptions.BigBlind, retrievedState.GameOptions.BigBlind)
+	require.Equal(t, gameState.GameOptions.MinPlayers, retrievedState.GameOptions.MinPlayers)
+	require.Equal(t, gameState.GameOptions.MaxPlayers, retrievedState.GameOptions.MaxPlayers)
+}

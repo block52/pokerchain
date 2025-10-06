@@ -25,6 +25,8 @@ type Keeper struct {
 	ProcessedEthTxs collections.KeySet[string]
 	// Games stores all poker games
 	Games collections.Map[string, types.Game]
+	// GameStates stores game state data for frontend compatibility
+	GameStates collections.Map[string, types.TexasHoldemStateDTO]
 
 	bankKeeper    types.BankKeeper
 	stakingKeeper types.StakingKeeper
@@ -56,6 +58,7 @@ func NewKeeper(
 		Params:          collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 		ProcessedEthTxs: collections.NewKeySet(sb, types.ProcessedEthTxsKey, "processed_eth_txs", collections.StringKey),
 		Games:           collections.NewMap(sb, types.GamesKey, "games", collections.StringKey, codec.CollValue[types.Game](cdc)),
+		GameStates:      collections.NewMap(sb, types.GameStatesKey, "game_states", collections.StringKey, codec.CollValue[types.TexasHoldemStateDTO](cdc)),
 	}
 
 	schema, err := sb.Build()
