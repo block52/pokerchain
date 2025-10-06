@@ -38,8 +38,6 @@ import (
 	upgradetypes "cosmossdk.io/x/upgrade/types"
 	_ "github.com/block52/pokerchain/x/poker/module"
 	pokermoduletypes "github.com/block52/pokerchain/x/poker/types"
-	_ "github.com/block52/pokerchain/x/pokerchain/module"
-	pokerchainmoduletypes "github.com/block52/pokerchain/x/pokerchain/types"
 	"github.com/cosmos/cosmos-sdk/runtime"
 	_ "github.com/cosmos/cosmos-sdk/x/auth/tx/config" // import for side-effects
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -129,7 +127,6 @@ var (
 						// ibc modules
 						ibcexported.ModuleName,
 						// chain modules
-						pokerchainmoduletypes.ModuleName,
 						pokermoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/beginBlockers
 					},
@@ -139,7 +136,6 @@ var (
 						feegrant.ModuleName,
 						group.ModuleName,
 						// chain modules
-						pokerchainmoduletypes.ModuleName,
 						pokermoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/endBlockers
 					},
@@ -177,7 +173,6 @@ var (
 						ibctransfertypes.ModuleName,
 						icatypes.ModuleName,
 						// chain modules
-						pokerchainmoduletypes.ModuleName,
 						pokermoduletypes.ModuleName,
 						// this line is used by starport scaffolding # stargate/app/initGenesis
 					},
@@ -274,10 +269,6 @@ var (
 			{
 				Name:   epochstypes.ModuleName,
 				Config: appconfig.WrapAny(&epochsmodulev1.Module{}),
-			},
-			{
-				Name:   pokerchainmoduletypes.ModuleName,
-				Config: appconfig.WrapAny(&pokerchainmoduletypes.Module{}),
 			},
 			{
 				Name:   pokermoduletypes.ModuleName,

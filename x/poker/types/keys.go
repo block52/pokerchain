@@ -17,3 +17,6 @@ const (
 
 // ParamsKey is the prefix to retrieve all Params
 var ParamsKey = collections.NewPrefix("p_poker")
+
+// ProcessedEthTxsKey is the prefix to store processed Ethereum transaction hashes
+var ProcessedEthTxsKey = collections.NewPrefix("processed_eth_txs")
