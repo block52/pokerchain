@@ -20,6 +20,7 @@ const (
 	GameTypeTexasHoldem GameType = "texas-holdem"
 	GameTypeOmaha       GameType = "omaha"
 	GameTypeSevenCard   GameType = "seven-card-stud"
+	GameTypeSitAndGo    GameType = "sit-and-go"
 )
 
 // TexasHoldemRound represents the current round of a Texas Hold'em game
