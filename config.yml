@@ -1,7 +1,7 @@
 version: 1
 validation: sovereign
 default_denom: stake
-accounts: 
+accounts:
 - name: alice
   coins:
   - 20000token
@@ -25,3 +25,12 @@ validators:
   bonded: 200000000stake
 - name: validator2
   bonded: 100000000stake
+
+# Bridge Configuration
+bridge:
+  enabled: true
+  ethereum_rpc_url: "https://mainnet.base.org"
+  deposit_contract_address: "0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"  # CosmosBridge on Base
+  usdc_contract_address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"      # USDC on Base
+  polling_interval_seconds: 15
+  starting_block: 36469223  # Block where CosmosBridge was deployed

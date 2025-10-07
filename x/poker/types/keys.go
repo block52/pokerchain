@@ -20,3 +20,9 @@ var ParamsKey = collections.NewPrefix("p_poker")
 
 // ProcessedEthTxsKey is the prefix to store processed Ethereum transaction hashes
 var ProcessedEthTxsKey = collections.NewPrefix("processed_eth_txs")
+
+// GamesKey is the prefix to store games
+var GamesKey = collections.NewPrefix("games")
+
+// GameStatesKey is the prefix to store game states
+var GameStatesKey = collections.NewPrefix("game_states")

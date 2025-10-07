@@ -17,12 +17,23 @@ func initCometBFTConfig() *cmtcfg.Config {
 	return cfg
 }
 
+// BridgeConfig defines configuration for the Ethereum bridge
+type BridgeConfig struct {
+	Enabled                bool   `mapstructure:"enabled"`
+	EthereumRPCURL         string `mapstructure:"ethereum_rpc_url"`
+	DepositContractAddress string `mapstructure:"deposit_contract_address"`
+	USDCContractAddress    string `mapstructure:"usdc_contract_address"`
+	PollingIntervalSeconds int    `mapstructure:"polling_interval_seconds"`
+	StartingBlock          uint64 `mapstructure:"starting_block"`
+}
+
 // initAppConfig helps to override default appConfig template and configs.
 // return "", nil if no custom configuration is required for the application.
 func initAppConfig() (string, interface{}) {
 	// The following code snippet is just for reference.
 	type CustomAppConfig struct {
 		serverconfig.Config `mapstructure:",squash"`
+		Bridge              BridgeConfig `mapstructure:"bridge"`
 	}
 
 	// Optionally allow the chain developer to overwrite the SDK's default
@@ -44,9 +55,40 @@ func initAppConfig() (string, interface{}) {
 
 	customAppConfig := CustomAppConfig{
 		Config: *srvCfg,
+		Bridge: BridgeConfig{
+			Enabled:                true,
+			EthereumRPCURL:         "https://base.llamarpc.com",
+			DepositContractAddress: "0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B",
+			USDCContractAddress:    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+			PollingIntervalSeconds: 15,
+			StartingBlock:          36469223,
+		},
 	}
 
-	customAppTemplate := serverconfig.DefaultConfigTemplate
+	customAppTemplate := serverconfig.DefaultConfigTemplate + `
+###############################################################################
+###                           Bridge Configuration                          ###
+###############################################################################
+
+[bridge]
+# Enable or disable the Ethereum bridge service
+enabled = {{ .Bridge.Enabled }}
+
+# Ethereum RPC URL (Base Chain)
+ethereum_rpc_url = "{{ .Bridge.EthereumRPCURL }}"
+
+# CosmosBridge contract address on Base Chain
+deposit_contract_address = "{{ .Bridge.DepositContractAddress }}"
+
+# USDC contract address on Base Chain
+usdc_contract_address = "{{ .Bridge.USDCContractAddress }}"
+
+# Polling interval in seconds
+polling_interval_seconds = {{ .Bridge.PollingIntervalSeconds }}
+
+# Starting block number (block where CosmosBridge was deployed)
+starting_block = {{ .Bridge.StartingBlock }}
+`
 	// Edit the default template file
 	//
 	// customAppTemplate := serverconfig.DefaultConfigTemplate + `
