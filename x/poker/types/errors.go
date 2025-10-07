@@ -12,4 +12,5 @@ var (
 	ErrTxAlreadyProcessed = errors.Register(ModuleName, 1101, "ethereum transaction already processed")
 	ErrInvalidAmount      = errors.Register(ModuleName, 1102, "invalid mint amount")
 	ErrInvalidRecipient   = errors.Register(ModuleName, 1103, "invalid recipient address")
+	ErrInvalidRequest     = errors.Register(ModuleName, 1104, "invalid request")
 )
