@@ -41,14 +41,14 @@ func NewKeeper(
 
 	bankKeeper types.BankKeeper,
 	stakingKeeper types.StakingKeeper,
-) Keeper {
+) *Keeper {
 	if _, err := addressCodec.BytesToString(authority); err != nil {
 		panic(fmt.Sprintf("invalid authority address %s: %s", authority, err))
 	}
 
 	sb := collections.NewSchemaBuilder(storeService)
 
-	k := Keeper{
+	k := &Keeper{
 		storeService: storeService,
 		cdc:          cdc,
 		addressCodec: addressCodec,
@@ -76,12 +76,12 @@ func (k Keeper) GetAuthority() []byte {
 	return k.authority
 }
 
-// SetBridgeService sets the bridge service reference
+// SetBridgeService sets the bridge service for this keeper instance
 func (k *Keeper) SetBridgeService(bs *BridgeService) {
 	k.bridgeService = bs
 }
 
-// GetBridgeService returns the bridge service
-func (k Keeper) GetBridgeService() *BridgeService {
+// GetBridgeService returns the bridge service for this keeper instance
+func (k *Keeper) GetBridgeService() *BridgeService {
 	return k.bridgeService
 }

@@ -158,6 +158,8 @@ func (bs *BridgeService) processNewDeposits(ctx context.Context) error {
 
 // processDepositEvent processes a single deposit event
 func (bs *BridgeService) processDepositEvent(ctx context.Context, vLog types.Log) error {
+	bs.logger.Info("🔷 trackMint: Entering processDepositEvent", "txHash", vLog.TxHash.Hex(), "block", vLog.BlockNumber)
+
 	// Parse the Deposited event from CosmosBridge contract
 	// event Deposited(string indexed account, uint256 amount, uint256 index)
 
@@ -170,8 +172,15 @@ func (bs *BridgeService) processDepositEvent(ctx context.Context, vLog types.Log
 	// Parse the deposit details from transaction data and event logs
 	recipient, amount, nonce, err := bs.parseDepositEvent(tx.Data(), vLog.Data)
 	if err != nil {
+		bs.logger.Error("❌ trackMint: Failed to parse deposit event", "error", err)
 		return fmt.Errorf("failed to parse deposit event: %w", err)
 	}
+
+	bs.logger.Info("✅ trackMint: Deposit event parsed successfully",
+		"recipient", recipient,
+		"amount", amount.String(),
+		"nonce", nonce,
+	)
 
 	txHash := vLog.TxHash.Hex()
 
@@ -189,12 +198,14 @@ func (bs *BridgeService) processDepositEvent(ctx context.Context, vLog types.Log
 	bs.pendingDeposits = append(bs.pendingDeposits, depositEvent)
 	bs.depositMutex.Unlock()
 
-	bs.logger.Info("✅ Queued deposit for processing",
+	bs.logger.Info("✅ trackMint: Queued deposit for processing",
 		"recipient", recipient,
 		"amount", amount.String(),
 		"txHash", txHash,
 		"nonce", nonce,
 	)
+
+	bs.logger.Info("📌 trackMint: Deposit queued - will be processed in EndBlocker with proper SDK context", "txHash", txHash)
 
 	return nil
 }

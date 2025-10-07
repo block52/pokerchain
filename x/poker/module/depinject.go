@@ -41,7 +41,7 @@ type ModuleInputs struct {
 type ModuleOutputs struct {
 	depinject.Out
 
-	PokerKeeper keeper.Keeper
+	PokerKeeper *keeper.Keeper
 	Module      appmodule.AppModule
 }
 

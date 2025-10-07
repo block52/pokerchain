@@ -12,42 +12,83 @@ import (
 // This method can be called by the bridge service or validators
 func (k Keeper) ProcessBridgeDeposit(ctx context.Context, ethTxHash string, recipient string, amount uint64, nonce uint64) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	logger := sdkCtx.Logger().With("module", "poker/bridge")
+
+	logger.Info("🔷 trackMint: Starting deposit processing",
+		"txHash", ethTxHash,
+		"recipient", recipient,
+		"amount", amount,
+		"nonce", nonce,
+	)
 
 	// Check if transaction was already processed
 	if exists, err := k.ProcessedEthTxs.Has(sdkCtx, ethTxHash); err != nil {
+		logger.Error("❌ trackMint: Failed to check processed transactions", "error", err)
 		return fmt.Errorf("failed to check processed transactions: %w", err)
 	} else if exists {
+		logger.Warn("⚠️ trackMint: Transaction already processed", "txHash", ethTxHash)
 		return types.ErrTxAlreadyProcessed
 	}
+
+	logger.Info("✅ trackMint: Transaction not yet processed, continuing...")
 
 	// Validate recipient address
 	recipientAddr, err := k.addressCodec.StringToBytes(recipient)
 	if err != nil {
+		logger.Error("❌ trackMint: Invalid recipient address", "recipient", recipient, "error", err)
 		return fmt.Errorf("invalid recipient address: %w", err)
 	}
 
+	recipientStr, _ := k.addressCodec.BytesToString(recipientAddr)
+	logger.Info("✅ trackMint: Recipient address validated", "recipientAddr", recipientStr)
+
 	// Validate amount
 	if amount == 0 {
+		logger.Error("❌ trackMint: Invalid amount (zero)")
 		return types.ErrInvalidAmount
 	}
+
+	logger.Info("✅ trackMint: Amount validated", "amount", amount)
 
 	// Create coins to mint
 	coins := sdk.NewCoins(sdk.NewInt64Coin("uusdc", int64(amount)))
 
+	logger.Info("🪙 trackMint: Minting coins to module account",
+		"module", types.ModuleName,
+		"coins", coins.String(),
+	)
+
 	// Mint coins to module account
 	if err := k.bankKeeper.MintCoins(ctx, types.ModuleName, coins); err != nil {
+		logger.Error("❌ trackMint: Failed to mint coins", "error", err)
 		return fmt.Errorf("failed to mint coins: %w", err)
 	}
 
+	logger.Info("✅ trackMint: Coins minted successfully to module account")
+
+	logger.Info("💸 trackMint: Sending coins to recipient",
+		"from_module", types.ModuleName,
+		"to_recipient", recipient,
+		"coins", coins.String(),
+	)
+
 	// Send to recipient
 	if err := k.bankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, recipientAddr, coins); err != nil {
+		logger.Error("❌ trackMint: Failed to send coins to recipient", "error", err)
 		return fmt.Errorf("failed to send coins: %w", err)
 	}
 
+	logger.Info("✅ trackMint: Coins sent successfully to recipient", "recipient", recipient)
+
+	logger.Info("📝 trackMint: Marking transaction as processed", "txHash", ethTxHash)
+
 	// Mark as processed
 	if err := k.ProcessedEthTxs.Set(sdkCtx, ethTxHash); err != nil {
+		logger.Error("❌ trackMint: Failed to mark transaction as processed", "error", err)
 		return fmt.Errorf("failed to mark transaction as processed: %w", err)
 	}
+
+	logger.Info("✅ trackMint: Transaction marked as processed")
 
 	// Emit event
 	sdkCtx.EventManager().EmitEvent(
@@ -58,6 +99,12 @@ func (k Keeper) ProcessBridgeDeposit(ctx context.Context, ethTxHash string, reci
 			sdk.NewAttribute("amount", coins.String()),
 			sdk.NewAttribute("nonce", fmt.Sprintf("%d", nonce)),
 		),
+	)
+
+	logger.Info("🎉 trackMint: Deposit processed successfully!",
+		"txHash", ethTxHash,
+		"recipient", recipient,
+		"amount", coins.String(),
 	)
 
 	return nil

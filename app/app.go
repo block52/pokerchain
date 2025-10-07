@@ -99,7 +99,7 @@ type App struct {
 	ICAHostKeeper       icahostkeeper.Keeper
 	TransferKeeper      ibctransferkeeper.Keeper
 
-	PokerKeeper pokermodulekeeper.Keeper
+	PokerKeeper *pokermodulekeeper.Keeper
 	// this line is used by starport scaffolding # stargate/app/keeperDeclaration
 
 	// simulation manager
@@ -238,7 +238,7 @@ func New(
 		)
 
 		bridgeService, err := pokermodulekeeper.NewBridgeService(
-			&app.PokerKeeper,
+			app.PokerKeeper,
 			bridgeConfig.EthereumRPCURL,
 			bridgeConfig.DepositContractAddress,
 			bridgeConfig.USDCContractAddress,
