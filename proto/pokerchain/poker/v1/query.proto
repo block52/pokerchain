@@ -36,6 +36,11 @@ service Query {
   rpc LegalActions(QueryLegalActionsRequest) returns (QueryLegalActionsResponse) {
     option (google.api.http).get = "/block52/pokerchain/poker/v1/legal_actions/{game_id}/{player_address}";
   }
+
+  // GameState Queries the detailed game state for a game.
+  rpc GameState(QueryGameStateRequest) returns (QueryGameStateResponse) {
+    option (google.api.http).get = "/block52/pokerchain/poker/v1/game_state/{game_id}";
+  }
 }
 
 // QueryParamsRequest is request type for the Query/Params RPC method.
@@ -87,4 +92,14 @@ message QueryLegalActionsRequest {
 // QueryLegalActionsResponse defines the QueryLegalActionsResponse message.
 message QueryLegalActionsResponse {
   string actions = 1;
+}
+
+// QueryGameStateRequest defines the QueryGameStateRequest message.
+message QueryGameStateRequest {
+  string game_id = 1;
+}
+
+// QueryGameStateResponse defines the QueryGameStateResponse message.
+message QueryGameStateResponse {
+  string game_state = 1;
 }

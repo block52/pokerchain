@@ -149,7 +149,7 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 			actionIndex,                    // index (current action count)
 			string(gameStateJson),          // gameStateJson
 			string(gameOptionsJson),        // gameOptionsJson
-			`seat=1`,                   // data with seat parameter
+			`seat=1`,                       // data with seat parameter
 		},
 		ID:      1,
 		JSONRPC: "2.0",
@@ -199,9 +199,6 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 
 	// Parse the result to get updated game state
 	if response.Result != nil {
-		// TODO: Remove this debug logging after testing
-		fmt.Printf("DEBUG: Poker engine response result: %+v\n", response.Result)
-
 		// The result should contain the updated game state
 		// Parse the result as a TexasHoldemStateDTO and update our stored game state
 		resultBytes, err := json.Marshal(response.Result)
@@ -209,19 +206,20 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 			return fmt.Errorf("failed to marshal response result: %w", err)
 		}
 
-		fmt.Printf("DEBUG: Result bytes: %s\n", string(resultBytes))
+		// Log what we got from the engine for debugging
+		fmt.Printf("ENGINE RESPONSE: %s\n", string(resultBytes))
 
 		var updatedGameState types.TexasHoldemStateDTO
 		if err := json.Unmarshal(resultBytes, &updatedGameState); err != nil {
-			fmt.Printf("DEBUG: Failed to unmarshal game state: %v\n", err)
-			// Don't return error here, just log it for now
+			fmt.Printf("UNMARSHAL ERROR: %v\n", err)
+			// For now, don't fail the transaction, just log the error
 		} else {
 			// Store the updated game state
 			k.GameStates.Set(ctx, gameId, updatedGameState)
-			fmt.Printf("DEBUG: Successfully updated game state with players from engine\n")
+			fmt.Printf("SUCCESSFULLY STORED GAME STATE\n")
 		}
 	} else {
-		fmt.Printf("DEBUG: No result in poker engine response\n")
+		fmt.Printf("NO RESULT FROM ENGINE\n")
 	}
 
 	return nil
