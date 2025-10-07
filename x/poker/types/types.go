@@ -7,7 +7,7 @@ import (
 
 const (
 	// TokenDenom is the denomination of the game token
-	TokenDenom = "token"
+	TokenDenom = "uusdc"
 
 	// GameCreationCost is the cost in tokens to create a new game
 	GameCreationCost = int64(1)

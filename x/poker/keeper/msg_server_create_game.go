@@ -2,7 +2,9 @@ package keeper
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"strconv"
 	"time"
 
 	errorsmod "cosmossdk.io/errors"
@@ -10,6 +12,7 @@ import (
 	"github.com/block52/pokerchain/x/poker/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	"golang.org/x/crypto/sha3"
 )
 
 func (k msgServer) CreateGame(ctx context.Context, msg *types.MsgCreateGame) (*types.MsgCreateGameResponse, error) {
@@ -40,14 +43,16 @@ func (k msgServer) CreateGame(ctx context.Context, msg *types.MsgCreateGame) (*t
 		return nil, errorsmod.Wrap(err, "failed to deduct game creation cost")
 	}
 
-	// Generate unique game ID (using message fields or a counter approach)
-	// For now, using a simple approach - in production, consider using a counter or UUID
-	gameId := msg.GameId
-	if gameId == "" {
-		// Generate game ID based on creator and timestamp if not provided
-		sdkCtx := sdk.UnwrapSDKContext(ctx)
-		gameId = fmt.Sprintf("game_%s_%d", msg.Creator[:8], sdkCtx.BlockTime().Unix())
-	}
+	// Generate unique game ID using keccak256 hash of timestamp + creator address
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	timestamp := strconv.FormatInt(sdkCtx.BlockTime().Unix(), 10)
+	hashData := timestamp + msg.Creator
+
+	// Use keccak256 (Ethereum-style hash)
+	hash := sha3.NewLegacyKeccak256()
+	hash.Write([]byte(hashData))
+	hashBytes := hash.Sum(nil)
+	gameId := "0x" + hex.EncodeToString(hashBytes)
 
 	// Check if game with this ID already exists
 	_, err = k.Games.Get(ctx, gameId)
@@ -118,7 +123,6 @@ func (k msgServer) CreateGame(ctx context.Context, msg *types.MsgCreateGame) (*t
 	}
 
 	// Emit events
-	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	sdkCtx.EventManager().EmitEvents(sdk.Events{
 		sdk.NewEvent(
 			"game_created",

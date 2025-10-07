@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -53,13 +54,10 @@ type JSONRPCRequest struct {
 
 // JSONRPCResponse represents a JSON-RPC response
 type JSONRPCResponse struct {
-	Result interface{} `json:"result"`
-	Error  *struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
-	ID      int    `json:"id"`
-	JSONRPC string `json:"jsonrpc"`
+	Result  interface{} `json:"result"`
+	Error   interface{} `json:"error"` // Can be string or structured error
+	ID      int         `json:"id"`
+	JSONRPC string      `json:"jsonrpc"`
 }
 
 func (k msgServer) PerformAction(ctx context.Context, msg *types.MsgPerformAction) (*types.MsgPerformActionResponse, error) {
@@ -73,16 +71,13 @@ func (k msgServer) PerformAction(ctx context.Context, msg *types.MsgPerformActio
 	}
 
 	// Check if the game exists
-	gameExists, err := k.HasGameState(ctx, msg.GameId)
+	_, err := k.Games.Get(ctx, msg.GameId)
 	if err != nil {
-		return nil, errorsmod.Wrap(err, "failed to check game existence")
-	}
-	if !gameExists {
 		return nil, errorsmod.Wrapf(types.ErrGameNotFound, "game not found: %s", msg.GameId)
 	}
 
-	// Make JSON-RPC call to game engine
-	err = k.callGameEngine(msg.Creator, msg.GameId, msg.Action, msg.Amount)
+	// Make JSON-RPC call to game engine with game state
+	err = k.callGameEngine(ctx, msg.Creator, msg.GameId, msg.Action, msg.Amount)
 	if err != nil {
 		return nil, errorsmod.Wrap(err, "failed to call game engine")
 	}
@@ -93,12 +88,46 @@ func (k msgServer) PerformAction(ctx context.Context, msg *types.MsgPerformActio
 	return &types.MsgPerformActionResponse{}, nil
 }
 
-// callGameEngine makes a JSON-RPC call to the game engine
-func (k msgServer) callGameEngine(playerId, gameId, action string, amount uint64) error {
-	// Create JSON-RPC request
+// callGameEngine makes a JSON-RPC call to the game engine with game state and options
+func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action string, amount uint64) error {
+	// Fetch game state from GameStates collection
+	gameState, err := k.GameStates.Get(ctx, gameId)
+	if err != nil {
+		return fmt.Errorf("failed to get game state: %w", err)
+	}
+
+	// Fetch game options from Games collection
+	game, err := k.Games.Get(ctx, gameId)
+	if err != nil {
+		return fmt.Errorf("failed to get game: %w", err)
+	}
+
+	// Convert game state to JSON
+	gameStateJson, err := json.Marshal(gameState)
+	if err != nil {
+		return fmt.Errorf("failed to marshal game state: %w", err)
+	}
+
+	// Convert game options to JSON
+	gameOptionsJson, err := json.Marshal(game)
+	if err != nil {
+		return fmt.Errorf("failed to marshal game options: %w", err)
+	}
+
+	// Create JSON-RPC request with new params format:
+	// [from, to, action, value, index, gameStateJson, gameOptionsJson, data]
 	request := JSONRPCRequest{
-		Method:  "perform_action",
-		Params:  []interface{}{playerId, gameId, action, strconv.FormatUint(amount, 10), 0, 1, 1},
+		Method: "perform_action",
+		Params: []interface{}{
+			playerId,                       // from
+			gameId,                         // to (game address)
+			action,                         // action
+			strconv.FormatUint(amount, 10), // value
+			0,                              // index
+			string(gameStateJson),          // gameStateJson
+			string(gameOptionsJson),        // gameOptionsJson
+			"{}",                           // data (empty for now)
+		},
 		ID:      1,
 		JSONRPC: "2.0",
 	}
@@ -110,8 +139,7 @@ func (k msgServer) callGameEngine(playerId, gameId, action string, amount uint64
 	}
 
 	// Make HTTP POST request to game engine
-	// node := "https://localhost:8545"
-	node := "https://node1.block52.xyz"
+	node := "http://localhost:8545"
 	resp, err := http.Post(node, "application/json", bytes.NewBuffer(requestBody))
 	if err != nil {
 		return fmt.Errorf("failed to make HTTP request to game engine: %w", err)
@@ -120,13 +148,30 @@ func (k msgServer) callGameEngine(playerId, gameId, action string, amount uint64
 
 	// Parse JSON-RPC response
 	var response JSONRPCResponse
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return fmt.Errorf("failed to decode JSON-RPC response: %w", err)
+	responseBody, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return fmt.Errorf("failed to read response body: %w", readErr)
+	}
+
+	if err := json.Unmarshal(responseBody, &response); err != nil {
+		return fmt.Errorf("failed to decode JSON-RPC response (body: %s): %w", string(responseBody), err)
 	}
 
 	// Check for JSON-RPC error
 	if response.Error != nil {
-		return fmt.Errorf("game engine error: %s (code %d)", response.Error.Message, response.Error.Code)
+		switch err := response.Error.(type) {
+		case string:
+			return fmt.Errorf("game engine error: %s", err)
+		case map[string]interface{}:
+			if code, ok := err["code"].(float64); ok {
+				if message, ok := err["message"].(string); ok {
+					return fmt.Errorf("game engine error: %s (code %.0f)", message, code)
+				}
+			}
+			return fmt.Errorf("game engine error: %v", err)
+		default:
+			return fmt.Errorf("game engine error: %v", response.Error)
+		}
 	}
 
 	return nil

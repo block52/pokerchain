@@ -58,9 +58,9 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 				},
 				{
 					RpcMethod:      "CreateGame",
-					Use:            "create-game [game-id] [min-buy-in] [max-buy-in] [min-players] [max-players] [small-blind] [big-blind] [timeout] [game-type]",
+					Use:            "create-game [min-buy-in] [max-buy-in] [min-players] [max-players] [small-blind] [big-blind] [timeout] [game-type]",
 					Short:          "Send a create-game tx",
-					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "game_id"}, {ProtoField: "min_buy_in"}, {ProtoField: "max_buy_in"}, {ProtoField: "min_players"}, {ProtoField: "max_players"}, {ProtoField: "small_blind"}, {ProtoField: "big_blind"}, {ProtoField: "timeout"}, {ProtoField: "game_type"}},
+					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "min_buy_in"}, {ProtoField: "max_buy_in"}, {ProtoField: "min_players"}, {ProtoField: "max_players"}, {ProtoField: "small_blind"}, {ProtoField: "big_blind"}, {ProtoField: "timeout"}, {ProtoField: "game_type"}},
 				},
 				{
 					RpcMethod:      "JoinGame",

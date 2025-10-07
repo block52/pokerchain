@@ -49,7 +49,10 @@ require (
 	google.golang.org/protobuf v1.36.10
 )
 
-require github.com/ethereum/go-ethereum v1.16.4
+require (
+	github.com/ethereum/go-ethereum v1.16.4
+	golang.org/x/crypto v0.42.0
+)
 
 require (
 	4d63.com/gocheckcompilerdirectives v1.3.0 // indirect
@@ -407,7 +410,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/arch v0.15.0 // indirect
-	golang.org/x/crypto v0.42.0 // indirect
 	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b // indirect
 	golang.org/x/exp/typeparams v0.0.0-20250210185358-939b2ce775ac // indirect
 	golang.org/x/mod v0.27.0 // indirect

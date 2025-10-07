@@ -13,4 +13,6 @@ var (
 	ErrInvalidAmount      = errors.Register(ModuleName, 1102, "invalid mint amount")
 	ErrInvalidRecipient   = errors.Register(ModuleName, 1103, "invalid recipient address")
 	ErrInvalidRequest     = errors.Register(ModuleName, 1104, "invalid request")
+	ErrInvalidAction      = errors.Register(ModuleName, 1105, "invalid poker action")
+	ErrGameNotFound       = errors.Register(ModuleName, 1106, "game not found")
 )
