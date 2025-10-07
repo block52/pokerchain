@@ -149,7 +149,7 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 			actionIndex,                    // index (current action count)
 			string(gameStateJson),          // gameStateJson
 			string(gameOptionsJson),        // gameOptionsJson
-			`{"seat":1}`,                   // data with seat parameter
+			`seat=1`,                   // data with seat parameter
 		},
 		ID:      1,
 		JSONRPC: "2.0",
