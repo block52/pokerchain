@@ -29,12 +29,13 @@ const (
 	SitIn      PlayerActionType = "sit-in"
 	SitOut     PlayerActionType = "sit-out"
 	Show       PlayerActionType = "show"
+	Join       PlayerActionType = "join"
 )
 
 // isValidAction checks if the action is valid
 func isValidAction(action string) bool {
 	validActions := []PlayerActionType{
-		SmallBlind, BigBlind, Fold, Check, Bet, Call, Raise, AllIn, Muck, SitIn, SitOut, Show,
+		SmallBlind, BigBlind, Fold, Check, Bet, Call, Raise, AllIn, Muck, SitIn, SitOut, Show, Join,
 	}
 	for _, validAction := range validActions {
 		if PlayerActionType(action) == validAction {
@@ -108,14 +109,32 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 		return fmt.Errorf("failed to marshal game state: %w", err)
 	}
 
+	// Create GameOptionsDTO from the game object
+	gameOptions := types.GameOptionsDTO{
+		MinBuyIn:   &[]string{strconv.FormatUint(game.MinBuyIn, 10)}[0],
+		MaxBuyIn:   &[]string{strconv.FormatUint(game.MaxBuyIn, 10)}[0],
+		MinPlayers: &[]int{int(game.MinPlayers)}[0],
+		MaxPlayers: &[]int{int(game.MaxPlayers)}[0],
+		SmallBlind: &[]string{strconv.FormatUint(game.SmallBlind, 10)}[0],
+		BigBlind:   &[]string{strconv.FormatUint(game.BigBlind, 10)}[0],
+		Timeout:    &[]int{int(game.Timeout)}[0],
+		Type:       &[]types.GameType{types.GameType(game.GameType)}[0],
+	}
+
 	// Convert game options to JSON
-	gameOptionsJson, err := json.Marshal(game)
+	gameOptionsJson, err := json.Marshal(gameOptions)
 	if err != nil {
 		return fmt.Errorf("failed to marshal game options: %w", err)
 	}
 
 	// Create JSON-RPC request with new params format:
 	// [from, to, action, value, index, gameStateJson, gameOptionsJson, data]
+	// Action index starts at 1, if ActionCount is 0 (null/first command), set to 1
+	actionIndex := gameState.ActionCount
+	if actionIndex == 0 {
+		actionIndex = 1 // Ensure first action starts at index 1
+	}
+
 	request := JSONRPCRequest{
 		Method: "perform_action",
 		Params: []interface{}{
@@ -123,7 +142,7 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 			gameId,                         // to (game address)
 			action,                         // action
 			strconv.FormatUint(amount, 10), // value
-			0,                              // index
+			actionIndex,                    // index (current action count)
 			string(gameStateJson),          // gameStateJson
 			string(gameOptionsJson),        // gameOptionsJson
 			"{}",                           // data (empty for now)
@@ -172,6 +191,24 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 		default:
 			return fmt.Errorf("game engine error: %v", response.Error)
 		}
+	}
+
+	// Parse the result to get updated game state
+	if response.Result != nil {
+		// The result should contain the updated game state
+		// Parse the result as a TexasHoldemStateDTO and update our stored game state
+		resultBytes, err := json.Marshal(response.Result)
+		if err != nil {
+			return fmt.Errorf("failed to marshal response result: %w", err)
+		}
+
+		var updatedGameState types.TexasHoldemStateDTO
+		if err := json.Unmarshal(resultBytes, &updatedGameState); err != nil {
+			return fmt.Errorf("failed to unmarshal updated game state: %w", err)
+		}
+
+		// Store the updated game state
+		k.GameStates.Set(ctx, gameId, updatedGameState)
 	}
 
 	return nil

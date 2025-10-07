@@ -70,15 +70,15 @@ const (
 
 // GameOptionsDTO represents the game configuration options
 type GameOptionsDTO struct {
-	MinBuyIn     *string                `json:"min_buy_in,omitempty"`
-	MaxBuyIn     *string                `json:"max_buy_in,omitempty"`
-	MinPlayers   *int                   `json:"min_players,omitempty"`
-	MaxPlayers   *int                   `json:"max_players,omitempty"`
-	SmallBlind   *string                `json:"small_blind,omitempty"`
-	BigBlind     *string                `json:"big_blind,omitempty"`
+	MinBuyIn     *string                `json:"minBuyIn,omitempty"`
+	MaxBuyIn     *string                `json:"maxBuyIn,omitempty"`
+	MinPlayers   *int                   `json:"minPlayers,omitempty"`
+	MaxPlayers   *int                   `json:"maxPlayers,omitempty"`
+	SmallBlind   *string                `json:"smallBlind,omitempty"`
+	BigBlind     *string                `json:"bigBlind,omitempty"`
 	Timeout      *int                   `json:"timeout,omitempty"`
 	Type         *GameType              `json:"type,omitempty"`
-	OtherOptions map[string]interface{} `json:"other_options,omitempty"`
+	OtherOptions map[string]interface{} `json:"otherOptions,omitempty"`
 }
 
 // PlayerDTO represents a player in the game
@@ -86,21 +86,21 @@ type PlayerDTO struct {
 	Address      string           `json:"address"`
 	Seat         int              `json:"seat"`
 	Stack        string           `json:"stack"`
-	IsSmallBlind bool             `json:"is_small_blind"`
-	IsBigBlind   bool             `json:"is_big_blind"`
-	IsDealer     bool             `json:"is_dealer"`
-	HoleCards    *[]string        `json:"hole_cards,omitempty"`
+	IsSmallBlind bool             `json:"isSmallBlind"`
+	IsBigBlind   bool             `json:"isBigBlind"`
+	IsDealer     bool             `json:"isDealer"`
+	HoleCards    *[]string        `json:"holeCards,omitempty"`
 	Status       PlayerStatus     `json:"status"`
-	LastAction   *ActionDTO       `json:"last_action,omitempty"`
-	LegalActions []LegalActionDTO `json:"legal_actions"`
-	SumOfBets    string           `json:"sum_of_bets"`
+	LastAction   *ActionDTO       `json:"lastAction,omitempty"`
+	LegalActions []LegalActionDTO `json:"legalActions"`
+	SumOfBets    string           `json:"sumOfBets"`
 	Timeout      int              `json:"timeout"`
 	Signature    string           `json:"signature"`
 }
 
 // ActionDTO represents a player action
 type ActionDTO struct {
-	PlayerId  string           `json:"player_id"`
+	PlayerId  string           `json:"playerId"`
 	Seat      int              `json:"seat"`
 	Action    string           `json:"action"` // Can be PlayerActionType or NonPlayerActionType
 	Amount    string           `json:"amount"`
@@ -129,7 +129,7 @@ type WinnerDTO struct {
 // ResultDTO represents game results
 type ResultDTO struct {
 	Place    int    `json:"place"`
-	PlayerId string `json:"player_id"`
+	PlayerId string `json:"playerId"`
 	Payout   string `json:"payout"`
 }
 
@@ -137,15 +137,15 @@ type ResultDTO struct {
 type TexasHoldemStateDTO struct {
 	Type            GameType         `json:"type"`
 	Address         string           `json:"address"`
-	GameOptions     GameOptionsDTO   `json:"game_options"`
+	GameOptions     GameOptionsDTO   `json:"gameOptions"`
 	Players         []PlayerDTO      `json:"players"`
-	CommunityCards  []string         `json:"community_cards"`
+	CommunityCards  []string         `json:"communityCards"`
 	Deck            string           `json:"deck"`
 	Pots            []string         `json:"pots"`
-	NextToAct       int              `json:"next_to_act"`
-	PreviousActions []ActionDTO      `json:"previous_actions"`
-	ActionCount     int              `json:"action_count"`
-	HandNumber      int              `json:"hand_number"`
+	NextToAct       int              `json:"nextToAct"`
+	PreviousActions []ActionDTO      `json:"previousActions"`
+	ActionCount     int              `json:"actionCount"`
+	HandNumber      int              `json:"handNumber"`
 	Round           TexasHoldemRound `json:"round"`
 	Winners         []WinnerDTO      `json:"winners"`
 	Results         []ResultDTO      `json:"results"`
@@ -154,19 +154,19 @@ type TexasHoldemStateDTO struct {
 
 // Game represents a poker game
 type Game struct {
-	GameId     string    `json:"game_id"`
+	GameId     string    `json:"gameId"`
 	Creator    string    `json:"creator"`
-	MinBuyIn   uint64    `json:"min_buy_in"`
-	MaxBuyIn   uint64    `json:"max_buy_in"`
-	MinPlayers int64     `json:"min_players"`
-	MaxPlayers int64     `json:"max_players"`
-	SmallBlind uint64    `json:"small_blind"`
-	BigBlind   uint64    `json:"big_blind"`
+	MinBuyIn   uint64    `json:"minBuyIn"`
+	MaxBuyIn   uint64    `json:"maxBuyIn"`
+	MinPlayers int64     `json:"minPlayers"`
+	MaxPlayers int64     `json:"maxPlayers"`
+	SmallBlind uint64    `json:"smallBlind"`
+	BigBlind   uint64    `json:"bigBlind"`
 	Timeout    int64     `json:"timeout"`
-	GameType   string    `json:"game_type"`
+	GameType   string    `json:"gameType"`
 	Players    []string  `json:"players"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 // Marshal implements the protobuf marshaling interface
