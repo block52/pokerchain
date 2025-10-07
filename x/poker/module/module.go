@@ -138,6 +138,100 @@ func (am AppModule) BeginBlock(_ context.Context) error {
 
 // EndBlock contains the logic that is automatically triggered at the end of each block.
 // The end block implementation is optional.
-func (am AppModule) EndBlock(_ context.Context) error {
+func (am AppModule) EndBlock(ctx context.Context) error {
+	// Process pending bridge deposits
+	bridgeService := am.keeper.GetBridgeService()
+	if bridgeService == nil {
+		return nil // Bridge service not initialized
+	}
+
+	// Get pending deposits from the bridge service
+	pendingDeposits := bridgeService.GetPendingDeposits()
+	if len(pendingDeposits) == 0 {
+		return nil // No deposits to process
+	}
+
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+
+	// Process each pending deposit
+	for _, deposit := range pendingDeposits {
+		// Check if already processed
+		if exists, err := am.keeper.ProcessedEthTxs.Has(sdkCtx, deposit.TxHash); err != nil {
+			sdkCtx.Logger().Error("Failed to check processed transaction",
+				"error", err,
+				"txHash", deposit.TxHash,
+			)
+			continue
+		} else if exists {
+			sdkCtx.Logger().Debug("Transaction already processed, skipping",
+				"txHash", deposit.TxHash,
+			)
+			continue
+		}
+
+		// Validate recipient address
+		recipientAddr, err := sdk.AccAddressFromBech32(deposit.Recipient)
+		if err != nil {
+			sdkCtx.Logger().Error("Invalid recipient address",
+				"error", err,
+				"recipient", deposit.Recipient,
+				"txHash", deposit.TxHash,
+			)
+			continue
+		}
+
+		// Create coins to mint
+		amount := deposit.Amount.Uint64()
+		coins := sdk.NewCoins(sdk.NewInt64Coin("uusdc", int64(amount)))
+
+		// Mint coins to module account
+		if err := am.bankKeeper.MintCoins(ctx, types.ModuleName, coins); err != nil {
+			sdkCtx.Logger().Error("Failed to mint coins",
+				"error", err,
+				"amount", amount,
+				"txHash", deposit.TxHash,
+			)
+			continue
+		}
+
+		// Send coins to recipient
+		if err := am.bankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, recipientAddr, coins); err != nil {
+			sdkCtx.Logger().Error("Failed to send coins to recipient",
+				"error", err,
+				"recipient", deposit.Recipient,
+				"amount", amount,
+				"txHash", deposit.TxHash,
+			)
+			continue
+		}
+
+		// Mark transaction as processed
+		if err := am.keeper.ProcessedEthTxs.Set(sdkCtx, deposit.TxHash); err != nil {
+			sdkCtx.Logger().Error("Failed to mark transaction as processed",
+				"error", err,
+				"txHash", deposit.TxHash,
+			)
+			continue
+		}
+
+		// Emit event
+		sdkCtx.EventManager().EmitEvent(
+			sdk.NewEvent(
+				"bridge_mint",
+				sdk.NewAttribute("recipient", deposit.Recipient),
+				sdk.NewAttribute("amount", coins.String()),
+				sdk.NewAttribute("eth_tx_hash", deposit.TxHash),
+				sdk.NewAttribute("nonce", fmt.Sprintf("%d", deposit.Nonce)),
+			),
+		)
+
+		sdkCtx.Logger().Info("✅ Successfully bridged USDC",
+			"recipient", deposit.Recipient,
+			"amount", amount,
+			"txHash", deposit.TxHash,
+			"nonce", deposit.Nonce,
+		)
+	}
+
 	return nil
 }

@@ -4,16 +4,14 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sync"
 	"time"
 
 	"cosmossdk.io/log"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-
-	pokertypes "github.com/block52/pokerchain/x/poker/types"
 )
 
 // BridgeService handles monitoring Ethereum L1 deposits and bridging USDC to Cosmos
@@ -25,6 +23,8 @@ type BridgeService struct {
 	logger             log.Logger
 	lastProcessedBlock uint64
 	pollingInterval    time.Duration
+	pendingDeposits    []DepositEvent
+	depositMutex       sync.Mutex
 }
 
 // DepositEvent represents a USDC deposit event from Ethereum
@@ -102,31 +102,54 @@ func (bs *BridgeService) processNewDeposits(ctx context.Context) error {
 		)
 	}
 
-	// Query for deposit events
-	query := ethereum.FilterQuery{
-		FromBlock: big.NewInt(int64(bs.lastProcessedBlock + 1)),
-		ToBlock:   big.NewInt(int64(latestBlock)),
-		Addresses: []common.Address{bs.depositContract},
-		Topics: [][]common.Hash{
-			{common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")}, // Transfer event
-		},
-	}
+	// Process blocks in chunks to avoid "range too large" errors
+	const maxBlockRange = 999 // Most RPC providers limit to ~1000 blocks
+	startBlock := bs.lastProcessedBlock + 1
 
-	logs, err := bs.ethClient.FilterLogs(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to filter logs: %w", err)
-	}
-
-	if len(logs) > 0 {
-		bs.logger.Info("📋 Found deposit events", "count", len(logs))
-	}
-
-	// Process each deposit event
-	for _, vLog := range logs {
-		bs.logger.Info("🔍 Processing deposit event", "txHash", vLog.TxHash.Hex())
-		if err := bs.processDepositEvent(ctx, vLog); err != nil {
-			bs.logger.Error("❌ Failed to process deposit event", "error", err, "txHash", vLog.TxHash.Hex())
+	for startBlock <= latestBlock {
+		endBlock := startBlock + maxBlockRange
+		if endBlock > latestBlock {
+			endBlock = latestBlock
 		}
+
+		bs.logger.Debug("🔍 Scanning block range",
+			"from", startBlock,
+			"to", endBlock,
+			"range", endBlock-startBlock+1,
+		)
+
+		// Query for deposit events in this chunk
+		query := ethereum.FilterQuery{
+			FromBlock: big.NewInt(int64(startBlock)),
+			ToBlock:   big.NewInt(int64(endBlock)),
+			Addresses: []common.Address{bs.depositContract},
+			Topics: [][]common.Hash{
+				{common.HexToHash("0x46008385c8bcecb546cb0a96e5b409f34ac1a8ece8f3ea98488282519372bdf2")}, // Deposited event
+			},
+		}
+
+		logs, err := bs.ethClient.FilterLogs(ctx, query)
+		if err != nil {
+			return fmt.Errorf("failed to filter logs (blocks %d-%d): %w", startBlock, endBlock, err)
+		}
+
+		if len(logs) > 0 {
+			bs.logger.Info("📋 Found deposit events",
+				"count", len(logs),
+				"block_range", fmt.Sprintf("%d-%d", startBlock, endBlock),
+			)
+		}
+
+		// Process each deposit event
+		for _, vLog := range logs {
+			bs.logger.Info("🔍 Processing deposit event", "txHash", vLog.TxHash.Hex(), "block", vLog.BlockNumber)
+			if err := bs.processDepositEvent(ctx, vLog); err != nil {
+				bs.logger.Error("❌ Failed to process deposit event", "error", err, "txHash", vLog.TxHash.Hex())
+			}
+		}
+
+		// Move to next chunk
+		startBlock = endBlock + 1
 	}
 
 	bs.lastProcessedBlock = latestBlock
@@ -135,34 +158,24 @@ func (bs *BridgeService) processNewDeposits(ctx context.Context) error {
 
 // processDepositEvent processes a single deposit event
 func (bs *BridgeService) processDepositEvent(ctx context.Context, vLog types.Log) error {
-	// Parse the transfer event to extract deposit details
-	// This is a simplified version - in production you'd parse the actual ABI
+	// Parse the Deposited event from CosmosBridge contract
+	// event Deposited(string indexed account, uint256 amount, uint256 index)
 
-	// Extract recipient from transaction data or logs
+	// Get the transaction to extract the cosmos recipient address from input data
 	tx, _, err := bs.ethClient.TransactionByHash(ctx, vLog.TxHash)
 	if err != nil {
 		return fmt.Errorf("failed to get transaction: %w", err)
 	}
 
-	// For this example, we'll assume the recipient address is encoded in the transaction data
-	// In a real implementation, you'd parse the contract call data properly
-	recipient, amount, nonce, err := bs.parseTransactionData(tx.Data())
+	// Parse the deposit details from transaction data and event logs
+	recipient, amount, nonce, err := bs.parseDepositEvent(tx.Data(), vLog.Data)
 	if err != nil {
-		return fmt.Errorf("failed to parse transaction data: %w", err)
+		return fmt.Errorf("failed to parse deposit event: %w", err)
 	}
 
-	// Check if this transaction has already been processed
 	txHash := vLog.TxHash.Hex()
-	sdkCtx := sdk.UnwrapSDKContext(ctx)
 
-	if exists, err := bs.keeper.ProcessedEthTxs.Has(sdkCtx, txHash); err != nil {
-		return fmt.Errorf("failed to check processed transactions: %w", err)
-	} else if exists {
-		bs.logger.Debug("Transaction already processed", "txHash", txHash)
-		return nil
-	}
-
-	// Create mint message and execute it
+	// Create deposit event and add to queue
 	depositEvent := DepositEvent{
 		From:      vLog.Address,
 		Recipient: recipient,
@@ -171,62 +184,92 @@ func (bs *BridgeService) processDepositEvent(ctx context.Context, vLog types.Log
 		Nonce:     nonce,
 	}
 
-	return bs.executeMint(ctx, depositEvent)
-}
+	// Add to pending deposits queue (thread-safe)
+	bs.depositMutex.Lock()
+	bs.pendingDeposits = append(bs.pendingDeposits, depositEvent)
+	bs.depositMutex.Unlock()
 
-// parseTransactionData extracts recipient, amount, and nonce from transaction data
-func (bs *BridgeService) parseTransactionData(data []byte) (recipient string, amount *big.Int, nonce uint64, err error) {
-	// This is a placeholder implementation
-	// In a real scenario, you'd decode the contract call data using the ABI
-
-	// For demonstration, we'll return mock data
-	// In production, this would parse the actual contract call data
-	recipient = "cosmos1..."     // Extract from contract call data
-	amount = big.NewInt(1000000) // Extract from contract call data (in micro-USDC)
-	nonce = 1                    // Extract from contract call data
-
-	return recipient, amount, nonce, nil
-}
-
-// executeMint performs the actual minting on the Cosmos side
-func (bs *BridgeService) executeMint(ctx context.Context, event DepositEvent) error {
-	sdkCtx := sdk.UnwrapSDKContext(ctx)
-
-	// Convert amount from wei to micro-USDC
-	amountMicroUSDC := event.Amount.Uint64()
-
-	// Create coins to mint
-	coins := sdk.NewCoins(sdk.NewInt64Coin("uusdc", int64(amountMicroUSDC)))
-
-	// Mint coins to the module account
-	if err := bs.keeper.bankKeeper.MintCoins(ctx, pokertypes.ModuleName, coins); err != nil {
-		return fmt.Errorf("failed to mint coins: %w", err)
-	}
-
-	// Convert recipient address
-	recipientAddr, err := bs.keeper.addressCodec.StringToBytes(event.Recipient)
-	if err != nil {
-		return fmt.Errorf("invalid recipient address: %w", err)
-	}
-
-	// Send coins to recipient
-	if err := bs.keeper.bankKeeper.SendCoinsFromModuleToAccount(ctx, pokertypes.ModuleName, recipientAddr, coins); err != nil {
-		return fmt.Errorf("failed to send coins to recipient: %w", err)
-	}
-
-	// Mark transaction as processed
-	if err := bs.keeper.ProcessedEthTxs.Set(sdkCtx, event.TxHash); err != nil {
-		return fmt.Errorf("failed to mark transaction as processed: %w", err)
-	}
-
-	bs.logger.Info("✅ Successfully bridged USDC",
-		"recipient", event.Recipient,
-		"amount", amountMicroUSDC,
-		"txHash", event.TxHash,
-		"nonce", event.Nonce,
+	bs.logger.Info("✅ Queued deposit for processing",
+		"recipient", recipient,
+		"amount", amount.String(),
+		"txHash", txHash,
+		"nonce", nonce,
 	)
 
 	return nil
+}
+
+// parseDepositEvent extracts recipient, amount, and nonce from Deposited event
+func (bs *BridgeService) parseDepositEvent(txData []byte, eventData []byte) (recipient string, amount *big.Int, nonce uint64, err error) {
+	// Parse the transaction input data to extract the cosmos recipient address
+	// Function signature for depositUnderlying(uint256 amount, string calldata receiver)
+	// or deposit(uint256 amount, string calldata receiver, address token)
+
+	if len(txData) < 4 {
+		return "", nil, 0, fmt.Errorf("transaction data too short")
+	}
+
+	// Extract function selector (first 4 bytes)
+	selector := txData[:4]
+
+	// depositUnderlying: 0x3ccfd60b (keccak256("depositUnderlying(uint256,string)"))
+	// deposit: 0x47e7ef24 (keccak256("deposit(uint256,string,address)"))
+
+	var recipientStr string
+
+	// For depositUnderlying, params start at byte 4
+	// Layout: amount (32 bytes), string offset (32 bytes), string length (32 bytes), string data
+	if len(txData) >= 68 {
+		// Skip selector (4) + amount (32) + string offset (32) = 68 bytes
+		// Read string length from offset
+		if len(txData) >= 100 {
+			// String length is at bytes 68-100
+			strLenBytes := txData[68:100]
+			strLen := new(big.Int).SetBytes(strLenBytes).Uint64()
+
+			// String data starts at byte 100
+			if len(txData) >= int(100+strLen) {
+				recipientStr = string(txData[100 : 100+strLen])
+			}
+		}
+	}
+
+	if recipientStr == "" {
+		return "", nil, 0, fmt.Errorf("could not extract recipient address from transaction data")
+	}
+
+	// Parse event data: amount (uint256) and index (uint256)
+	// Event data contains non-indexed parameters
+	if len(eventData) < 64 {
+		return "", nil, 0, fmt.Errorf("event data too short: expected 64 bytes, got %d", len(eventData))
+	}
+
+	// Amount is first 32 bytes
+	amountBytes := eventData[0:32]
+	amount = new(big.Int).SetBytes(amountBytes)
+
+	// Index is second 32 bytes
+	indexBytes := eventData[32:64]
+	nonce = new(big.Int).SetBytes(indexBytes).Uint64()
+
+	bs.logger.Info("📋 Parsed deposit event",
+		"recipient", recipientStr,
+		"amount", amount.String(),
+		"index", nonce,
+		"selector", fmt.Sprintf("0x%x", selector),
+	)
+
+	return recipientStr, amount, nonce, nil
+}
+
+// GetPendingDeposits returns and clears the pending deposits queue (thread-safe)
+func (bs *BridgeService) GetPendingDeposits() []DepositEvent {
+	bs.depositMutex.Lock()
+	defer bs.depositMutex.Unlock()
+
+	deposits := bs.pendingDeposits
+	bs.pendingDeposits = []DepositEvent{} // Clear the queue
+	return deposits
 }
 
 // GetLastProcessedBlock returns the last processed Ethereum block number

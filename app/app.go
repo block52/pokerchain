@@ -252,6 +252,9 @@ func New(
 				bridgeService.SetLastProcessedBlock(bridgeConfig.StartingBlock - 1)
 			}
 
+			// Set bridge service on keeper so EndBlocker can access it
+			app.PokerKeeper.SetBridgeService(bridgeService)
+
 			// Start bridge service in background
 			go bridgeService.Start(context.Background())
 			logger.Info("✅ Bridge service started successfully")

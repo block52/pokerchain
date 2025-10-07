@@ -26,6 +26,7 @@ type Keeper struct {
 
 	bankKeeper    types.BankKeeper
 	stakingKeeper types.StakingKeeper
+	bridgeService *BridgeService
 }
 
 func NewKeeper(
@@ -67,4 +68,14 @@ func NewKeeper(
 // GetAuthority returns the module's authority.
 func (k Keeper) GetAuthority() []byte {
 	return k.authority
+}
+
+// SetBridgeService sets the bridge service reference
+func (k *Keeper) SetBridgeService(bs *BridgeService) {
+	k.bridgeService = bs
+}
+
+// GetBridgeService returns the bridge service
+func (k Keeper) GetBridgeService() *BridgeService {
+	return k.bridgeService
 }
