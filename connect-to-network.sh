@@ -32,34 +32,50 @@ cp "$GENESIS_FILE" "$NODE_HOME/config/genesis.json"
 
 # Get peer ID from remote node (optional, requires access)
 echo "Getting peer information..."
-echo "To get the peer ID from node1.block52.xyz, run:"
-echo "ssh user@node1.block52.xyz 'pokerchaind tendermint show-node-id'"
-echo ""
+echo "Attempting to get peer ID from root@node1.block52.xyz..."
+
+# Try to get peer ID automatically
+PEER_ID=""
+if command -v ssh &> /dev/null; then
+    echo "Using SSH to get node ID from root@node1.block52.xyz..."
+    PEER_ID=$(ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no root@node1.block52.xyz 'pokerchaind tendermint show-node-id' 2>/dev/null || echo "")
+    
+    if [ -n "$PEER_ID" ]; then
+        echo "✅ Successfully retrieved peer ID: $PEER_ID"
+    else
+        echo "❌ Failed to retrieve peer ID via SSH"
+        echo "You can also run: ssh root@node1.block52.xyz 'pokerchaind tendermint show-node-id'"
+        echo ""
+        read -p "Enter the peer ID manually (or press Enter to skip): " PEER_ID
+    fi
+else
+    echo "SSH not available. Please get peer ID manually:"
+    echo "ssh root@node1.block52.xyz 'pokerchaind tendermint show-node-id'"
+    echo ""
+    read -p "Enter the peer ID from node1.block52.xyz: " PEER_ID
+fi
 
 # Configure persistent peers
 CONFIG_FILE="$NODE_HOME/config/config.toml"
 
 echo "Configuring network settings..."
 
-# Update persistent peers (you'll need to add the actual peer ID)
-read -p "Enter the peer ID from node1.block52.xyz: " PEER_ID
-
 if [ -n "$PEER_ID" ]; then
     FULL_PEER="$PEER_ID@$PEER_ADDRESS"
     echo "Adding peer: $FULL_PEER"
-    sed -i "s/persistent_peers = \"\"/persistent_peers = \"$FULL_PEER\"/" "$CONFIG_FILE"
+    sed -i '' "s/persistent_peers = \"\"/persistent_peers = \"$FULL_PEER\"/" "$CONFIG_FILE"
 else
     echo "Warning: No peer ID provided. You'll need to configure it manually."
 fi
 
 # Configure other network settings
-sed -i 's/create_empty_blocks = true/create_empty_blocks = false/' "$CONFIG_FILE"
-sed -i 's/create_empty_blocks_interval = "0s"/create_empty_blocks_interval = "30s"/' "$CONFIG_FILE"
+sed -i '' 's/create_empty_blocks = true/create_empty_blocks = false/' "$CONFIG_FILE"
+sed -i '' 's/create_empty_blocks_interval = "0s"/create_empty_blocks_interval = "30s"/' "$CONFIG_FILE"
 
 # Update app.toml
 APP_CONFIG="$NODE_HOME/config/app.toml"
-sed -i 's/enable = false/enable = true/' "$APP_CONFIG"
-sed -i 's/swagger = false/swagger = true/' "$APP_CONFIG"
+sed -i '' 's/enable = false/enable = true/' "$APP_CONFIG"
+sed -i '' 's/swagger = false/swagger = true/' "$APP_CONFIG"
 
 echo ""
 echo "Configuration complete!"

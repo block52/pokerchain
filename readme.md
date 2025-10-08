@@ -33,6 +33,25 @@ ignite chain serve
 
 `serve` command installs dependencies, builds, initializes, and starts your blockchain in development.
 
+### Quick Test - Poker Functionality
+
+Once your chain is running, test the poker module:
+
+```bash
+# 1. Import a test account (see TEST_ACTORS.md for seed phrases)
+pokerchaind keys add alice --recover --keyring-backend test
+
+# 2. Create a poker game
+pokerchaind tx poker create-game 1000 10000 2 6 50 100 30 "texas-holdem" \
+  --from alice --keyring-backend test --chain-id pokerchain --fees 1000token --yes
+
+# 3. Query legal actions for a player
+curl -X GET "http://localhost:1317/pokerchain/poker/v1/legal_actions/game-id/player-address"
+
+# 4. Check game state
+curl -X GET "http://localhost:1317/pokerchain/poker/v1/game/game-id"
+```
+
 ### Configure
 
 Your blockchain in development can be configured with `config.yml`. To learn more, see the [Ignite CLI docs](https://docs.ignite.com).
@@ -165,6 +184,17 @@ For multi-node setups, ensure your nodes can communicate:
 -   Verify genesis configuration matches across nodes
 
 ## Development Notes
+
+### Test Actors
+
+For testing poker functionality, we provide 10 pre-configured test actors with seed phrases. See [TEST_ACTORS.md](./TEST_ACTORS.md) for complete details including:
+
+-   **Test accounts**: Alice, Bob, Charlie, Diana, Eve, Frank, Grace, Henry, Iris, Jack
+-   **Seed phrases**: Ready-to-import mnemonic phrases for each account
+-   **Usage instructions**: How to import accounts and add test funds
+-   **Example commands**: Creating games and querying legal actions
+
+**⚠️ Important**: These are test accounts only - never use on mainnet!
 
 ### Build Tools
 
