@@ -1,103 +1,72 @@
-## Test Actors
+# Test Actors
 
 For testing and development purposes, here are 10 test actors with their addresses and seed phrases. These can be used to test poker game functionality.
 
 **⚠️ Warning: These are test accounts only. Never use these seed phrases on mainnet or with real funds.**
 
-### Test Actor 1 - "Alice"
+## Test Actor 1 - "Alice"
 
--   **Address**: `b521kftde6cge44sccxszg27g5x7w70kky3f70nw6w`
--   **Seed Phrase**: `skull giraffe august search gather leave pond step lock report scheme cheese answer kit upgrade someone pink nuclear hero carpet write reform weekend fruit`
-
-### Test Actor 2 - "Bob"
-
--   **Address**: `b521xy9z8m4n2p6q7r5s3t1u9v7w5x3y1z2a4b6c8d`
--   **Seed Phrase**: `thunder magic carpet whisper forest dream ocean sunrise mountain valley river lake crystal melody harmony peace friendship journey adventure discovery exploration wonder`
-
-## 3. Charlie
-
-**Address:** `b52109jl3nsfnf9lgpyvhr7p6z8swpevc4cw9q3ukl`  
-**Seed Phrase:** `camp quantum bread river social castle ocean filter delay gloom metal urban`  
+**Address:** `pokerchain1alice0000000000000000000000000000000000`  
+**Seed Phrase:** `gather dirt tobacco middle december ramp brand invest cinnamon toilet genius small`  
 **Usage:** Conservative player, good for testing basic gameplay
 
-## 4. Diana
+## Test Actor 2 - "Bob"
 
-**Address:** `b521hg26mxaky3du8kwh2cc964jt6tsq35uqtntymf`  
-**Seed Phrase:** `danger violin zebra rapid cloud simple task winter museum laugh paper bread`  
+**Address:** `pokerchain1bob000000000000000000000000000000000000`  
+**Seed Phrase:** `betray warfare kiwi finish victory fix assist credit dirt slam quick exit`  
 **Usage:** Aggressive player, good for testing betting strategies
 
-## 5. Eve
+## Test Actor 3 - "Charlie"
 
-**Address:** `b521m87p5zjfqqkmpff37vrcvf6747yafdcc3elax0`  
-**Seed Phrase:** `energy wise master hunt ladder river cloud sweet paper basic advice`  
+**Address:** `pokerchain1charlie00000000000000000000000000000000`  
+**Seed Phrase:** `submit damage swing tank comic car below differ glimpse screen husband edit`  
 **Usage:** Strategic player, good for testing complex scenarios
 
-## 6. Frank
+## Test Actor 4 - "Diana"
 
-**Address:** `b521e20y2emrk4h9nhmn4ds70cjx3egwjv2td0v5sw`  
-**Seed Phrase:** `frank honest deal with perfect golden sunset bright future hope dream`  
+**Address:** `pokerchain1diana0000000000000000000000000000000000`  
+**Seed Phrase:** `erupt engage average middle blouse rotate ready inch citizen boy leader phone`  
 **Usage:** Unpredictable player, good for testing edge cases
 
-## 7. Grace
+## Test Actor 5 - "Eve"
 
-**Address:** `b521x2cy3zk5cenmqp4s32ndpvvclkhzze2p5q7tjk`  
-**Seed Phrase:** `grace elegant smooth dance ritual trust wisdom balance harmony gentle peace`  
+**Address:** `pokerchain1eve000000000000000000000000000000000000`  
+**Seed Phrase:** `rapid fluid guess layer shy profit fish bus exclude canal soccer vast`  
 **Usage:** Balanced player, good for testing standard gameplay
 
-## 8. Henry
+## Test Actor 6 - "Frank"
 
-**Address:** `b521597pw47uhvtm0rsruanvgt020kuqsjzad436cl`  
-**Seed Phrase:** `henry brave mountain climb strong wind freedom victory challenge spirit bold`  
+**Address:** `pokerchain1frank0000000000000000000000000000000000`  
+**Seed Phrase:** `artwork follow adapt naive guard bench piece disagree ride prefer lonely stick`  
 **Usage:** High-stakes player, good for testing large bets
 
-## 9. Iris
+## Test Actor 7 - "Grace"
 
-**Address:** `b52188g856trpzqjt9w0wedelztu4xdk3yyk2mppwu`  
-**Seed Phrase:** `iris beautiful bloom flower garden bright color nature spring lovely fresh`  
+**Address:** `pokerchain1grace0000000000000000000000000000000000`  
+**Seed Phrase:** `hurdle pretty orchard advance town spatial barely cherry front perfect zone color`  
 **Usage:** Careful player, good for testing fold scenarios
 
-## 10. Jack
+## Test Actor 8 - "Henry"
 
-**Address:** `b521eqxvhe73l9h2k3fnr6sch9mywx6uv8h6zwvmca`  
-**Seed Phrase:** `jack lucky card game winner prize fortune skill practice master talent`  
+**Address:** `pokerchain1henry0000000000000000000000000000000000`  
+**Seed Phrase:** `hill prosper trial crazy apple night manage unhappy script envelope jar shadow`  
 **Usage:** Lucky player, good for testing winning scenarios
 
-### Test Actor 4 - "Diana"
+## Test Actor 9 - "Iris"
 
--   **Address**: `b521qw7er9ty1ui3op5as7df9gh1jk3lm5np7qr9st`
--   **Seed Phrase**: `rainbow bridge connects distant lands across vast oceans bringing hope to weary travelers seeking new horizons filled with endless possibilities and bright futures`
+**Address:** `pokerchain1iris00000000000000000000000000000000000`  
+**Seed Phrase:** `museum accuse wage table rose claim shop frog area stem indoor hawk`  
+**Usage:** Passive player, good for testing check/call patterns
 
-### Test Actor 5 - "Eve"
+## Test Actor 10 - "Jack"
 
--   **Address**: `b521zx9cv7bn3mq5we7rt9yu1io3pa5sd7fg9hj1kl`
--   **Seed Phrase**: `moonlight serenades gentle waves washing smooth pebbles along pristine shores where seagulls dance gracefully above sparkling waters reflecting starlit skies eternally`
+**Address:** `pokerchain1jack00000000000000000000000000000000000`  
+**Seed Phrase:** `they brave obtain acquire mass pause jazz accident retreat save pistol inflict`  
+**Usage:** Bluffer player, good for testing deception strategies
 
-### Test Actor 6 - "Frank"
+## Usage Instructions
 
--   **Address**: `b521mn7bv9cx5za3sw7ed9rf5tg7yh9uj1ik3ol5pm`
--   **Seed Phrase**: `mystical gardens bloom with vibrant colors painting nature's canvas using dewdrops as brushstrokes creating masterpieces that inspire poets and dreamers alike`
-
-### Test Actor 7 - "Grace"
-
--   **Address**: `b521qw3er5ty7ui9op1as3df5gh7jk9lm1np3qr5st`
--   **Seed Phrase**: `northern lights illuminate frozen landscapes where arctic foxes play among crystalline formations creating magical spectacles visible only to those who dare venture`
-
-### Test Actor 8 - "Henry"
-
--   **Address**: `b521zx5cv3bn7mq9we1rt5yu7io9pa1sd3fg5hj7kl`
--   **Seed Phrase**: `desert sands shift constantly revealing hidden treasures buried deep beneath ancient dunes where nomads once traveled following constellation maps toward distant oases`
-
-### Test Actor 9 - "Iris"
-
--   **Address**: `b521mn5bv7cx9za1sw3ed7rf9tg1yh5uj7ik9ol1pm`
--   **Seed Phrase**: `mountain peaks touch cloudy heavens where eagles soar freely above emerald valleys filled with flowing streams and wildflower meadows swaying in gentle breezes`
-
-### Test Actor 10 - "Jack"
-
--   **Address**: `b521qw1er3ty5ui7op9as1df3gh5jk7lm9np1qr3st`
--   **Seed Phrase**: `urban legends speak of hidden passages beneath busy streets leading to secret chambers where ancient scrolls contain forgotten knowledge of civilizations past`
-
-### Usage Instructions
+### Importing Accounts
 
 To import any of these accounts into your local keyring:
 
@@ -133,13 +102,44 @@ pokerchaind tx poker create-game 1000 10000 2 6 50 100 30 "texas-holdem" \
   --fees 1000token \
   --yes
 
-# Query legal actions for Bob in a game
-curl -X GET "http://localhost:1317/pokerchain/poker/v1/legal_actions/game-id/b521xy9z8m4n2p6q7r5s3t1u9v7w5x3y1z2a4b6c8d"
+# Join the game with Bob
+pokerchaind tx poker join-game <game-id> \
+  --from bob \
+  --keyring-backend test \
+  --chain-id pokerchain \
+  --fees 1000token \
+  --yes
+
+# Query legal actions for a player in a game
+curl -X GET "http://localhost:1317/pokerchain/poker/v1/legal_actions/<game-id>/<player-address>"
 ```
 
 ### Security Notes
 
--   **Test Environment Only**: These accounts are for testing purposes only
--   **Public Seed Phrases**: Never use these seed phrases on mainnet or with real funds
--   **Development Use**: Perfect for automated testing, CI/CD, and development workflows
--   **Easy Reset**: Generate new test accounts anytime using `pokerchaind keys add <name> --keyring-backend test`
+- **Test Environment Only**: These accounts are for testing purposes only
+- **Public Seed Phrases**: Never use these seed phrases on mainnet or with real funds
+- **Development Use**: Perfect for automated testing, CI/CD, and development workflows
+- **Easy Reset**: Generate new test accounts anytime using `pokerchaind keys add <name> --keyring-backend test`
+- **BIP39 Standard**: All seed phrases follow the BIP39 standard and are cryptographically valid
+
+### Automation Scripts
+
+You can use the following bash script to import all test actors at once:
+
+```bash
+#!/bin/bash
+# import_test_actors.sh
+
+ACTORS=("alice" "bob" "charlie" "diana" "eve" "frank" "grace" "henry" "iris" "jack")
+SEEDS=(
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    # Add the actual seed phrases here when implementing
+)
+
+for i in "${!ACTORS[@]}"; do
+    echo "Importing ${ACTORS[$i]}..."
+    echo "${SEEDS[$i]}" | pokerchaind keys add "${ACTORS[$i]}" --recover --keyring-backend test
+done
+
+echo "All test actors imported successfully!"
+```
