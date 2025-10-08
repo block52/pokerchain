@@ -135,10 +135,6 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 		actionIndex = 1 // Ensure first action starts at index 1
 	}
 
-	// Add debug logging to see what we're sending to the engine
-	fmt.Printf("DEBUG: Sending to poker engine - GameID: %s, Action: %s, PlayerID: %s, Amount: %s, Index: %d\n",
-		gameId, action, playerId, strconv.FormatUint(amount, 10), actionIndex)
-
 	request := JSONRPCRequest{
 		Method: "perform_action",
 		Params: []interface{}{
@@ -206,9 +202,6 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 			return fmt.Errorf("failed to marshal response result: %w", err)
 		}
 
-		// Log what we got from the engine for debugging
-		fmt.Printf("ENGINE RESPONSE: %s\n", string(resultBytes))
-
 		// The engine response has a "data" field containing the actual game state
 		// First extract the wrapper structure
 		var engineResponse struct {
@@ -217,7 +210,7 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 		}
 
 		if err := json.Unmarshal(resultBytes, &engineResponse); err != nil {
-			return fmt.Errorf("failed to unmarshal engine response wrapper: %v - Raw response: %s", err, string(resultBytes))
+			return fmt.Errorf("failed to unmarshal engine response wrapper: %v", err)
 		}
 
 		// Now marshal just the data portion and unmarshal into our game state structure
@@ -228,26 +221,15 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 
 		var updatedGameState types.TexasHoldemStateDTO
 		if err := json.Unmarshal(dataBytes, &updatedGameState); err != nil {
-			return fmt.Errorf("UNMARSHAL ERROR: %v - Data: %s", err, string(dataBytes))
+			return fmt.Errorf("failed to unmarshal updated game state: %v", err)
 		}
-
-		// Debug: Show what we're about to store
-		stateToStoreBytes, _ := json.Marshal(updatedGameState)
-		fmt.Printf("ABOUT TO STORE: %s\n", string(stateToStoreBytes))
 
 		// Store the updated game state
 		if err := k.GameStates.Set(ctx, gameId, updatedGameState); err != nil {
 			return fmt.Errorf("failed to store updated game state: %w", err)
 		}
-
-		fmt.Printf("SUCCESSFULLY STORED GAME STATE\n") // Store the updated game state
-		if err := k.GameStates.Set(ctx, gameId, updatedGameState); err != nil {
-			return fmt.Errorf("failed to store updated game state: %w", err)
-		}
-
-		fmt.Printf("SUCCESSFULLY STORED GAME STATE\n")
 	} else {
-		return fmt.Errorf("NO RESULT FROM ENGINE - Full response: %+v", response)
+		return fmt.Errorf("no result returned from poker engine")
 	}
 
 	return nil
