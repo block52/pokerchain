@@ -209,17 +209,45 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 		// Log what we got from the engine for debugging
 		fmt.Printf("ENGINE RESPONSE: %s\n", string(resultBytes))
 
-		var updatedGameState types.TexasHoldemStateDTO
-		if err := json.Unmarshal(resultBytes, &updatedGameState); err != nil {
-			fmt.Printf("UNMARSHAL ERROR: %v\n", err)
-			// For now, don't fail the transaction, just log the error
-		} else {
-			// Store the updated game state
-			k.GameStates.Set(ctx, gameId, updatedGameState)
-			fmt.Printf("SUCCESSFULLY STORED GAME STATE\n")
+		// The engine response has a "data" field containing the actual game state
+		// First extract the wrapper structure
+		var engineResponse struct {
+			Data      map[string]interface{} `json:"data"`
+			Signature interface{}            `json:"signature"`
 		}
+
+		if err := json.Unmarshal(resultBytes, &engineResponse); err != nil {
+			return fmt.Errorf("failed to unmarshal engine response wrapper: %v - Raw response: %s", err, string(resultBytes))
+		}
+
+		// Now marshal just the data portion and unmarshal into our game state structure
+		dataBytes, err := json.Marshal(engineResponse.Data)
+		if err != nil {
+			return fmt.Errorf("failed to marshal engine data: %w", err)
+		}
+
+		var updatedGameState types.TexasHoldemStateDTO
+		if err := json.Unmarshal(dataBytes, &updatedGameState); err != nil {
+			return fmt.Errorf("UNMARSHAL ERROR: %v - Data: %s", err, string(dataBytes))
+		}
+
+		// Debug: Show what we're about to store
+		stateToStoreBytes, _ := json.Marshal(updatedGameState)
+		fmt.Printf("ABOUT TO STORE: %s\n", string(stateToStoreBytes))
+
+		// Store the updated game state
+		if err := k.GameStates.Set(ctx, gameId, updatedGameState); err != nil {
+			return fmt.Errorf("failed to store updated game state: %w", err)
+		}
+
+		fmt.Printf("SUCCESSFULLY STORED GAME STATE\n") // Store the updated game state
+		if err := k.GameStates.Set(ctx, gameId, updatedGameState); err != nil {
+			return fmt.Errorf("failed to store updated game state: %w", err)
+		}
+
+		fmt.Printf("SUCCESSFULLY STORED GAME STATE\n")
 	} else {
-		fmt.Printf("NO RESULT FROM ENGINE\n")
+		return fmt.Errorf("NO RESULT FROM ENGINE - Full response: %+v", response)
 	}
 
 	return nil
