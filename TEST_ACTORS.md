@@ -6,62 +6,62 @@ For testing and development purposes, here are 10 test actors with their address
 
 ## Test Actor 1 - "Alice"
 
-**Address:** `pokerchain1alice0000000000000000000000000000000000`  
-**Seed Phrase:** `gather dirt tobacco middle december ramp brand invest cinnamon toilet genius small`  
+**Address:** `b521dfe7r39q88zeqtde44efdqeky9thdtwngkzy2y`  
+**Seed Phrase:** `cement shadow leave crash crisp aisle model hip lend february library ten cereal soul bind boil bargain barely rookie odor panda artwork damage reason`  
 **Usage:** Conservative player, good for testing basic gameplay
 
 ## Test Actor 2 - "Bob"
 
-**Address:** `pokerchain1bob000000000000000000000000000000000000`  
-**Seed Phrase:** `betray warfare kiwi finish victory fix assist credit dirt slam quick exit`  
+**Address:** `b521hg93rsm2f5v3zlepf20ru88uweajt3nf492s2p`  
+**Seed Phrase:** `vanish legend pelican blush control spike useful usage into any remove wear flee short october naive swear wall spy cup sort avoid agent credit`  
 **Usage:** Aggressive player, good for testing betting strategies
 
 ## Test Actor 3 - "Charlie"
 
-**Address:** `pokerchain1charlie00000000000000000000000000000000`  
-**Seed Phrase:** `submit damage swing tank comic car below differ glimpse screen husband edit`  
+**Address:** `b521xkh7eznh50km2lxh783sqqyml8fjwl0tqjsc0c`  
+**Seed Phrase:** `video short denial minimum vague arm dose parrot poverty saddle kingdom life buyer globe fashion topic vicious theme voice keep try jacket fresh potato`  
 **Usage:** Strategic player, good for testing complex scenarios
 
 ## Test Actor 4 - "Diana"
 
-**Address:** `pokerchain1diana0000000000000000000000000000000000`  
-**Seed Phrase:** `erupt engage average middle blouse rotate ready inch citizen boy leader phone`  
+**Address:** `b521n25h4eg6uhtdvs26988k9ye497sylum8lz5vns`  
+**Seed Phrase:** `twice bacon whale space improve galaxy liberty trumpet outside sunny action reflect doll hill ugly torch ride gossip snack fork talk market proud nothing`  
 **Usage:** Unpredictable player, good for testing edge cases
 
 ## Test Actor 5 - "Eve"
 
-**Address:** `pokerchain1eve000000000000000000000000000000000000`  
-**Seed Phrase:** `rapid fluid guess layer shy profit fish bus exclude canal soccer vast`  
+**Address:** `b521pscx3n8gygnm7pf3vxcyvxlwvcxa3ug2vzaxah`  
+**Seed Phrase:** `raven mix autumn dismiss degree husband street slender maple muscle inch radar winner agent claw permit autumn expose power minute master scrub asthma retreat`  
 **Usage:** Balanced player, good for testing standard gameplay
 
 ## Test Actor 6 - "Frank"
 
-**Address:** `pokerchain1frank0000000000000000000000000000000000`  
-**Seed Phrase:** `artwork follow adapt naive guard bench piece disagree ride prefer lonely stick`  
+**Address:** `b521pejd682h20grq0em8jwhmnclggf2hqaq7xh8tk`  
+**Seed Phrase:** `alpha satoshi civil spider expand bread pitch keen define helmet tourist rib habit cereal impulse earn milk need obscure ski purchase question vocal author`  
 **Usage:** High-stakes player, good for testing large bets
 
 ## Test Actor 7 - "Grace"
 
-**Address:** `pokerchain1grace0000000000000000000000000000000000`  
-**Seed Phrase:** `hurdle pretty orchard advance town spatial barely cherry front perfect zone color`  
+**Address:** `b521r4ysrlg7cqgfx4nh48t234g6hl3lxap9dddede`  
+**Seed Phrase:** `letter stumble apology garlic liquid loyal bid board silver web ghost jewel lift direct green silk urge guitar nest erase remind jaguar decrease skin`  
 **Usage:** Careful player, good for testing fold scenarios
 
 ## Test Actor 8 - "Henry"
 
-**Address:** `pokerchain1henry0000000000000000000000000000000000`  
-**Seed Phrase:** `hill prosper trial crazy apple night manage unhappy script envelope jar shadow`  
+**Address:** `b521xe9xv26qtdern5k84csy2c6jxxfa33vxn6s0aw`  
+**Seed Phrase:** `access execute loyal tag grid demise cloth desk dolphin pelican trumpet frown note level sibling dumb upon unfold wedding party success hint need fruit`  
 **Usage:** Lucky player, good for testing winning scenarios
 
 ## Test Actor 9 - "Iris"
 
 **Address:** `pokerchain1iris00000000000000000000000000000000000`  
-**Seed Phrase:** `museum accuse wage table rose claim shop frog area stem indoor hawk`  
+**Seed Phrase:** `any antenna globe forget neglect race advice admit market guilt clay tunnel anxiety aim morning scrap visit sibling royal during proud flee maid fiscal`  
 **Usage:** Passive player, good for testing check/call patterns
 
 ## Test Actor 10 - "Jack"
 
 **Address:** `pokerchain1jack00000000000000000000000000000000000`  
-**Seed Phrase:** `they brave obtain acquire mass pause jazz accident retreat save pistol inflict`  
+**Seed Phrase:** `digital option before hawk alcohol uncover expire faint enact shield bike uncle kangaroo museum domain heart purchase under answer topple timber hole height glance`  
 **Usage:** Bluffer player, good for testing deception strategies
 
 ## Usage Instructions
@@ -116,11 +116,11 @@ curl -X GET "http://localhost:1317/pokerchain/poker/v1/legal_actions/<game-id>/<
 
 ### Security Notes
 
-- **Test Environment Only**: These accounts are for testing purposes only
-- **Public Seed Phrases**: Never use these seed phrases on mainnet or with real funds
-- **Development Use**: Perfect for automated testing, CI/CD, and development workflows
-- **Easy Reset**: Generate new test accounts anytime using `pokerchaind keys add <name> --keyring-backend test`
-- **BIP39 Standard**: All seed phrases follow the BIP39 standard and are cryptographically valid
+-   **Test Environment Only**: These accounts are for testing purposes only
+-   **Public Seed Phrases**: Never use these seed phrases on mainnet or with real funds
+-   **Development Use**: Perfect for automated testing, CI/CD, and development workflows
+-   **Easy Reset**: Generate new test accounts anytime using `pokerchaind keys add <name> --keyring-backend test`
+-   **BIP39 Standard**: All seed phrases follow the BIP39 standard and are cryptographically valid
 
 ### Automation Scripts
 

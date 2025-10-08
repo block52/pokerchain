@@ -8,6 +8,15 @@ set -e
 echo "🎮 Setting up Pokerchain Genesis with Test Actors"
 echo "================================================"
 
+# Ask which user should be the primary validator
+echo "Which test actor should run the primary validator node?"
+echo "Available actors: alice, bob, charlie, diana, eve, frank, grace, henry, iris, jack"
+read -p "Enter the primary validator name [alice]: " PRIMARY_VALIDATOR
+PRIMARY_VALIDATOR=${PRIMARY_VALIDATOR:-alice}
+
+echo "Primary validator will be: $PRIMARY_VALIDATOR"
+echo ""
+
 # Configuration
 CHAIN_ID="pokerchain"
 DENOM="b52"
@@ -31,18 +40,18 @@ declare -A TEST_ACTORS=(
     ["jack"]="b521eqxvhe73l9h2k3fnr6sch9mywx6uv8h6zwvmca"
 )
 
-# Validator seed phrases (from TEST_ACTORS.md)
+# Validator seed phrases (Simple 12-word BIP39 mnemonics for testing)
 declare -A SEED_PHRASES=(
-    ["alice"]="skull giraffe august search gather leave pond step lock report scheme cheese answer kit upgrade someone pink nuclear hero carpet write reform weekend fruit"
-    ["bob"]="thunder magic carpet whisper forest dream ocean sunrise mountain valley river lake crystal melody harmony peace friendship journey adventure discovery exploration wonder"
-    ["charlie"]="camp quantum bread river social castle ocean filter delay gloom metal urban"
-    ["diana"]="danger violin zebra rapid cloud simple task winter museum laugh paper bread"
-    ["eve"]="energy wise master hunt ladder river cloud sweet paper basic advice"
-    ["frank"]="frank honest deal with perfect golden sunset bright future hope dream"
-    ["grace"]="grace elegant smooth dance ritual trust wisdom balance harmony gentle peace"
-    ["henry"]="henry brave mountain climb strong wind freedom victory challenge spirit bold"
-    ["iris"]="iris beautiful bloom flower garden bright color nature spring lovely fresh"
-    ["jack"]="jack lucky card game winner prize fortune skill practice master talent"
+    ["alice"]="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    ["bob"]="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon above"
+    ["charlie"]="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon absent"
+    ["diana"]="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon absorb"
+    ["eve"]="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abstract"
+    ["frank"]="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abuse"
+    ["grace"]="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon access"
+    ["henry"]="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon accident"
+    ["iris"]="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon account"
+    ["jack"]="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon accuse"
 )
 
 # Clean start
@@ -50,28 +59,64 @@ echo "🧹 Cleaning previous setup..."
 rm -rf "$HOME_DIR"
 pkill $POKERCHAIND || true
 
-# Initialize chain
-echo "🚀 Initializing chain..."
-$POKERCHAIND init validator --chain-id "$CHAIN_ID" --home "$HOME_DIR"
+# Initialize chain with primary validator
+echo "🚀 Initializing chain as $PRIMARY_VALIDATOR..."
+$POKERCHAIND init "$PRIMARY_VALIDATOR" --chain-id "$CHAIN_ID" --home "$HOME_DIR"
 
 # Add test actors as validators
 echo "👥 Adding test actors as validators..."
 
-VALIDATOR_COUNT=0
+# First add the primary validator
+name=$PRIMARY_VALIDATOR
+address="${TEST_ACTORS[$name]}"
+seed="${SEED_PHRASES[$name]}"
+
+echo "Adding primary validator: $name ($address)..."
+
+# Add key from seed phrase using temporary file
+echo "$seed" > /tmp/seed_$name.txt
+$POKERCHAIND keys add "$name" --recover --keyring-backend test --home "$HOME_DIR" --source /tmp/seed_$name.txt
+rm /tmp/seed_$name.txt
+
+# Add genesis account with b52 tokens and stake tokens
+$POKERCHAIND genesis add-genesis-account "$name" "${ACTOR_BALANCE}${DENOM},${STAKE_BALANCE}${STAKE_DENOM}" \
+    --keyring-backend test --home "$HOME_DIR"
+
+# Create primary validator transaction
+echo "Creating primary validator gentx for $name..."
+$POKERCHAIND genesis gentx "$name" "50000000000${STAKE_DENOM}" \
+    --chain-id "$CHAIN_ID" \
+    --moniker "$name-validator" \
+    --commission-max-change-rate "0.1" \
+    --commission-max-rate "0.2" \
+    --commission-rate "0.1" \
+    --keyring-backend test \
+    --home "$HOME_DIR"
+
+VALIDATOR_COUNT=1
+
+# Add remaining test actors
 for name in "${!TEST_ACTORS[@]}"; do
+    # Skip if this is the primary validator (already added)
+    if [ "$name" = "$PRIMARY_VALIDATOR" ]; then
+        continue
+    fi
+    
     address="${TEST_ACTORS[$name]}"
     seed="${SEED_PHRASES[$name]}"
     
     echo "Adding $name ($address)..."
     
-    # Add key from seed phrase
-    echo "$seed" | $POKERCHAIND keys add "$name" --recover --keyring-backend test --home "$HOME_DIR"
+    # Add key from seed phrase using temporary file
+    echo "$seed" > /tmp/seed_$name.txt
+    $POKERCHAIND keys add "$name" --recover --keyring-backend test --home "$HOME_DIR" --source /tmp/seed_$name.txt
+    rm /tmp/seed_$name.txt
     
     # Add genesis account with b52 tokens and stake tokens
     $POKERCHAIND genesis add-genesis-account "$name" "${ACTOR_BALANCE}${DENOM},${STAKE_BALANCE}${STAKE_DENOM}" \
         --keyring-backend test --home "$HOME_DIR"
     
-    # Create validator transaction for first 5 actors
+    # Create validator transaction for first 5 actors total
     if [ $VALIDATOR_COUNT -lt 5 ]; then
         echo "Creating validator gentx for $name..."
         $POKERCHAIND genesis gentx "$name" "50000000000${STAKE_DENOM}" \
@@ -105,16 +150,22 @@ echo ""
 echo "🎉 Genesis setup complete!"
 echo "========================="
 echo ""
+echo "🛡️  Primary Validator: $PRIMARY_VALIDATOR"
+echo ""
 echo "Test Actors Added:"
 for name in "${!TEST_ACTORS[@]}"; do
-    echo "  ✅ $name: ${TEST_ACTORS[$name]}"
+    if [ "$name" = "$PRIMARY_VALIDATOR" ]; then
+        echo "  ⭐ $name: ${TEST_ACTORS[$name]} (PRIMARY VALIDATOR)"
+    else
+        echo "  ✅ $name: ${TEST_ACTORS[$name]}"
+    fi
 done
 echo ""
 echo "💰 Each actor has:"
 echo "  - $ACTOR_BALANCE $DENOM tokens"
 echo "  - $STAKE_BALANCE $STAKE_DENOM tokens" 
 echo ""
-echo "🛡️  Validators created: 5 (alice, bob, charlie, diana, eve)"
+echo "🛡️  Total Validators: $VALIDATOR_COUNT"
 echo ""
 echo "📁 Files created:"
 echo "  - ./genesis.json (project root)"
@@ -122,3 +173,4 @@ echo "  - ./app.toml (app configuration)"
 echo "  - $HOME_DIR (full node setup)"
 echo ""
 echo "🚀 Ready to deploy to node1.block52.xyz!"
+echo "   Run: ./deploy-node.sh node1.block52.xyz root"
