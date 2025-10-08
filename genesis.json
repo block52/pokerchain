@@ -124,56 +124,56 @@
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521charlie3test3charlie3test3charlie3te",
+          "address": "b52109jl3nsfnf9lgpyvhr7p6z8swpevc4cw9q3ukl",
           "pub_key": null,
           "account_number": "10",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521diana4test4diana4test4diana4test4di",
+          "address": "b521hg26mxaky3du8kwh2cc964jt6tsq35uqtntymf",
           "pub_key": null,
           "account_number": "11",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521eve5test5eve5test5eve5test5eve5test",
+          "address": "b521m87p5zjfqqkmpff37vrcvf6747yafdcc3elax0",
           "pub_key": null,
           "account_number": "12",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521frank6test6frank6test6frank6test6fr",
+          "address": "b521e20y2emrk4h9nhmn4ds70cjx3egwjv2td0v5sw",
           "pub_key": null,
           "account_number": "13",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521grace7test7grace7test7grace7test7gr",
+          "address": "b521x2cy3zk5cenmqp4s32ndpvvclkhzze2p5q7tjk",
           "pub_key": null,
           "account_number": "14",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521henry8test8henry8test8henry8test8he",
+          "address": "b521597pw47uhvtm0rsruanvgt020kuqsjzad436cl",
           "pub_key": null,
           "account_number": "15",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521iris9test9iris9test9iris9test9iris9",
+          "address": "b52188g856trpzqjt9w0wedelztu4xdk3yyk2mppwu",
           "pub_key": null,
           "account_number": "16",
           "sequence": "0"
         },
         {
           "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521jack10test10jack10test10jack10test10",
+          "address": "b521eqxvhe73l9h2k3fnr6sch9mywx6uv8h6zwvmca",
           "pub_key": null,
           "account_number": "17",
           "sequence": "0"
@@ -260,7 +260,7 @@
           ]
         },
         {
-          "address": "b521charlie3test3charlie3test3charlie3te",
+          "address": "b52109jl3nsfnf9lgpyvhr7p6z8swpevc4cw9q3ukl",
           "coins": [
             {
               "denom": "stake",
@@ -273,7 +273,7 @@
           ]
         },
         {
-          "address": "b521diana4test4diana4test4diana4test4di",
+          "address": "b521hg26mxaky3du8kwh2cc964jt6tsq35uqtntymf",
           "coins": [
             {
               "denom": "stake",
@@ -286,7 +286,7 @@
           ]
         },
         {
-          "address": "b521eve5test5eve5test5eve5test5eve5test",
+          "address": "b521m87p5zjfqqkmpff37vrcvf6747yafdcc3elax0",
           "coins": [
             {
               "denom": "stake",
@@ -299,7 +299,7 @@
           ]
         },
         {
-          "address": "b521frank6test6frank6test6frank6test6fr",
+          "address": "b521e20y2emrk4h9nhmn4ds70cjx3egwjv2td0v5sw",
           "coins": [
             {
               "denom": "stake",
@@ -312,7 +312,7 @@
           ]
         },
         {
-          "address": "b521grace7test7grace7test7grace7test7gr",
+          "address": "b521x2cy3zk5cenmqp4s32ndpvvclkhzze2p5q7tjk",
           "coins": [
             {
               "denom": "stake",
@@ -325,7 +325,7 @@
           ]
         },
         {
-          "address": "b521henry8test8henry8test8henry8test8he",
+          "address": "b521597pw47uhvtm0rsruanvgt020kuqsjzad436cl",
           "coins": [
             {
               "denom": "stake",
@@ -338,7 +338,7 @@
           ]
         },
         {
-          "address": "b521iris9test9iris9test9iris9test9iris9",
+          "address": "b52188g856trpzqjt9w0wedelztu4xdk3yyk2mppwu",
           "coins": [
             {
               "denom": "stake",
@@ -351,7 +351,7 @@
           ]
         },
         {
-          "address": "b521jack10test10jack10test10jack10test10",
+          "address": "b521eqxvhe73l9h2k3fnr6sch9mywx6uv8h6zwvmca",
           "coins": [
             {
               "denom": "stake",

@@ -42,7 +42,7 @@ case $NODE_TYPE in
         # For the first node (node1.block52.xyz)
         echo "Steps for node1.block52.xyz:"
         echo "1. Install Go 1.24.7+ and pokerchaind"
-        echo "2. Copy genesis.json to the server"
+        echo "2. Copy genesis.json and app.toml to the server"
         echo "3. Run the second-node.sh script"
         echo ""
         
@@ -56,6 +56,7 @@ case $NODE_TYPE in
             
             # Copy necessary files
             scp genesis.json "$REMOTE_USER@$REMOTE_HOST:~/"
+            scp app.toml "$REMOTE_USER@$REMOTE_HOST:~/"
             scp second-node.sh "$REMOTE_USER@$REMOTE_HOST:~/"
             scp install-from-source.sh "$REMOTE_USER@$REMOTE_HOST:~/"
             scp get-node-info.sh "$REMOTE_USER@$REMOTE_HOST:~/"

@@ -30,6 +30,15 @@ fi
 echo "Updating genesis.json..."
 cp "$GENESIS_FILE" "$NODE_HOME/config/genesis.json"
 
+# Copy app.toml if it exists
+APP_TOML_FILE="./app.toml"
+if [ -f "$APP_TOML_FILE" ]; then
+    echo "Updating app.toml..."
+    cp "$APP_TOML_FILE" "$NODE_HOME/config/app.toml"
+else
+    echo "Note: app.toml not found in current directory, using default configuration"
+fi
+
 # Get peer ID from remote node (optional, requires access)
 echo "Getting peer information..."
 echo "Attempting to get peer ID from root@node1.block52.xyz..."

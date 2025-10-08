@@ -14,10 +14,53 @@ For testing and development purposes, here are 10 test actors with their address
 -   **Address**: `b521xy9z8m4n2p6q7r5s3t1u9v7w5x3y1z2a4b6c8d`
 -   **Seed Phrase**: `thunder magic carpet whisper forest dream ocean sunrise mountain valley river lake crystal melody harmony peace friendship journey adventure discovery exploration wonder`
 
-### Test Actor 3 - "Charlie"
+## 3. Charlie
 
--   **Address**: `b521ab3cd5ef7gh9ij1kl3mn5op7qr9st1uv3wx5yz`
--   **Seed Phrase**: `ancient wisdom speaks through silent stones beneath golden sunlight dancing shadows tell stories of forgotten realms where dragons once soared majestically`
+**Address:** `b52109jl3nsfnf9lgpyvhr7p6z8swpevc4cw9q3ukl`  
+**Seed Phrase:** `camp quantum bread river social castle ocean filter delay gloom metal urban`  
+**Usage:** Conservative player, good for testing basic gameplay
+
+## 4. Diana
+
+**Address:** `b521hg26mxaky3du8kwh2cc964jt6tsq35uqtntymf`  
+**Seed Phrase:** `danger violin zebra rapid cloud simple task winter museum laugh paper bread`  
+**Usage:** Aggressive player, good for testing betting strategies
+
+## 5. Eve
+
+**Address:** `b521m87p5zjfqqkmpff37vrcvf6747yafdcc3elax0`  
+**Seed Phrase:** `energy wise master hunt ladder river cloud sweet paper basic advice`  
+**Usage:** Strategic player, good for testing complex scenarios
+
+## 6. Frank
+
+**Address:** `b521e20y2emrk4h9nhmn4ds70cjx3egwjv2td0v5sw`  
+**Seed Phrase:** `frank honest deal with perfect golden sunset bright future hope dream`  
+**Usage:** Unpredictable player, good for testing edge cases
+
+## 7. Grace
+
+**Address:** `b521x2cy3zk5cenmqp4s32ndpvvclkhzze2p5q7tjk`  
+**Seed Phrase:** `grace elegant smooth dance ritual trust wisdom balance harmony gentle peace`  
+**Usage:** Balanced player, good for testing standard gameplay
+
+## 8. Henry
+
+**Address:** `b521597pw47uhvtm0rsruanvgt020kuqsjzad436cl`  
+**Seed Phrase:** `henry brave mountain climb strong wind freedom victory challenge spirit bold`  
+**Usage:** High-stakes player, good for testing large bets
+
+## 9. Iris
+
+**Address:** `b52188g856trpzqjt9w0wedelztu4xdk3yyk2mppwu`  
+**Seed Phrase:** `iris beautiful bloom flower garden bright color nature spring lovely fresh`  
+**Usage:** Careful player, good for testing fold scenarios
+
+## 10. Jack
+
+**Address:** `b521eqxvhe73l9h2k3fnr6sch9mywx6uv8h6zwvmca`  
+**Seed Phrase:** `jack lucky card game winner prize fortune skill practice master talent`  
+**Usage:** Lucky player, good for testing winning scenarios
 
 ### Test Actor 4 - "Diana"
 
