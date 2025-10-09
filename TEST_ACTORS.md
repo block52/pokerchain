@@ -68,13 +68,13 @@ For testing and development purpose**Address:** `b521xe9xv26qtdern5k84csy2c6jxxf
 
 ## Test Actor 9 - "Iris"
 
-**Address:** `pokerchain1iris00000000000000000000000000000000000`  
+**Address:** `b52102v4aqqm8pxtl5k2kv5229xx7vfwlu66ev0p3h`  
 **Seed Phrase:** `any antenna globe forget neglect race advice admit market guilt clay tunnel anxiety aim morning scrap visit sibling royal during proud flee maid fiscal`  
 **Usage:** Passive player, good for testing check/call patterns
 
 ## Test Actor 10 - "Jack"
 
-**Address:** `pokerchain1jack00000000000000000000000000000000000`  
+**Address:** `b521dyqcaeuhwp6ryzc58gpyqaz8rxrt95sdcltdsq`  
 **Seed Phrase:** `digital option before hawk alcohol uncover expire faint enact shield bike uncle kangaroo museum domain heart purchase under answer topple timber hole height glance`  
 **Usage:** Bluffer player, good for testing deception strategies
 
