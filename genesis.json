@@ -190,175 +190,91 @@
       },
       "balances": [
         {
-          "address": "b5218xjr5vrw3k9lr9k582zay0s5srvpey4s23hcyd",
+          "address": "b521dfe7r39q88zeqtde44efdqeky9thdtwngkzy2y",
           "coins": [
             {
               "denom": "stake",
-              "amount": "100000000"
-            },
-            {
-              "denom": "token",
-              "amount": "20000"
-            }
-          ]
-        },
-        {
-          "address": "b521fl48vsnmsdzcv85q5d2q4z5ajdha8yu39jd6f8",
-          "coins": [
-            {
-              "denom": "stake",
-              "amount": "100000000"
-            }
-          ]
-        },
-        {
-          "address": "b521jv65s3grqf6v6jl3dp4t6c9t9rk99cd8hkqfe0",
-          "coins": [
-            {
-              "denom": "stake",
-              "amount": "120"
-            }
-          ]
-        },
-        {
-          "address": "b52172jjy8a0atlhy25uj0cf3qllta9d2hu5a5a9a6",
-          "coins": [
-            {
-              "denom": "stake",
-              "amount": "100000000"
-            },
-            {
-              "denom": "token",
-              "amount": "10000"
-            }
-          ]
-        },
-        {
-          "address": "b521kftde6cge44sccxszg27g5x7w70kky3f70nw6w",
-          "coins": [
-            {
-              "denom": "stake",
-              "amount": "52000000000"
-            },
-            {
-              "denom": "token",
               "amount": "52000"
             }
           ]
         },
         {
-          "address": "b521weeu9thllmlkkyc2ansrl39w4elh0dpt5s5jm6",
+          "address": "b521hg93rsm2f5v3zlepf20ru88uweajt3nf492s2p",
           "coins": [
             {
               "denom": "stake",
-              "amount": "52000000000"
-            },
-            {
-              "denom": "token",
               "amount": "52000"
             }
           ]
         },
         {
-          "address": "b52109jl3nsfnf9lgpyvhr7p6z8swpevc4cw9q3ukl",
+          "address": "b521xkh7eznh50km2lxh783sqqyml8fjwl0tqjsc0c",
           "coins": [
             {
               "denom": "stake",
-              "amount": "52000000000"
-            },
-            {
-              "denom": "token",
               "amount": "52000"
             }
           ]
         },
         {
-          "address": "b521hg26mxaky3du8kwh2cc964jt6tsq35uqtntymf",
+          "address": "b521n25h4eg6uhtdvs26988k9ye497sylum8lz5vns",
           "coins": [
             {
               "denom": "stake",
-              "amount": "52000000000"
-            },
-            {
-              "denom": "token",
               "amount": "52000"
             }
           ]
         },
         {
-          "address": "b521m87p5zjfqqkmpff37vrcvf6747yafdcc3elax0",
+          "address": "b521pscx3n8gygnm7pf3vxcyvxlwvcxa3ug2vzaxah",
           "coins": [
             {
               "denom": "stake",
-              "amount": "52000000000"
-            },
-            {
-              "denom": "token",
               "amount": "52000"
             }
           ]
         },
         {
-          "address": "b521e20y2emrk4h9nhmn4ds70cjx3egwjv2td0v5sw",
+          "address": "b521pejd682h20grq0em8jwhmnclggf2hqaq7xh8tk",
           "coins": [
             {
               "denom": "stake",
-              "amount": "52000000000"
-            },
-            {
-              "denom": "token",
               "amount": "52000"
             }
           ]
         },
         {
-          "address": "b521x2cy3zk5cenmqp4s32ndpvvclkhzze2p5q7tjk",
+          "address": "b521r4ysrlg7cqgfx4nh48t234g6hl3lxap9dddede",
           "coins": [
             {
               "denom": "stake",
-              "amount": "52000000000"
-            },
-            {
-              "denom": "token",
               "amount": "52000"
             }
           ]
         },
         {
-          "address": "b521597pw47uhvtm0rsruanvgt020kuqsjzad436cl",
+          "address": "b521xe9xv26qtdern5k84csy2c6jxxfa33vxn6s0aw",
           "coins": [
             {
               "denom": "stake",
-              "amount": "52000000000"
-            },
-            {
-              "denom": "token",
               "amount": "52000"
             }
           ]
         },
         {
-          "address": "b52188g856trpzqjt9w0wedelztu4xdk3yyk2mppwu",
+          "address": "b52102v4aqqm8pxtl5k2kv5229xx7vfwlu66ev0p3h",
           "coins": [
             {
               "denom": "stake",
-              "amount": "52000000000"
-            },
-            {
-              "denom": "token",
               "amount": "52000"
             }
           ]
         },
         {
-          "address": "b521eqxvhe73l9h2k3fnr6sch9mywx6uv8h6zwvmca",
+          "address": "b521dyqcaeuhwp6ryzc58gpyqaz8rxrt95sdcltdsq",
           "coins": [
             {
               "denom": "stake",
-              "amount": "52000000000"
-            },
-            {
-              "denom": "token",
               "amount": "52000"
             }
           ]
@@ -367,11 +283,7 @@
       "supply": [
         {
           "denom": "stake",
-          "amount": "520000300000120"
-        },
-        {
-          "denom": "token",
-          "amount": "550000"
+          "amount": "520000"
         }
       ],
       "denom_metadata": [],
@@ -389,74 +301,15 @@
         "withdraw_addr_enabled": true
       },
       "fee_pool": {
-        "community_pool": [
-          {
-            "denom": "stake",
-            "amount": "2.400000000000000000"
-          }
-        ]
+        "community_pool": []
       },
       "delegator_withdraw_infos": [],
-      "previous_proposer": "b52valcons19whqk46zsskljxg23y4uwzlfsadkgn5quvvk5s",
-      "outstanding_rewards": [
-        {
-          "validator_address": "b52valoper18xjr5vrw3k9lr9k582zay0s5srvpey4s4u6q74",
-          "outstanding_rewards": [
-            {
-              "denom": "stake",
-              "amount": "117.600000000000000000"
-            }
-          ]
-        }
-      ],
-      "validator_accumulated_commissions": [
-        {
-          "validator_address": "b52valoper18xjr5vrw3k9lr9k582zay0s5srvpey4s4u6q74",
-          "accumulated": {
-            "commission": [
-              {
-                "denom": "stake",
-                "amount": "11.760000000000000000"
-              }
-            ]
-          }
-        }
-      ],
-      "validator_historical_rewards": [
-        {
-          "validator_address": "b52valoper18xjr5vrw3k9lr9k582zay0s5srvpey4s4u6q74",
-          "period": "1",
-          "rewards": {
-            "cumulative_reward_ratio": [],
-            "reference_count": 2
-          }
-        }
-      ],
-      "validator_current_rewards": [
-        {
-          "validator_address": "b52valoper18xjr5vrw3k9lr9k582zay0s5srvpey4s4u6q74",
-          "rewards": {
-            "rewards": [
-              {
-                "denom": "stake",
-                "amount": "105.840000000000000000"
-              }
-            ],
-            "period": "2"
-          }
-        }
-      ],
-      "delegator_starting_infos": [
-        {
-          "delegator_address": "b5218xjr5vrw3k9lr9k582zay0s5srvpey4s23hcyd",
-          "validator_address": "b52valoper18xjr5vrw3k9lr9k582zay0s5srvpey4s4u6q74",
-          "starting_info": {
-            "previous_period": "1",
-            "stake": "100000000.000000000000000000",
-            "height": "0"
-          }
-        }
-      ],
+      "previous_proposer": "",
+      "outstanding_rewards": [],
+      "validator_accumulated_commissions": [],
+      "validator_historical_rewards": [],
+      "validator_current_rewards": [],
+      "delegator_starting_infos": [],
       "validator_slash_events": []
     },
     "epochs": {

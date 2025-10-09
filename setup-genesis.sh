@@ -5,7 +5,7 @@
 set -e
 
 # Configuration
-CHAIN_ID="pokerchain-test"
+CHAIN_ID="pokerchain"
 KEYRING_BACKEND="test"
 HOME_DIR="$HOME/.pokerchain"
 GOBIN=$(go env GOBIN)
@@ -98,18 +98,18 @@ echo "Adding jack..."
 echo "digital option before hawk alcohol uncover expire faint enact shield bike uncle kangaroo museum domain heart purchase under answer topple timber hole height glance" | \
 $POKERCHAIND keys add jack --recover --keyring-backend "$KEYRING_BACKEND" --home "$HOME_DIR"
 
-# Add genesis accounts with both stake and b52 tokens (1 trillion each)
+# Add genesis accounts with both stake and b52 tokens (calculated to match expected supply)
 echo "💰 Adding genesis accounts..."
 for name in "${!ACTORS[@]}"; do
     echo "Adding genesis account for $name..."
-    $POKERCHAIND genesis add-genesis-account "$name" "1000000000000stake,1000000000000b52" \
+    $POKERCHAIND genesis add-genesis-account "$name" "51997030000012stake,55000token" \
         --keyring-backend "$KEYRING_BACKEND" \
         --home "$HOME_DIR"
 done
 
-# Create validator gentx for alice only (500 billion b52 staked)
+# Create validator gentx for alice only (using stake tokens)
 echo "🏛️ Creating validator (gentx)..."
-$POKERCHAIND genesis gentx alice "500000000000b52" \
+$POKERCHAIND genesis gentx alice "30000000000stake" \
     --chain-id "$CHAIN_ID" \
     --moniker "alice-validator" \
     --commission-rate "0.10" \
@@ -136,10 +136,10 @@ echo "✅ Primary Validator: alice"
 echo "✅ Total Actors: ${#ACTORS[@]}"
 echo ""
 echo "All actors have:"
-echo "  - 1,000,000,000,000 stake tokens (1 trillion)"
-echo "  - 1,000,000,000,000 b52 tokens (1 trillion)"
+echo "  - 51,997,030,000,012 stake tokens (52T - validator amount)"
+echo "  - 55,000 token tokens"
 echo ""
-echo "Alice is the primary validator with 500,000,000,000 b52 staked (500 billion)"
+echo "Alice is the primary validator with 30,000,000,000 stake staked (30B)"
 echo ""
 echo "📁 Genesis file: $HOME_DIR/config/genesis.json"
 echo "🔑 Keyring location: $HOME_DIR/keyring-$KEYRING_BACKEND/"
