@@ -103,6 +103,16 @@ LOCAL_HASH=$(sha256sum "./genesis.json" | cut -d' ' -f1)
 echo "Local genesis hash: $LOCAL_HASH"
 scp "./genesis.json" "$REMOTE_USER@$REMOTE_HOST:/tmp/genesis.json"
 
+# Copy validator files from repo testnet setup
+echo "Copying validator files from repo..."
+if [ -f "./.testnets/validator0/config/priv_validator_key.json" ] && [ -f "./.testnets/validator0/data/priv_validator_state.json" ]; then
+    scp "./.testnets/validator0/config/priv_validator_key.json" "$REMOTE_USER@$REMOTE_HOST:/tmp/priv_validator_key.json"
+    scp "./.testnets/validator0/data/priv_validator_state.json" "$REMOTE_USER@$REMOTE_HOST:/tmp/priv_validator_state.json"
+    echo "✅ Validator files copied from repo"
+else
+    echo "⚠️  Warning: Validator files not found in .testnets/validator0/, node will generate new ones"
+fi
+
 # Initialize node and copy files to correct locations
 ssh "$REMOTE_USER@$REMOTE_HOST" "
 echo 'Initializing pokerchaind...'
@@ -114,6 +124,21 @@ cp /tmp/genesis.json /root/.pokerchain/config/genesis.json
 echo 'Verifying genesis file hash...'
 REMOTE_HASH=\$(sha256sum /root/.pokerchain/config/genesis.json | cut -d' ' -f1)
 echo \"Remote genesis hash: \$REMOTE_HASH\"
+
+# Copy validator files if they exist
+if [ -f '/tmp/priv_validator_key.json' ] && [ -f '/tmp/priv_validator_state.json' ]; then
+    echo 'Copying validator private key...'
+    cp /tmp/priv_validator_key.json /root/.pokerchain/config/priv_validator_key.json
+    chmod 600 /root/.pokerchain/config/priv_validator_key.json
+    echo 'Creating data directory and copying validator state...'
+    mkdir -p /root/.pokerchain/data
+    cp /tmp/priv_validator_state.json /root/.pokerchain/data/priv_validator_state.json
+    chmod 600 /root/.pokerchain/data/priv_validator_state.json
+    echo '✅ Validator files installed from repo'
+else
+    echo '⚠️  Using generated validator files'
+fi
+
 echo 'Setting minimum gas prices...'
 sed -i 's/minimum-gas-prices = \"\"/minimum-gas-prices = \"0stake\"/' /root/.pokerchain/config/app.toml
 echo '✅ Genesis and config files installed'

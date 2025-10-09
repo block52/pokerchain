@@ -1,7 +1,7 @@
 {
   "app_name": "pokerchaind",
-  "app_version": "main-5a08f0f054885430b798e5e51b32e4bc40c0eefd",
-  "genesis_time": "2025-10-09T04:38:12.06090916Z",
+  "app_version": "main-d0707a66b5a52f22f753a7d4c09a1d898ed661a3",
+  "genesis_time": "2025-10-09T06:57:53.095950741Z",
   "chain_id": "pokerchain",
   "initial_height": 1,
   "app_hash": null,
@@ -37,55 +37,6 @@
           "pub_key": null,
           "account_number": "2",
           "sequence": "0"
-        },
-        {
-          "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521n25h4eg6uhtdvs26988k9ye497sylum8lz5vns",
-          "pub_key": null,
-          "account_number": "3",
-          "sequence": "0"
-        },
-        {
-          "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521pscx3n8gygnm7pf3vxcyvxlwvcxa3ug2vzaxah",
-          "pub_key": null,
-          "account_number": "4",
-          "sequence": "0"
-        },
-        {
-          "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521pejd682h20grq0em8jwhmnclggf2hqaq7xh8tk",
-          "pub_key": null,
-          "account_number": "5",
-          "sequence": "0"
-        },
-        {
-          "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521r4ysrlg7cqgfx4nh48t234g6hl3lxap9dddede",
-          "pub_key": null,
-          "account_number": "6",
-          "sequence": "0"
-        },
-        {
-          "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521xe9xv26qtdern5k84csy2c6jxxfa33vxn6s0aw",
-          "pub_key": null,
-          "account_number": "7",
-          "sequence": "0"
-        },
-        {
-          "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b52102v4aqqm8pxtl5k2kv5229xx7vfwlu66ev0p3h",
-          "pub_key": null,
-          "account_number": "8",
-          "sequence": "0"
-        },
-        {
-          "@type": "/cosmos.auth.v1beta1.BaseAccount",
-          "address": "b521dyqcaeuhwp6ryzc58gpyqaz8rxrt95sdcltdsq",
-          "pub_key": null,
-          "account_number": "9",
-          "sequence": "0"
         }
       ]
     },
@@ -99,72 +50,7 @@
       },
       "balances": [
         {
-          "address": "b521pscx3n8gygnm7pf3vxcyvxlwvcxa3ug2vzaxah",
-          "coins": [
-            {
-              "denom": "stake",
-              "amount": "52000"
-            },
-            {
-              "denom": "usdc",
-              "amount": "100"
-            }
-          ]
-        },
-        {
-          "address": "b521pejd682h20grq0em8jwhmnclggf2hqaq7xh8tk",
-          "coins": [
-            {
-              "denom": "stake",
-              "amount": "52000"
-            },
-            {
-              "denom": "usdc",
-              "amount": "100"
-            }
-          ]
-        },
-        {
-          "address": "b521r4ysrlg7cqgfx4nh48t234g6hl3lxap9dddede",
-          "coins": [
-            {
-              "denom": "stake",
-              "amount": "52000"
-            },
-            {
-              "denom": "usdc",
-              "amount": "100"
-            }
-          ]
-        },
-        {
           "address": "b521xkh7eznh50km2lxh783sqqyml8fjwl0tqjsc0c",
-          "coins": [
-            {
-              "denom": "stake",
-              "amount": "52000"
-            },
-            {
-              "denom": "usdc",
-              "amount": "100"
-            }
-          ]
-        },
-        {
-          "address": "b521xe9xv26qtdern5k84csy2c6jxxfa33vxn6s0aw",
-          "coins": [
-            {
-              "denom": "stake",
-              "amount": "52000"
-            },
-            {
-              "denom": "usdc",
-              "amount": "100"
-            }
-          ]
-        },
-        {
-          "address": "b521dyqcaeuhwp6ryzc58gpyqaz8rxrt95sdcltdsq",
           "coins": [
             {
               "denom": "stake",
@@ -181,37 +67,11 @@
           "coins": [
             {
               "denom": "stake",
-              "amount": "52000"
+              "amount": "1000000000000"
             },
             {
               "denom": "usdc",
-              "amount": "100"
-            }
-          ]
-        },
-        {
-          "address": "b52102v4aqqm8pxtl5k2kv5229xx7vfwlu66ev0p3h",
-          "coins": [
-            {
-              "denom": "stake",
-              "amount": "52000"
-            },
-            {
-              "denom": "usdc",
-              "amount": "100"
-            }
-          ]
-        },
-        {
-          "address": "b521n25h4eg6uhtdvs26988k9ye497sylum8lz5vns",
-          "coins": [
-            {
-              "denom": "stake",
-              "amount": "52000"
-            },
-            {
-              "denom": "usdc",
-              "amount": "100"
+              "amount": "10000"
             }
           ]
         },
@@ -232,11 +92,11 @@
       "supply": [
         {
           "denom": "stake",
-          "amount": "520000"
+          "amount": "1000000104000"
         },
         {
           "denom": "usdc",
-          "amount": "1000"
+          "amount": "10200"
         }
       ],
       "denom_metadata": [],
@@ -336,15 +196,15 @@
                 "validator_address": "b52valoper1dfe7r39q88zeqtde44efdqeky9thdtwnhm0usu",
                 "pubkey": {
                   "@type": "/cosmos.crypto.ed25519.PubKey",
-                  "key": "VsrDIm+PoSk7bFsplAndouAOIISLZk8ocUokAnAuZRc="
+                  "key": "ePndEh1mRQkNKedQ2sd829s0XTZNhdOFdaNwlwPk3DI="
                 },
                 "value": {
                   "denom": "stake",
-                  "amount": "50000"
+                  "amount": "100000000000"
                 }
               }
             ],
-            "memo": "bf6332203d8a6ae5cccb65dd898410a21c5d3f91@192.168.86.45:26656",
+            "memo": "ca45690655ef3cac0db5221180417bae3cb713a3@192.168.86.45:26656",
             "timeout_height": "0",
             "unordered": false,
             "timeout_timestamp": null,
@@ -375,7 +235,7 @@
             "tip": null
           },
           "signatures": [
-            "zBqPLCRmMItLEHpRcVeliVU2IwzglGizEfQOZWhB+nIaIIqWfgJwtuLgeOPFFwwqShxN+JwbqDusnnrWbDV6lQ=="
+            "6ewCMhPkfIWrf9PrsedX9UAKB8fl7YjADKxXxr6tOx9/IvhrQxaglBiCXEivCkQJwNjIAYjZCL8rTaApfV1yAA=="
           ]
         }
       ]
