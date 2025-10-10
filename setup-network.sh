@@ -6,7 +6,49 @@
 set -e
 
 echo "🔗 Pokerchain Multi-Node Setup Guide"
-echo "===================================="
+echo "===============        # Copy the config file with peer configuration
+        echo "⚙️ Configuring node connection..."
+        cp config.toml "$HOME/.pokerchain/config/"
+        echo "✅ Config file copied"
+        
+        # Handle sync-only vs validator setup
+        if [ "$SYNC_ONLY" = true ]; then
+            echo "🔄 Configuring sync-only mode..."
+            
+            # Create minimal validator state file for sync-only node
+            mkdir -p "$HOME/.pokerchain/data"
+            echo '{"height":"0","round":0,"step":0}' > "$HOME/.pokerchain/data/priv_validator_state.json"
+            chmod 600 "$HOME/.pokerchain/data/priv_validator_state.json"
+            
+            # Remove any validator key to ensure sync-only mode
+            rm -f "$HOME/.pokerchain/config/priv_validator_key.json"
+            
+            echo "✅ Sync-only mode configured"
+            echo "   - Node will connect to node1.block52.xyz"
+            echo "   - Node will sync blockchain without creating blocks"
+            echo "   - No validator keys configured - sync-only"
+            
+        else
+            # Copy validator keys for validator nodes
+            if [ "$USE_VALIDATOR_KEY" = true ]; then
+                echo "🔑 Copying validator keys for $ACTOR_NAME..."
+                if [ -f ".testnets/$VALIDATOR_ID/config/priv_validator_key.json" ] && [ -f ".testnets/$VALIDATOR_ID/data/priv_validator_state.json" ]; then
+                    cp ".testnets/$VALIDATOR_ID/config/priv_validator_key.json" "$HOME/.pokerchain/config/"
+                    cp ".testnets/$VALIDATOR_ID/data/priv_validator_state.json" "$HOME/.pokerchain/data/"
+                    chmod 600 "$HOME/.pokerchain/config/priv_validator_key.json"
+                    chmod 600 "$HOME/.pokerchain/data/priv_validator_state.json"
+                    echo "✅ Validator keys copied for $ACTOR_NAME"
+                else
+                    echo "⚠️  Warning: Validator keys not found for $ACTOR_NAME"
+                    echo "    The node will run as a non-validator"
+                fi
+            else
+                echo "🔓 Running as non-validator"
+                # Remove any existing validator keys to ensure non-validator mode
+                rm -f "$HOME/.pokerchain/config/priv_validator_key.json"
+                rm -f "$HOME/.pokerchain/data/priv_validator_state.json"
+            fi
+        fi==============="
 echo ""
 
 # Check if we're setting up the first or second node
@@ -77,8 +119,64 @@ case $NODE_TYPE in
         echo "💻 Setting up local/second node..."
         echo ""
         
+        # Ask which actor to use
+        echo "What type of local node would you like to setup?"
+        echo "0) Sync-only node (recommended - syncs from node1.block52.xyz without creating blocks)"
+        echo "1) Bob validator node"
+        echo "2) Charlie validator node"  
+        echo "3) Diana validator node"
+        echo "4) Eve validator node"
+        echo ""
+        read -p "Choose option (0-4): " ACTOR_CHOICE
+        
+        case $ACTOR_CHOICE in
+            0)
+                ACTOR_NAME="sync-node"
+                VALIDATOR_ID=""
+                echo "✅ Selected sync-only mode (will sync from node1.block52.xyz without creating blocks)"
+                USE_VALIDATOR_KEY=false
+                SYNC_ONLY=true
+                ;;
+            1)
+                ACTOR_NAME="bob"
+                VALIDATOR_ID="validator1"
+                echo "✅ Selected Bob"
+                USE_VALIDATOR_KEY=true
+                SYNC_ONLY=false
+                ;;
+            2)
+                ACTOR_NAME="charlie"
+                VALIDATOR_ID="validator2"
+                echo "✅ Selected Charlie"
+                USE_VALIDATOR_KEY=true
+                SYNC_ONLY=false
+                ;;
+            3)
+                ACTOR_NAME="diana"
+                VALIDATOR_ID="validator3"
+                echo "✅ Selected Diana"
+                USE_VALIDATOR_KEY=true
+                SYNC_ONLY=false
+                ;;
+            4)
+                ACTOR_NAME="eve"
+                VALIDATOR_ID="validator4"
+                echo "✅ Selected Eve"
+                USE_VALIDATOR_KEY=true
+                SYNC_ONLY=false
+                ;;
+            *)
+                echo "❌ Invalid choice. Defaulting to sync-only mode."
+                ACTOR_NAME="sync-node"
+                VALIDATOR_ID=""
+                USE_VALIDATOR_KEY=false
+                SYNC_ONLY=true
+                ;;
+        esac
+        
         # For the second node (local)
-        echo "Setting up local node to connect to node1.block52.xyz"
+        echo ""
+        echo "Setting up local node ($ACTOR_NAME) to connect to node1.block52.xyz"
         echo ""
         
         # Check if pokerchaind is installed
@@ -90,16 +188,85 @@ case $NODE_TYPE in
             echo "✅ pokerchaind found"
         fi
         
-        # Run the connection script
-        echo ""
-        echo "🔗 Configuring connection to network..."
-        ./connect-to-network.sh
+        # For sync-only mode, completely reset the node
+        if [ "$SYNC_ONLY" = true ]; then
+            echo ""
+            echo "🔄 Setting up sync-only node (will remove existing data)..."
+            
+            # Stop any running pokerchaind processes
+            echo "🛑 Stopping any running pokerchaind processes..."
+            pkill pokerchaind 2>/dev/null || true
+            sleep 2
+            
+            # Remove existing node data completely
+            echo "🗑️  Removing existing blockchain data..."
+            rm -rf "$HOME/.pokerchain"
+            echo "✅ Existing data removed"
+            
+            # Initialize fresh node
+            echo "🔧 Initializing fresh sync node..."
+            pokerchaind init "$ACTOR_NAME" --chain-id pokerchain
+            echo "✅ Fresh node initialized"
+            
+        else
+            # Initialize the node if not already done (for validator nodes)
+            if [ ! -d "$HOME/.pokerchain" ]; then
+                echo "🔧 Initializing local node..."
+                pokerchaind init "$ACTOR_NAME-node" --chain-id pokerchain
+                echo "✅ Node initialized"
+            else
+                echo "✅ Node already initialized"
+            fi
+        fi
+        
+        # Copy the genesis file
+        echo "📋 Copying genesis file..."
+        cp genesis.json "$HOME/.pokerchain/config/"
+        echo "✅ Genesis file copied"
+        
+        # Copy the config file with peer configuration
+        echo "� Configuring node connection..."
+        cp config.toml "$HOME/.pokerchain/config/"
+        echo "✅ Config file copied"
+        
+        # Copy validator keys if requested
+        if [ "$USE_VALIDATOR_KEY" = true ]; then
+            echo "🔑 Copying validator keys for $ACTOR_NAME..."
+            if [ -f ".testnets/$VALIDATOR_ID/config/priv_validator_key.json" ] && [ -f ".testnets/$VALIDATOR_ID/data/priv_validator_state.json" ]; then
+                cp ".testnets/$VALIDATOR_ID/config/priv_validator_key.json" "$HOME/.pokerchain/config/"
+                cp ".testnets/$VALIDATOR_ID/data/priv_validator_state.json" "$HOME/.pokerchain/data/"
+                chmod 600 "$HOME/.pokerchain/config/priv_validator_key.json"
+                chmod 600 "$HOME/.pokerchain/data/priv_validator_state.json"
+                echo "✅ Validator keys copied for $ACTOR_NAME"
+            else
+                echo "⚠️  Warning: Validator keys not found for $ACTOR_NAME"
+                echo "    The node will run as a non-validator"
+            fi
+        else
+            echo "🔓 Running as non-validator (Alice keys will not be copied to avoid conflicts)"
+            # Remove any existing validator keys to ensure non-validator mode
+            rm -f "$HOME/.pokerchain/config/priv_validator_key.json"
+            rm -f "$HOME/.pokerchain/data/priv_validator_state.json"
+        fi
         
         echo ""
         echo "🚀 Setup complete!"
         echo ""
-        echo "To start your local node:"
-        echo "pokerchaind start"
+        if [ "$SYNC_ONLY" = true ]; then
+            echo "Your sync-only node is ready!"
+            echo ""
+            echo "To start syncing from node1.block52.xyz:"
+            echo "pokerchaind start --minimum-gas-prices=\"0.01stake\""
+            echo ""
+            echo "The node will:"
+            echo "• Connect to node1.block52.xyz"
+            echo "• Download and sync the blockchain"
+            echo "• Run in read-only mode (no block creation)"
+            echo "• Provide API access on localhost:1317"
+        else
+            echo "To start your local node ($ACTOR_NAME):"
+            echo "pokerchaind start --minimum-gas-prices=\"0.01stake\""
+        fi
         echo ""
         echo "To check your node info:"
         echo "./get-node-info.sh"
