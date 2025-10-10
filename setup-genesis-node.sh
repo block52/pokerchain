@@ -2,6 +2,24 @@
 
 # Pokerchain Genesis Node Setup Script
 # This script sets up the master genesis node on node1.block52.xyz
+#
+# Security Features:
+# - Stops any running pokerchaind processes before setup
+# - Disables systemd service during setup to prevent conflicts
+# - Sets least privilege file permissions (600 for sensitive files, 644 for public)
+# - Creates backups before destructive operations
+# - Verifies permissions after setting them
+# - Configures UFW firewall with only necessary ports
+# - Creates systemd service with restart policies
+#
+# File Permissions:
+# - genesis.json: 644 (public readable)
+# - config.toml: 600 (owner only - contains node configuration)
+# - app.toml: 600 (owner only - contains app settings)
+# - priv_validator_key.json: 600 (CRITICAL - validator private key)
+# - priv_validator_state.json: 600 (CRITICAL - validator state)
+# - node_key.json: 600 (owner only - node identity)
+# - data/: 700 (owner only - blockchain data)
 
 set -e
 
@@ -48,6 +66,204 @@ print_warning() {
 
 print_info() {
     echo "ℹ️  $1"
+}
+
+# Stop pokerchaind if running
+stop_pokerchaind() {
+    print_info "Checking if pokerchaind is running..."
+    
+    # Check if systemd service exists and is running
+    if systemctl list-units --full -all | grep -q "pokerchaind.service"; then
+        if systemctl is-active --quiet pokerchaind; then
+            print_warning "pokerchaind service is running. Stopping..."
+            sudo systemctl stop pokerchaind
+            sleep 2
+            print_success "pokerchaind service stopped"
+        else
+            print_info "pokerchaind service exists but is not running"
+        fi
+        
+        # Disable the service to prevent auto-start during setup
+        if systemctl is-enabled --quiet pokerchaind 2>/dev/null; then
+            print_info "Disabling pokerchaind service temporarily..."
+            sudo systemctl disable pokerchaind
+        fi
+    fi
+    
+    # Check for any pokerchaind processes
+    if pgrep -x pokerchaind > /dev/null; then
+        print_warning "Found running pokerchaind processes. Stopping..."
+        pkill -TERM pokerchaind
+        sleep 3
+        
+        # Force kill if still running
+        if pgrep -x pokerchaind > /dev/null; then
+            print_warning "Processes still running. Force stopping..."
+            pkill -KILL pokerchaind
+            sleep 1
+        fi
+        
+        print_success "All pokerchaind processes stopped"
+    else
+        print_success "No pokerchaind processes running"
+    fi
+}
+
+# Set secure file permissions
+set_file_permissions() {
+    print_info "Setting secure file permissions..."
+    
+    # Config directory - readable by owner and group
+    chmod 755 "$HOME_DIR/config"
+    chmod 755 "$HOME_DIR/data"
+    
+    # Genesis file - readable by all (public data)
+    if [ -f "$HOME_DIR/config/genesis.json" ]; then
+        chmod 644 "$HOME_DIR/config/genesis.json"
+        print_success "genesis.json: 644 (rw-r--r--)"
+    fi
+    
+    # Config files - readable by owner only (may contain sensitive settings)
+    if [ -f "$HOME_DIR/config/config.toml" ]; then
+        chmod 600 "$HOME_DIR/config/config.toml"
+        print_success "config.toml: 600 (rw-------)"
+    fi
+    
+    if [ -f "$HOME_DIR/config/app.toml" ]; then
+        chmod 600 "$HOME_DIR/config/app.toml"
+        print_success "app.toml: 600 (rw-------)"
+    fi
+    
+    # Validator keys - MUST be owner-only (highly sensitive)
+    if [ -f "$HOME_DIR/config/priv_validator_key.json" ]; then
+        chmod 600 "$HOME_DIR/config/priv_validator_key.json"
+        print_success "priv_validator_key.json: 600 (rw-------)"
+    fi
+    
+    if [ -f "$HOME_DIR/data/priv_validator_state.json" ]; then
+        chmod 600 "$HOME_DIR/data/priv_validator_state.json"
+        print_success "priv_validator_state.json: 600 (rw-------)"
+    fi
+    
+    # Node key - owner-only
+    if [ -f "$HOME_DIR/config/node_key.json" ]; then
+        chmod 600 "$HOME_DIR/config/node_key.json"
+        print_success "node_key.json: 600 (rw-------)"
+    fi
+    
+    # Client config - readable by owner only
+    if [ -f "$HOME_DIR/config/client.toml" ]; then
+        chmod 600 "$HOME_DIR/config/client.toml"
+        print_success "client.toml: 600 (rw-------)"
+    fi
+    
+    # Data directory files
+    if [ -d "$HOME_DIR/data" ]; then
+        chmod 700 "$HOME_DIR/data"
+        print_success "data directory: 700 (rwx------)"
+    fi
+    
+    # WAL directory if it exists
+    if [ -d "$HOME_DIR/data/cs.wal" ]; then
+        chmod 700 "$HOME_DIR/data/cs.wal"
+    fi
+    
+    print_success "All file permissions set securely"
+}
+
+# Verify file permissions
+verify_file_permissions() {
+    print_info "Verifying file permissions..."
+    local issues=0
+    
+    # Check critical files
+    if [ -f "$HOME_DIR/config/priv_validator_key.json" ]; then
+        local perms=$(stat -c "%a" "$HOME_DIR/config/priv_validator_key.json" 2>/dev/null || stat -f "%A" "$HOME_DIR/config/priv_validator_key.json" 2>/dev/null)
+        if [ "$perms" != "600" ]; then
+            print_error "priv_validator_key.json has incorrect permissions: $perms (should be 600)"
+            issues=$((issues + 1))
+        fi
+    fi
+    
+    if [ -f "$HOME_DIR/data/priv_validator_state.json" ]; then
+        local perms=$(stat -c "%a" "$HOME_DIR/data/priv_validator_state.json" 2>/dev/null || stat -f "%A" "$HOME_DIR/data/priv_validator_state.json" 2>/dev/null)
+        if [ "$perms" != "600" ]; then
+            print_error "priv_validator_state.json has incorrect permissions: $perms (should be 600)"
+            issues=$((issues + 1))
+        fi
+    fi
+    
+    if [ $issues -eq 0 ]; then
+        print_success "All permissions verified correctly"
+    else
+        print_warning "Found $issues permission issues"
+    fi
+    
+    return $issues
+}
+
+# Display current system status
+check_system_status() {
+    echo ""
+    echo "🔍 System Status Check"
+    echo "====================="
+    echo ""
+    
+    # Check if pokerchaind binary exists
+    if command -v pokerchaind &> /dev/null; then
+        print_success "pokerchaind binary: $(which pokerchaind)"
+        echo "     Version: $(pokerchaind version 2>/dev/null || echo 'unknown')"
+    else
+        print_warning "pokerchaind binary: NOT FOUND"
+    fi
+    
+    # Check if systemd service exists
+    if systemctl list-units --full -all | grep -q "pokerchaind.service"; then
+        if systemctl is-active --quiet pokerchaind; then
+            print_warning "pokerchaind service: RUNNING (will be stopped)"
+        else
+            print_info "pokerchaind service: EXISTS but not running"
+        fi
+        if systemctl is-enabled --quiet pokerchaind 2>/dev/null; then
+            print_info "pokerchaind service: ENABLED (auto-start on boot)"
+        fi
+    else
+        print_info "pokerchaind service: NOT INSTALLED"
+    fi
+    
+    # Check for running processes
+    if pgrep -x pokerchaind > /dev/null; then
+        local count=$(pgrep -x pokerchaind | wc -l)
+        print_warning "pokerchaind processes: $count running (will be stopped)"
+    else
+        print_success "pokerchaind processes: NONE running"
+    fi
+    
+    # Check if home directory exists
+    if [ -d "$HOME_DIR" ]; then
+        print_info "Chain home: $HOME_DIR (EXISTS)"
+        if [ -f "$HOME_DIR/config/genesis.json" ]; then
+            print_info "  └─ genesis.json: FOUND"
+        fi
+        if [ -f "$HOME_DIR/config/priv_validator_key.json" ]; then
+            print_info "  └─ validator key: FOUND"
+        fi
+    else
+        print_info "Chain home: $HOME_DIR (NOT FOUND - will be created)"
+    fi
+    
+    echo ""
+}
+
+# Backup existing configuration
+backup_config() {
+    if [ -d "$HOME_DIR" ]; then
+        local backup_dir="$HOME_DIR.backup.$(date +%Y%m%d_%H%M%S)"
+        print_info "Creating backup at $backup_dir..."
+        cp -r "$HOME_DIR" "$backup_dir"
+        print_success "Backup created: $backup_dir"
+        echo "     Restore with: rm -rf $HOME_DIR && mv $backup_dir $HOME_DIR"
+    fi
 }
 
 # Check if required files exist
@@ -153,6 +369,9 @@ EOF
 setup_local_genesis_node() {
     print_info "Setting up local genesis node..."
     
+    # Check current system status
+    check_system_status
+    
     # Check if pokerchaind is installed
     if ! command -v pokerchaind &> /dev/null; then
         print_error "pokerchaind not found. Please install it first."
@@ -163,6 +382,9 @@ setup_local_genesis_node() {
     
     print_success "pokerchaind found"
     
+    # Check if pokerchaind is already running
+    stop_pokerchaind
+    
     # Check required files
     check_required_files
     
@@ -170,6 +392,12 @@ setup_local_genesis_node() {
     if [ -d "$HOME_DIR" ]; then
         read -p "⚠️  $HOME_DIR already exists. Remove and reinitialize? (y/n): " REINIT
         if [[ $REINIT == "y" ]]; then
+            # Offer to backup first
+            read -p "Create backup before removing? (recommended) (y/n): " DO_BACKUP
+            if [[ $DO_BACKUP == "y" ]]; then
+                backup_config
+            fi
+            
             print_info "Removing existing chain data..."
             rm -rf "$HOME_DIR"
             print_success "Existing data removed"
@@ -213,6 +441,13 @@ setup_local_genesis_node() {
     cp config.toml "$HOME_DIR/config/config.toml"
     print_success "config.toml copied"
     
+    # Set secure file permissions
+    set_file_permissions
+    
+    # Verify permissions were set correctly
+    echo ""
+    verify_file_permissions
+    
     # Setup firewall
     read -p "Setup UFW firewall rules? (y/n): " SETUP_FW
     if [[ $SETUP_FW == "y" ]]; then
@@ -235,13 +470,25 @@ setup_local_genesis_node() {
     echo ""
     print_success "Local genesis node setup complete!"
     echo ""
+    echo "📋 Security Summary:"
+    echo "  ✅ pokerchaind processes stopped"
+    echo "  ✅ File permissions set to least privilege:"
+    echo "     - genesis.json: 644 (public readable)"
+    echo "     - config.toml: 600 (owner only)"
+    echo "     - app.toml: 600 (owner only)"
+    echo "     - validator keys: 600 (owner only)"
+    echo "     - data directory: 700 (owner only)"
+    echo ""
     echo "📋 Next steps:"
     echo "  1. Start the node: pokerchaind start --minimum-gas-prices=\"0.01stake\""
-    echo "     OR use systemd: sudo systemctl start pokerchaind"
+    echo "     OR use systemd: sudo systemctl enable pokerchaind"
+    echo "                     sudo systemctl start pokerchaind"
     echo ""
     echo "  2. Get node info: ./get-node-info.sh"
     echo ""
     echo "  3. Check status: curl http://localhost:${RPC_PORT}/status"
+    echo ""
+    echo "  4. View logs: journalctl -u pokerchaind -f"
 }
 
 # Deploy to remote server
@@ -295,6 +542,32 @@ set -e
 
 echo "🔧 Setting up genesis node on remote server..."
 
+# Stop pokerchaind if running
+echo "🛑 Checking for running pokerchaind processes..."
+if systemctl list-units --full -all | grep -q "pokerchaind.service"; then
+    if systemctl is-active --quiet pokerchaind; then
+        echo "⚠️  Stopping pokerchaind service..."
+        sudo systemctl stop pokerchaind
+        sleep 2
+        echo "✅ Service stopped"
+    fi
+    if systemctl is-enabled --quiet pokerchaind 2>/dev/null; then
+        echo "📋 Disabling pokerchaind service temporarily..."
+        sudo systemctl disable pokerchaind
+    fi
+fi
+
+if pgrep -x pokerchaind > /dev/null; then
+    echo "⚠️  Stopping pokerchaind processes..."
+    pkill -TERM pokerchaind
+    sleep 3
+    if pgrep -x pokerchaind > /dev/null; then
+        pkill -KILL pokerchaind
+        sleep 1
+    fi
+    echo "✅ All processes stopped"
+fi
+
 # Check if pokerchaind is installed
 if ! command -v pokerchaind &> /dev/null; then
     echo "❌ pokerchaind not found. Please install it first."
@@ -309,7 +582,7 @@ if ! command -v pokerchaind &> /dev/null; then
 fi
 
 # Initialize node if needed
-if [ ! -d ~/.pokerchain/config/genesis.json ]; then
+if [ ! -f ~/.pokerchain/config/genesis.json ]; then
     echo "🔧 Initializing node..."
     pokerchaind init "node1.block52.xyz" --chain-id pokerchain
 fi
@@ -317,6 +590,44 @@ fi
 # Validate genesis
 echo "✅ Validating genesis..."
 pokerchaind validate-genesis
+
+# Set secure file permissions
+echo "🔒 Setting secure file permissions..."
+chmod 755 ~/.pokerchain/config
+chmod 755 ~/.pokerchain/data
+
+# Genesis - public readable
+if [ -f ~/.pokerchain/config/genesis.json ]; then
+    chmod 644 ~/.pokerchain/config/genesis.json
+fi
+
+# Config files - owner only
+if [ -f ~/.pokerchain/config/config.toml ]; then
+    chmod 600 ~/.pokerchain/config/config.toml
+fi
+
+if [ -f ~/.pokerchain/config/app.toml ]; then
+    chmod 600 ~/.pokerchain/config/app.toml
+fi
+
+# Validator keys - owner only (CRITICAL)
+if [ -f ~/.pokerchain/config/priv_validator_key.json ]; then
+    chmod 600 ~/.pokerchain/config/priv_validator_key.json
+fi
+
+if [ -f ~/.pokerchain/data/priv_validator_state.json ]; then
+    chmod 600 ~/.pokerchain/data/priv_validator_state.json
+fi
+
+if [ -f ~/.pokerchain/config/node_key.json ]; then
+    chmod 600 ~/.pokerchain/config/node_key.json
+fi
+
+if [ -d ~/.pokerchain/data ]; then
+    chmod 700 ~/.pokerchain/data
+fi
+
+echo "✅ File permissions set"
 
 # Setup UFW firewall
 echo "🔒 Setting up firewall..."
