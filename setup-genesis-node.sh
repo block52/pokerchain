@@ -31,6 +31,7 @@ echo ""
 CHAIN_ID="pokerchain"
 MONIKER="node1.block52.xyz"
 HOME_DIR="$HOME/.pokerchain"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REMOTE_USER=""
 REMOTE_HOST="node1.block52.xyz"
 DEPLOY_TYPE=""
@@ -66,6 +67,115 @@ print_warning() {
 
 print_info() {
     echo "ℹ️  $1"
+}
+
+# Detect the correct genesis validation command
+detect_genesis_validation_cmd() {
+    # Try different command variations based on Cosmos SDK version
+    if pokerchaind genesis validate --help &>/dev/null; then
+        echo "genesis validate"
+    elif pokerchaind validate-genesis --help &>/dev/null; then
+        echo "validate-genesis"
+    elif pokerchaind genesis validate-genesis --help &>/dev/null; then
+        echo "genesis validate-genesis"
+    else
+        # Command doesn't exist, we'll skip validation
+        echo ""
+    fi
+}
+
+# Validate genesis file
+validate_genesis() {
+    print_info "Validating genesis file..."
+    
+    local validate_cmd=$(detect_genesis_validation_cmd)
+    
+    if [ -z "$validate_cmd" ]; then
+        print_warning "Genesis validation command not available in this version"
+        print_info "Skipping validation (will verify manually during startup)"
+        return 0
+    fi
+    
+    # Change to home directory to ensure correct context
+    cd "$HOME_DIR/config" 2>/dev/null || cd "$HOME_DIR"
+    
+    if pokerchaind $validate_cmd 2>&1; then
+        print_success "Genesis file is valid"
+        cd "$PROJECT_DIR"
+        return 0
+    else
+        print_error "Genesis file validation failed"
+        cd "$PROJECT_DIR"
+        return 1
+    fi
+}
+
+# Ensure we're in the project directory
+ensure_project_directory() {
+    print_info "Project directory: $PROJECT_DIR"
+    cd "$PROJECT_DIR"
+    
+    # List what we found
+    echo ""
+    echo "📁 Files found in project directory:"
+    for file in "${REQUIRED_FILES[@]}"; do
+        if [ -f "$file" ]; then
+            echo "   ✅ $file"
+        else
+            echo "   ❌ $file (MISSING)"
+        fi
+    done
+    echo ""
+    
+    # Verify we have the required files in this directory
+    local missing_files=()
+    for file in "${REQUIRED_FILES[@]}"; do
+        if [ ! -f "$file" ]; then
+            missing_files+=("$file")
+        fi
+    done
+    
+    if [ ${#missing_files[@]} -gt 0 ]; then
+        print_error "Missing required files in $PROJECT_DIR:"
+        for file in "${missing_files[@]}"; do
+            echo "   - $file"
+        done
+        echo ""
+        echo "Please ensure you're running this script from the pokerchain project directory"
+        echo "where these configuration files are located."
+        exit 1
+    fi
+    
+    print_success "All required files found in project directory"
+}
+
+# Check Go environment
+check_go_environment() {
+    print_info "Checking Go environment..."
+    
+    if ! command -v go &> /dev/null; then
+        print_warning "Go not found in PATH"
+        echo "Please ensure Go is installed and in your PATH"
+        return 1
+    fi
+    
+    local go_version=$(go version | awk '{print $3}')
+    print_success "Go version: $go_version"
+    
+    # Check GOPATH
+    if [ -n "$GOPATH" ]; then
+        print_info "GOPATH: $GOPATH"
+    else
+        print_info "GOPATH: Not set (using default ~/go)"
+    fi
+    
+    # Check if pokerchaind is in GOPATH/bin or GOBIN
+    local gobin="${GOBIN:-${GOPATH:-$HOME/go}/bin}"
+    if [ -f "$gobin/pokerchaind" ]; then
+        print_success "pokerchaind found in: $gobin"
+    fi
+    
+    return 0
 }
 
 # Stop pokerchaind if running
@@ -202,6 +312,17 @@ verify_file_permissions() {
     return $issues
 }
 
+# Backup existing configuration
+backup_config() {
+    if [ -d "$HOME_DIR" ]; then
+        local backup_dir="$HOME_DIR.backup.$(date +%Y%m%d_%H%M%S)"
+        print_info "Creating backup at $backup_dir..."
+        cp -r "$HOME_DIR" "$backup_dir"
+        print_success "Backup created: $backup_dir"
+        echo "     Restore with: rm -rf $HOME_DIR && mv $backup_dir $HOME_DIR"
+    fi
+}
+
 # Display current system status
 check_system_status() {
     echo ""
@@ -253,17 +374,6 @@ check_system_status() {
     fi
     
     echo ""
-}
-
-# Backup existing configuration
-backup_config() {
-    if [ -d "$HOME_DIR" ]; then
-        local backup_dir="$HOME_DIR.backup.$(date +%Y%m%d_%H%M%S)"
-        print_info "Creating backup at $backup_dir..."
-        cp -r "$HOME_DIR" "$backup_dir"
-        print_success "Backup created: $backup_dir"
-        echo "     Restore with: rm -rf $HOME_DIR && mv $backup_dir $HOME_DIR"
-    fi
 }
 
 # Check if required files exist
@@ -339,6 +449,9 @@ create_systemd_service() {
     
     print_info "Creating systemd service..."
     
+    # Get GOBIN path
+    local gobin="${GOBIN:-${GOPATH:-$HOME/go}/bin}"
+    
     sudo tee /etc/systemd/system/pokerchaind.service > /dev/null <<EOF
 [Unit]
 Description=Pokerchain Daemon
@@ -354,6 +467,7 @@ Environment="DAEMON_NAME=pokerchaind"
 Environment="DAEMON_HOME=$HOME_DIR"
 Environment="DAEMON_ALLOW_DOWNLOAD_BINARIES=false"
 Environment="DAEMON_RESTART_AFTER_UPGRADE=true"
+Environment="PATH=$gobin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
 
 [Install]
 WantedBy=multi-user.target
@@ -369,6 +483,12 @@ EOF
 setup_local_genesis_node() {
     print_info "Setting up local genesis node..."
     
+    # Ensure we're in the correct directory
+    ensure_project_directory
+    
+    # Check Go environment
+    check_go_environment
+    
     # Check current system status
     check_system_status
     
@@ -376,11 +496,14 @@ setup_local_genesis_node() {
     if ! command -v pokerchaind &> /dev/null; then
         print_error "pokerchaind not found. Please install it first."
         echo ""
-        echo "Run: make install"
+        echo "Options:"
+        echo "  1. Run: make install (from project directory)"
+        echo "  2. Run: ./install-from-source.sh"
+        echo "  3. Ensure \$GOPATH/bin or \$GOBIN is in your PATH"
         exit 1
     fi
     
-    print_success "pokerchaind found"
+    print_success "pokerchaind found: $(which pokerchaind)"
     
     # Check if pokerchaind is already running
     stop_pokerchaind
@@ -423,13 +546,10 @@ setup_local_genesis_node() {
     print_success "Genesis file copied"
     
     # Validate genesis
-    print_info "Validating genesis file..."
-    if pokerchaind validate-genesis; then
-        print_success "Genesis file is valid"
-    else
-        print_error "Genesis file validation failed"
+    validate_genesis || {
+        print_error "Genesis validation failed. Please check your genesis.json file."
         exit 1
-    fi
+    }
     
     # Copy app.toml
     print_info "Copying app.toml..."
@@ -489,6 +609,17 @@ setup_local_genesis_node() {
     echo "  3. Check status: curl http://localhost:${RPC_PORT}/status"
     echo ""
     echo "  4. View logs: journalctl -u pokerchaind -f"
+    echo ""
+    echo "🔧 Troubleshooting:"
+    echo "  If pokerchaind command not found:"
+    echo "    - Ensure \$GOPATH/bin is in your PATH"
+    echo "    - Run: export PATH=\"\$HOME/go/bin:\$PATH\""
+    echo "    - Add to ~/.bashrc for persistence"
+    echo ""
+    echo "  If genesis validation fails:"
+    echo "    - Check genesis.json format"
+    echo "    - Ensure chain-id matches: $CHAIN_ID"
+    echo "    - Validation will also occur at startup"
 }
 
 # Deploy to remote server
@@ -542,6 +673,12 @@ set -e
 
 echo "🔧 Setting up genesis node on remote server..."
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+echo "📁 Working directory: $SCRIPT_DIR"
+
 # Stop pokerchaind if running
 echo "🛑 Checking for running pokerchaind processes..."
 if systemctl list-units --full -all | grep -q "pokerchaind.service"; then
@@ -568,28 +705,78 @@ if pgrep -x pokerchaind > /dev/null; then
     echo "✅ All processes stopped"
 fi
 
+# Check Go environment
+echo "🔍 Checking Go environment..."
+if ! command -v go &> /dev/null; then
+    echo "⚠️  Go not found. Please install Go first."
+    exit 1
+fi
+
+GO_VERSION=$(go version | awk '{print $3}')
+echo "✅ Go version: $GO_VERSION"
+
+# Check GOPATH/GOBIN
+GOBIN="${GOBIN:-${GOPATH:-$HOME/go}/bin}"
+echo "📁 Go bin directory: $GOBIN"
+
+# Add GOBIN to PATH if not already there
+if [[ ":$PATH:" != *":$GOBIN:"* ]]; then
+    export PATH="$GOBIN:$PATH"
+    echo "✅ Added $GOBIN to PATH"
+fi
+
 # Check if pokerchaind is installed
 if ! command -v pokerchaind &> /dev/null; then
-    echo "❌ pokerchaind not found. Please install it first."
+    echo "❌ pokerchaind not found. Installing..."
     if [ -f ~/install-from-source.sh ]; then
         echo "Running install-from-source.sh..."
         chmod +x ~/install-from-source.sh
         ~/install-from-source.sh
     else
-        echo "Please install pokerchaind manually"
+        echo "Please install pokerchaind manually with:"
+        echo "  cd /path/to/pokerchain"
+        echo "  make install"
         exit 1
     fi
 fi
+
+echo "✅ pokerchaind found: $(which pokerchaind)"
 
 # Initialize node if needed
 if [ ! -f ~/.pokerchain/config/genesis.json ]; then
     echo "🔧 Initializing node..."
     pokerchaind init "node1.block52.xyz" --chain-id pokerchain
+    echo "✅ Node initialized"
 fi
+
+# Detect genesis validation command
+detect_genesis_cmd() {
+    if pokerchaind genesis validate --help &>/dev/null; then
+        echo "genesis validate"
+    elif pokerchaind validate-genesis --help &>/dev/null; then
+        echo "validate-genesis"
+    else
+        echo ""
+    fi
+}
 
 # Validate genesis
 echo "✅ Validating genesis..."
-pokerchaind validate-genesis
+VALIDATE_CMD=$(detect_genesis_cmd)
+
+if [ -n "$VALIDATE_CMD" ]; then
+    cd ~/.pokerchain/config
+    if pokerchaind $VALIDATE_CMD; then
+        echo "✅ Genesis file is valid"
+    else
+        echo "❌ Genesis validation failed"
+        exit 1
+    fi
+    cd "$SCRIPT_DIR"
+else
+    echo "⚠️  Genesis validation command not available"
+    echo "    Skipping validation (will verify during startup)"
+fi
 
 # Set secure file permissions
 echo "🔒 Setting secure file permissions..."
@@ -631,16 +818,17 @@ echo "✅ File permissions set"
 
 # Setup UFW firewall
 echo "🔒 Setting up firewall..."
-sudo apt-get update
+sudo apt-get update -qq
 sudo apt-get install -y ufw
 
 # Configure firewall rules
-sudo ufw allow 22/tcp
-sudo ufw allow 26656/tcp
-sudo ufw allow 26657/tcp
-sudo ufw allow 1317/tcp
-sudo ufw allow 9090/tcp
-sudo ufw allow 9091/tcp
+echo "🔧 Configuring firewall rules..."
+sudo ufw allow 22/tcp comment 'SSH'
+sudo ufw allow 26656/tcp comment 'Cosmos P2P'
+sudo ufw allow 26657/tcp comment 'Cosmos RPC'
+sudo ufw allow 1317/tcp comment 'Cosmos API'
+sudo ufw allow 9090/tcp comment 'Cosmos gRPC'
+sudo ufw allow 9091/tcp comment 'Cosmos gRPC-Web'
 sudo ufw --force enable
 
 echo "✅ Firewall configured"
@@ -661,6 +849,7 @@ RestartSec=3
 LimitNOFILE=4096
 Environment="DAEMON_NAME=pokerchaind"
 Environment="DAEMON_HOME=$HOME/.pokerchain"
+Environment="PATH=$GOBIN:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
 
 [Install]
 WantedBy=multi-user.target
@@ -671,10 +860,14 @@ sudo systemctl daemon-reload
 echo ""
 echo "✅ Remote setup complete!"
 echo ""
-echo "To start the node:"
-echo "  sudo systemctl enable pokerchaind"
-echo "  sudo systemctl start pokerchaind"
-echo "  journalctl -u pokerchaind -f"
+echo "📋 Next steps:"
+echo "  sudo systemctl enable pokerchaind   # Enable on boot"
+echo "  sudo systemctl start pokerchaind    # Start the service"
+echo "  journalctl -u pokerchaind -f        # View logs"
+echo ""
+echo "🔍 Verify installation:"
+echo "  pokerchaind version"
+echo "  curl http://localhost:26657/status"
 REMOTE_SCRIPT
     
     # Copy and execute remote setup script
@@ -696,6 +889,28 @@ REMOTE_SCRIPT
 
 # Main menu
 show_menu() {
+    # Show environment info at startup
+    echo ""
+    echo "🔍 Environment Information:"
+    echo "=========================="
+    echo "Current directory: $(pwd)"
+    echo "Script directory:  $PROJECT_DIR"
+    echo "Home directory:    $HOME"
+    echo "Chain home:        $HOME_DIR"
+    if command -v go &> /dev/null; then
+        echo "Go version:        $(go version | awk '{print $3}')"
+        echo "GOPATH:            ${GOPATH:-$HOME/go}"
+        echo "GOBIN:             ${GOBIN:-${GOPATH:-$HOME/go}/bin}"
+    else
+        echo "Go:                ⚠️  NOT FOUND"
+    fi
+    if command -v pokerchaind &> /dev/null; then
+        echo "pokerchaind:       ✅ $(which pokerchaind)"
+    else
+        echo "pokerchaind:       ⚠️  NOT FOUND"
+    fi
+    echo ""
+    
     echo "What would you like to do?"
     echo ""
     echo "1) Setup genesis node locally"
