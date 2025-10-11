@@ -6,15 +6,24 @@ Get your Pokerchain node up and running in minutes!
 
 ### Setup Scripts
 ```bash
-./setup-network.sh         # 🎛️  Interactive menu (recommended for first time)
-./setup-sync-node.sh       # 🔄 Setup local sync node
-./setup-genesis-node.sh    # 🌐 Deploy genesis node to node1.block52.xyz
+./setup-network.sh            # 🎛️  Interactive menu (recommended for first time)
+./setup-sync-node.sh          # 🔄 Setup local sync node
+./setup-validator-node.sh     # 👑 Setup validator node
+./setup-genesis-node.sh       # 🌐 Deploy genesis node to node1.block52.xyz
 ```
 
 ### Node Control
 ```bash
-./start-node.sh            # ▶️  Start your local node
-./stop-node.sh             # ⏹️  Stop your local node
+./start-node.sh               # ▶️  Start your local node
+./stop-node.sh                # ⏹️  Stop your local node
+```
+
+### Documentation
+```bash
+QUICK_START.md               # This file - quick reference
+NETWORK_SETUP.md             # Complete network setup guide
+VALIDATOR_GUIDE.md           # Comprehensive validator guide
+TEST_ACTORS.md               # Test accounts with seed phrases
 ```
 
 ## 🎯 Common Scenarios
@@ -79,6 +88,57 @@ Get your Pokerchain node up and running in minutes!
 
 ---
 
+### Scenario 4: Set Up Validator Node
+
+**Goal**: Become a validator and participate in consensus
+
+**Prerequisites**:
+- Network is already running
+- You have tokens for staking
+- You understand validator responsibilities
+
+```bash
+./setup-validator-node.sh
+```
+
+**Interactive Setup**:
+1. Choose validator profile (Bob, Charlie, Diana, Eve, or custom)
+2. Select key management:
+   - Generate new validator keys
+   - Import existing keys
+   - Use pre-configured test keys
+3. Create or import validator account
+4. Review validator creation parameters
+5. Wait for node to sync
+6. Broadcast create-validator transaction
+
+**After Setup**:
+```bash
+# Start your validator node
+./start-node.sh
+
+# Wait for full sync (may take time)
+curl http://localhost:26657/status | jq '.result.sync_info.catching_up'
+# Wait until catching_up: false
+
+# Check your validator status
+pokerchaind query staking validator \
+  $(pokerchaind keys show <validator-name> --bech val -a --keyring-backend=test)
+
+# Monitor signing
+pokerchaind query slashing signing-info \
+  $(pokerchaind tendermint show-address)
+```
+
+**⚠️ Validator Responsibilities**:
+- Maintain high uptime (>95% recommended)
+- Keep node synced and updated
+- Monitor for slashing events
+- Secure your validator keys
+- Have backup/redundancy strategy
+
+---
+
 ## 📊 Quick Commands
 
 ### Check if Node is Running
@@ -121,6 +181,37 @@ curl http://localhost:1317/cosmos/base/tendermint/v1beta1/node_info
 
 # Check peers
 curl http://localhost:26657/net_info | jq '.result.n_peers'
+```
+
+### Validator Commands
+```bash
+# Show your validator info
+pokerchaind query staking validator \
+  $(pokerchaind keys show <name> --bech val -a --keyring-backend=test)
+
+# Check if you're in active validator set
+pokerchaind query staking validators | jq '.validators[].operator_address' | grep $(pokerchaind keys show <name> --bech val -a --keyring-backend=test)
+
+# Check signing status
+pokerchaind query slashing signing-info $(pokerchaind tendermint show-address)
+
+# Unjail if jailed
+pokerchaind tx slashing unjail \
+  --from=<name> \
+  --keyring-backend=test \
+  --chain-id=pokerchain \
+  --fees=1000stake \
+  --yes
+
+# Delegate more stake
+pokerchaind tx staking delegate \
+  $(pokerchaind keys show <name> --bech val -a --keyring-backend=test) \
+  1000000stake \
+  --from=<name> \
+  --keyring-backend=test \
+  --chain-id=pokerchain \
+  --fees=1000stake \
+  --yes
 ```
 
 ---

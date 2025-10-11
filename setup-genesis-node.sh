@@ -3,7 +3,9 @@
 # Pokerchain Genesis Node Setup Script
 # This script sets up the master genesis node on node1.block52.xyz
 #
-# Security Features:
+# Features:
+# - Builds pokerchaind from source using Makefile
+# - Deploys binary to remote server's GOBIN directory
 # - Stops any running pokerchaind processes before setup
 # - Disables systemd service during setup to prevent conflicts
 # - Sets least privilege file permissions (600 for sensitive files, 644 for public)
@@ -11,6 +13,8 @@
 # - Verifies permissions after setting them
 # - Configures UFW firewall with only necessary ports
 # - Creates systemd service with restart policies
+# - Automatically restarts service after deployment
+# - Verifies public endpoint accessibility
 #
 # File Permissions:
 # - genesis.json: 644 (public readable)
@@ -20,6 +24,12 @@
 # - priv_validator_state.json: 600 (CRITICAL - validator state)
 # - node_key.json: 600 (owner only - node identity)
 # - data/: 700 (owner only - blockchain data)
+#
+# Public Endpoints Verified:
+# - RPC (26657): Node status and blockchain queries
+# - API (1317): REST API for cosmos modules
+# - P2P (26656): Peer-to-peer communication
+# - gRPC (9090): gRPC queries
 
 set -e
 
@@ -716,6 +726,14 @@ setup_local_genesis_node() {
     
     echo ""
     print_success "Local genesis node setup complete!"
+    
+    # Verify local node if service was started
+    if systemctl list-units --full -all | grep -q "pokerchaind.service"; then
+        if systemctl is-active --quiet pokerchaind; then
+            echo ""
+            verify_local_node
+        fi
+    fi
     echo ""
     echo "📋 Security Summary:"
     echo "  ✅ pokerchaind processes stopped"
@@ -1113,10 +1131,11 @@ show_menu() {
     echo ""
     echo "1) Setup genesis node locally"
     echo "2) Deploy genesis node to node1.block52.xyz"
-    echo "3) Show network information"
-    echo "4) Exit"
+    echo "3) Verify remote node endpoints"
+    echo "4) Show network information"
+    echo "5) Exit"
     echo ""
-    read -p "Choose option (1-4): " CHOICE
+    read -p "Choose option (1-5): " CHOICE
     
     case $CHOICE in
         1)
@@ -1132,6 +1151,12 @@ show_menu() {
             deploy_to_remote "$REMOTE_USER" "$REMOTE_HOST"
             ;;
         3)
+            echo ""
+            read -p "Enter hostname to verify (default: node1.block52.xyz): " VERIFY_HOST
+            VERIFY_HOST=${VERIFY_HOST:-node1.block52.xyz}
+            verify_public_endpoints "$VERIFY_HOST"
+            ;;
+        4)
             echo ""
             echo "🌐 Network Configuration:"
             echo "========================"
@@ -1150,7 +1175,7 @@ show_menu() {
             echo "  API:  http://$REMOTE_HOST:$API_PORT"
             echo "  gRPC: $REMOTE_HOST:$GRPC_PORT"
             ;;
-        4)
+        5)
             echo "Goodbye!"
             exit 0
             ;;

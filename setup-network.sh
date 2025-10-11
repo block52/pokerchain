@@ -46,15 +46,21 @@ show_menu() {
     echo "   - Creates and signs blocks"
     echo "   - Requires validator keys"
     echo ""
-    echo -e "${GREEN}4)${NC} Verify Network Connectivity"
+    echo -e "${GREEN}4)${NC} Start Local Node"
+    echo "   Start your local pokerchaind node"
+    echo "   - Start via systemd (if configured)"
+    echo "   - Start manually if no service"
+    echo "   - View sync status and logs"
+    echo ""
+    echo -e "${GREEN}5)${NC} Verify Network Connectivity"
     echo "   Test connectivity to node1.block52.xyz"
     echo "   - Check RPC/API endpoints"
     echo "   - View network status"
     echo "   - Get node information"
     echo ""
-    echo -e "${GREEN}5)${NC} Exit"
+    echo -e "${GREEN}6)${NC} Exit"
     echo ""
-    echo -n "Enter your choice [1-5]: "
+    echo -n "Enter your choice [1-6]: "
 }
 
 # Check if script exists
@@ -100,20 +106,147 @@ setup_sync() {
     fi
 }
 
+# Start local node
+start_local_node() {
+    print_header
+    echo ""
+    echo "Starting Local Pokerchaind Node"
+    echo ""
+    
+    local home_dir="$HOME/.pokerchain"
+    local rpc_port=26657
+    
+    # Check if node is initialized
+    if [ ! -d "$home_dir" ]; then
+        echo -e "${YELLOW}⚠️  Node not initialized${NC}"
+        echo ""
+        echo "Please set up a node first:"
+        echo "  ./setup-network.sh → Option 2 (Sync Node)"
+        echo "  OR"
+        echo "  ./setup-sync-node.sh"
+        echo ""
+        read -p "Press Enter to continue..."
+        return
+    fi
+    
+    # Check if pokerchaind is installed
+    if ! command -v pokerchaind &> /dev/null; then
+        echo -e "${YELLOW}⚠️  pokerchaind not found in PATH${NC}"
+        echo ""
+        echo "Please ensure pokerchaind is installed:"
+        echo "  make install"
+        echo "  OR add to PATH: export PATH=\"\$HOME/go/bin:\$PATH\""
+        echo ""
+        read -p "Press Enter to continue..."
+        return
+    fi
+    
+    # Check if already running
+    if pgrep -x pokerchaind > /dev/null; then
+        echo -e "${GREEN}✅ pokerchaind is already running${NC}"
+        echo ""
+        
+        # Show status
+        if systemctl is-active --quiet pokerchaind 2>/dev/null; then
+            echo "Service status:"
+            sudo systemctl status pokerchaind --no-pager -l
+        fi
+        
+        echo ""
+        echo "Node information:"
+        if curl -s --max-time 5 http://localhost:$rpc_port/status > /dev/null 2>&1; then
+            curl -s http://localhost:$rpc_port/status | jq -r '
+                "  Node ID: " + .result.node_info.id,
+                "  Chain ID: " + .result.node_info.network,
+                "  Latest Block: " + .result.sync_info.latest_block_height,
+                "  Catching Up: " + (.result.sync_info.catching_up | tostring)
+            ' 2>/dev/null || echo "  RPC responding (jq not installed)"
+        else
+            echo "  (Node starting up, RPC not ready yet)"
+        fi
+        
+        echo ""
+        echo "Monitor with:"
+        if systemctl list-units --full -all 2>/dev/null | grep -q "pokerchaind.service"; then
+            echo "  journalctl -u pokerchaind -f"
+        fi
+        echo "  curl http://localhost:$rpc_port/status"
+        echo ""
+        read -p "Press Enter to continue..."
+        return
+    fi
+    
+    # Try to start via systemd first
+    if systemctl list-units --full -all 2>/dev/null | grep -q "pokerchaind.service"; then
+        echo "Starting pokerchaind via systemd..."
+        echo ""
+        
+        sudo systemctl start pokerchaind
+        sleep 3
+        
+        if systemctl is-active --quiet pokerchaind; then
+            echo -e "${GREEN}✅ Service started successfully!${NC}"
+            echo ""
+            sudo systemctl status pokerchaind --no-pager -l
+            echo ""
+            echo "Monitor logs:"
+            echo "  journalctl -u pokerchaind -f"
+            echo ""
+            
+            # Wait a bit and check sync status
+            echo "Checking sync status (waiting 5 seconds)..."
+            sleep 5
+            
+            if curl -s --max-time 5 http://localhost:$rpc_port/status > /dev/null 2>&1; then
+                echo ""
+                curl -s http://localhost:$rpc_port/status | jq -r '
+                    "Node Status:",
+                    "  Latest Block: " + .result.sync_info.latest_block_height,
+                    "  Catching Up: " + (.result.sync_info.catching_up | tostring),
+                    "  Network: " + .result.node_info.network
+                ' 2>/dev/null || echo "RPC is responding"
+            fi
+        else
+            echo -e "${YELLOW}⚠️  Service failed to start${NC}"
+            echo ""
+            echo "Check logs for errors:"
+            echo "  journalctl -u pokerchaind -n 50"
+        fi
+    else
+        # No systemd service, start manually
+        echo "No systemd service found. Start manually?"
+        echo ""
+        echo "This will start pokerchaind in the foreground."
+        echo "Press Ctrl+C to stop when done."
+        echo ""
+        read -p "Start now? (y/n): " start_manual
+        
+        if [[ $start_manual =~ ^[Yy]$ ]]; then
+            echo ""
+            echo "Starting pokerchaind..."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            pokerchaind start --minimum-gas-prices="0.01stake"
+        fi
+    fi
+    
+    echo ""
+    read -p "Press Enter to continue..."
+}
+
 # Setup validator node
 setup_validator() {
     print_header
     echo ""
     echo "Setting up Validator Node"
     echo ""
-    echo "⚠️  Validator node setup requires:"
-    echo "   - Existing validator keys"
-    echo "   - Proper network configuration"
-    echo "   - Coordination with existing validators"
-    echo ""
-    echo "This feature is coming soon!"
-    echo ""
-    read -p "Press Enter to continue..."
+    
+    if check_script "./setup-validator-node.sh"; then
+        chmod +x ./setup-validator-node.sh
+        ./setup-validator-node.sh
+    else
+        echo "Please ensure setup-validator-node.sh is in the current directory"
+        read -p "Press Enter to continue..."
+    fi
 }
 
 # Verify network connectivity
@@ -186,9 +319,12 @@ main() {
                 setup_validator
                 ;;
             4)
-                verify_network
+                start_local_node
                 ;;
             5)
+                verify_network
+                ;;
+            6)
                 print_header
                 echo ""
                 echo "Thank you for using Pokerchain Network Setup!"
@@ -197,7 +333,7 @@ main() {
                 ;;
             *)
                 echo ""
-                echo -e "${YELLOW}Invalid option. Please choose 1-5.${NC}"
+                echo -e "${YELLOW}Invalid option. Please choose 1-6.${NC}"
                 sleep 2
                 ;;
         esac
