@@ -1,222 +1,276 @@
-# pokerchain
+# 🚀 Pokerchain Quick Start
 
-**pokerchain** is a blockchain built using Cosmos SDK and Tendermint and created with [Ignite CLI](https://ignite.com/cli).
+Get your Pokerchain node up and running in minutes!
 
-## Requirements
+## 📦 Available Scripts
 
-### Go Version
+### Setup Scripts
+```bash
+./setup-network.sh         # 🎛️  Interactive menu (recommended for first time)
+./setup-sync-node.sh       # 🔄 Setup local sync node
+./setup-genesis-node.sh    # 🌐 Deploy genesis node to node1.block52.xyz
+```
 
--   **Go 1.24.0+** is required
--   **Recommended**: Go 1.24.7 or later
--   The project uses Cosmos SDK v0.53.2 which requires modern Go versions
+### Node Control
+```bash
+./start-node.sh            # ▶️  Start your local node
+./stop-node.sh             # ⏹️  Stop your local node
+```
 
-### Dependencies
+## 🎯 Common Scenarios
 
--   Cosmos SDK v0.53.2
--   Ignite CLI (latest version)
--   Required build tools are automatically managed via Go's `tool` directive
+### Scenario 1: First Time Setup (Developer)
 
-### Installation Check
-
-Verify your Go version:
+**Goal**: Set up a local node for development
 
 ```bash
-go version
-# Should show: go version go1.24.7 linux/amd64 (or similar)
+# Option A: Use the menu (easiest)
+./setup-network.sh
+# Choose option 2: Sync Node
+
+# Option B: Direct setup
+./setup-sync-node.sh
 ```
 
-## Get started
+**What happens**:
+1. Builds pokerchaind from source
+2. Fetches genesis from node1.block52.xyz
+3. Configures sync-only mode
+4. Sets up systemd service (optional)
+5. Ready to start!
 
-```
-ignite chain serve
-```
+---
 
-`serve` command installs dependencies, builds, initializes, and starts your blockchain in development.
+### Scenario 2: Daily Development
 
-### Quick Test - Poker Functionality
-
-Once your chain is running, test the poker module:
+**Goal**: Start node, develop, stop node
 
 ```bash
-# 1. Import a test account (see TEST_ACTORS.md for seed phrases)
-pokerchaind keys add alice --recover --keyring-backend test
+# Morning: Start your node
+./start-node.sh
 
-# 2. Create a poker game
-pokerchaind tx poker create-game 1000 10000 2 6 50 100 30 "texas-holdem" \
-  --from alice --keyring-backend test --chain-id pokerchain --fees 1000token --yes
+# Work on your code...
+# Node is running on localhost:26657 (RPC) and localhost:1317 (API)
 
-# 3. Query legal actions for a player
-curl -X GET "http://localhost:1317/pokerchain/poker/v1/legal_actions/game-id/player-address"
-
-# 4. Check game state
-curl -X GET "http://localhost:1317/pokerchain/poker/v1/game/game-id"
+# Evening: Stop your node
+./stop-node.sh
 ```
 
-### Configure
+---
 
-Your blockchain in development can be configured with `config.yml`. To learn more, see the [Ignite CLI docs](https://docs.ignite.com).
+### Scenario 3: Deploy Genesis Node
 
-Chain ID:
-
-```text
-c4def329d68084abf24c63a1a2bb2055d9935d27
-```
-
-### Web Frontend
-
-Additionally, Ignite CLI offers a frontend scaffolding feature (based on Vue) to help you quickly build a web frontend for your blockchain:
-
-Use: `ignite scaffold vue`
-This command can be run within your scaffolded blockchain project.
-
-For more information see the [monorepo for Ignite front-end development](https://github.com/ignite/web).
-
-## Release
-
-To release a new version of your blockchain, create and push a new tag with `v` prefix. A new draft release with the configured targets will be created.
-
-```
-git tag v0.1
-git push origin v0.1
-```
-
-After a draft release is created, make your final changes from the release page and publish it.
-
-### Install
-
-#### Option 1: Install from Release (Recommended)
-
-To install the latest version of your blockchain node's binary, execute the following command on your machine:
+**Goal**: Set up the main network node
 
 ```bash
-curl https://get.ignite.com/block52/pokerchain@latest! | sudo bash
+./setup-network.sh
+# Choose option 1: Genesis Node
+# Choose option 2: Deploy to node1.block52.xyz
+# Enter SSH username when prompted
 ```
 
-Or install a specific version:
+**What happens**:
+1. Builds pokerchaind locally
+2. Copies binary to remote server
+3. Deploys genesis and configs
+4. Sets up UFW firewall
+5. Starts systemd service
+6. Verifies public endpoints
 
+---
+
+## 📊 Quick Commands
+
+### Check if Node is Running
 ```bash
-curl https://get.ignite.com/block52/pokerchain@v0.1.0! | sudo bash
+# Quick check
+pgrep pokerchaind && echo "Running" || echo "Not running"
+
+# Detailed status
+curl -s http://localhost:26657/status | jq '.result.sync_info'
 ```
 
-#### Option 2: Install from Source
-
-If the above doesn't work or you want to build from source:
-
-**Prerequisites**: Ensure you have Go 1.24.0+ installed:
-
+### View Sync Progress
 ```bash
-# Check Go version
-go version
+# Current block height
+curl -s http://localhost:26657/status | jq -r '.result.sync_info.latest_block_height'
 
-# If you need to install/upgrade Go 1.24.7:
-wget https://go.dev/dl/go1.24.7.linux-amd64.tar.gz
-sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.24.7.linux-amd64.tar.gz
-export PATH=$PATH:/usr/local/go/bin
+# Are we syncing?
+curl -s http://localhost:26657/status | jq -r '.result.sync_info.catching_up'
 ```
 
-**Build from source**:
-
+### Check Logs
 ```bash
-git clone https://github.com/block52/pokerchain.git
-cd pokerchain
+# If using systemd
+journalctl -u pokerchaind -f
+
+# Last 100 lines
+journalctl -u pokerchaind -n 100
+
+# Logs from last hour
+journalctl -u pokerchaind --since "1 hour ago"
+```
+
+### Test Endpoints
+```bash
+# RPC endpoint
+curl http://localhost:26657/status
+
+# API endpoint  
+curl http://localhost:1317/cosmos/base/tendermint/v1beta1/node_info
+
+# Check peers
+curl http://localhost:26657/net_info | jq '.result.n_peers'
+```
+
+---
+
+## 🔧 Troubleshooting
+
+### pokerchaind: command not found
+```bash
+# Add to PATH
+export PATH="$HOME/go/bin:$PATH"
+echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.bashrc
+
+# Rebuild
 make install
 ```
 
-#### Option 3: Quick Install Script
-
-For remote nodes, you can use the provided installation script (includes Go version check):
-
+### Node won't start
 ```bash
-curl -sSL https://raw.githubusercontent.com/block52/pokerchain/main/install-from-source.sh | bash
+# Check logs
+journalctl -u pokerchaind -n 50
+
+# Verify initialization
+ls -la ~/.pokerchain/config/
+
+# Check if port is already in use
+lsof -i :26657
 ```
 
-`block52/pokerchain` should match the `username` and `repo_name` of the Github repository to which the source code was pushed. Learn more about [the install process](https://github.com/allinbits/starport-installer).
-
-## Troubleshooting
-
-### Go Version Issues
-
-**Problem**: Build errors related to Go version compatibility
-**Solution**: This project has been updated to work with Go 1.24.7 and Cosmos SDK v0.53.2
-
+### Not syncing / No peers
 ```bash
-# Check your Go version
-go version
+# Check persistent_peers
+cat ~/.pokerchain/config/config.toml | grep persistent_peers
 
-# If you see errors about Go 1.23 vs 1.24 requirements:
-# 1. Upgrade to Go 1.24.7 (see installation instructions above)
-# 2. Run: go mod tidy
-# 3. Try: ignite chain serve
+# Verify remote node is accessible
+curl http://node1.block52.xyz:26657/status
+
+# Re-run setup to fix config
+./setup-sync-node.sh
 ```
 
-**Recent Updates**:
+### Permission errors
+```bash
+# Fix ownership
+sudo chown -R $USER:$USER ~/.pokerchain
 
--   Updated from Go 1.22.9 → Go 1.24.7 for full Cosmos SDK v0.53.2 compatibility
--   Uses Go's native `tool` directive for build tools (buf, protoc-gen-\*, etc.)
--   All dependencies now properly resolved for Go 1.24+
+# Fix permissions
+chmod 755 ~/.pokerchain/config
+chmod 600 ~/.pokerchain/config/*.toml
+chmod 644 ~/.pokerchain/config/genesis.json
+```
 
-### Installation Issues
+---
 
-If you encounter "not found" errors with the curl installer:
+## 📁 File Locations
 
-1. **Wait for Release Processing**: After tagging a new version, GitHub Actions needs time to build and publish the release.
+```
+~/.pokerchain/              # Node home directory
+├── config/
+│   ├── genesis.json        # Chain genesis state
+│   ├── config.toml         # Node configuration
+│   ├── app.toml            # App configuration
+│   └── node_key.json       # Node identity
+└── data/
+    └── ...                 # Blockchain data
+```
 
-2. **Use Source Installation**:
+---
 
-    ```bash
-    git clone https://github.com/block52/pokerchain.git
-    cd pokerchain
-    make install
-    ```
+## 🌐 Network Information
 
-3. **Manual Binary Copy**: If you have the binary on another machine:
-    ```bash
-    # Use the provided script
-    ./install-binary.sh <remote-host> [remote-user]
-    ```
+### Genesis Node (node1.block52.xyz)
+- **RPC**: http://node1.block52.xyz:26657
+- **API**: http://node1.block52.xyz:1317  
+- **Chain ID**: pokerchain
+- **Role**: Primary validator
 
-### Network Configuration
+### Local Sync Node
+- **RPC**: http://localhost:26657
+- **API**: http://localhost:1317
+- **Role**: Read-only sync node
+- **Purpose**: Local development & testing
 
-For multi-node setups, ensure your nodes can communicate:
+---
 
--   Configure proper firewall rules
--   Use the provided `second-node.sh` script for node setup
--   Verify genesis configuration matches across nodes
+## 💡 Tips
 
-## Development Notes
+1. **Always use start-node.sh**: Don't manually run `pokerchaind start` unless needed
+2. **Check sync status regularly**: Use `curl localhost:26657/status | jq`
+3. **Logs are your friend**: When in doubt, check `journalctl -u pokerchaind -f`
+4. **Systemd is better**: Let the system manage your node automatically
+5. **Keep it running**: Sync nodes need to stay online to stay synced
 
-### Test Actors
+---
 
-For testing poker functionality, we provide 10 pre-configured test actors with seed phrases. See [TEST_ACTORS.md](./TEST_ACTORS.md) for complete details including:
+## 🆘 Getting Help
 
--   **Test accounts**: Alice, Bob, Charlie, Diana, Eve, Frank, Grace, Henry, Iris, Jack
--   **Seed phrases**: Ready-to-import mnemonic phrases for each account
--   **Usage instructions**: How to import accounts and add test funds
--   **Example commands**: Creating games and querying legal actions
+### Quick Checks
+```bash
+# 1. Is pokerchaind installed?
+which pokerchaind
+pokerchaind version
 
-**⚠️ Important**: These are test accounts only - never use on mainnet!
+# 2. Is node initialized?
+ls ~/.pokerchain/config/genesis.json
 
-### Build Tools
+# 3. Is node running?
+./start-node.sh  # Will tell you current status
 
-The project uses Go 1.24's `tool` directive to automatically manage build dependencies:
+# 4. Can we reach the network?
+curl http://node1.block52.xyz:26657/status
+```
 
--   `buf` for protocol buffer management
--   `protoc-gen-*` tools for code generation
--   `golangci-lint` for linting
+### Still stuck?
+1. Check [NETWORK_SETUP.md](./NETWORK_SETUP.md) for detailed guide
+2. Review logs: `journalctl -u pokerchaind -n 100`
+3. Verify configs are correct
+4. Re-run setup script
 
-All tools are automatically installed when running `go mod tidy` with Go 1.24+.
+---
 
-### Chain Configuration
+## 📚 Next Steps
 
--   **Chain ID**: Based on repository hash
--   **Cosmos SDK**: v0.53.2
--   **Consensus**: Tendermint
--   **Development ports**: 26657 (Tendermint), 1317 (API), 4500 (Faucet)
+Once your node is running:
 
-## Learn more
+1. **Test the poker module**
+   ```bash
+   # Import test accounts
+   pokerchaind keys add alice --recover --keyring-backend test
+   
+   # Create a game
+   pokerchaind tx poker create-game 1000 10000 2 6 50 100 30 "texas-holdem" \
+     --from alice --keyring-backend test --chain-id pokerchain --fees 1000stake --yes
+   ```
 
--   [Ignite CLI](https://ignite.com/cli)
--   [Tutorials](https://docs.ignite.com/guide)
--   [Ignite CLI docs](https://docs.ignite.com)
--   [Cosmos SDK docs](https://docs.cosmos.network)
--   [Developer Chat](https://discord.gg/ignite)
+2. **Query blockchain data**
+   ```bash
+   # Get node info
+   curl http://localhost:26657/status
+   
+   # Query accounts
+   curl http://localhost:1317/cosmos/auth/v1beta1/accounts
+   ```
+
+3. **Build your application**
+   - Use localhost:26657 for RPC calls
+   - Use localhost:1317 for REST API
+   - All standard Cosmos SDK queries work
+
+---
+
+**Made with ❤️ by Block52**
+
+For detailed documentation, see [NETWORK_SETUP.md](./NETWORK_SETUP.md)

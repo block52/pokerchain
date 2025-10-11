@@ -178,6 +178,107 @@ check_go_environment() {
     return 0
 }
 
+# Build pokerchaind using make
+build_pokerchaind() {
+    print_info "Building pokerchaind from source..."
+    
+    # Check if Makefile exists
+    if [ ! -f "Makefile" ]; then
+        print_error "Makefile not found in $PROJECT_DIR"
+        echo "Please ensure you're in the pokerchain project root directory"
+        exit 1
+    fi
+    
+    # Check if Go is installed
+    if ! command -v go &> /dev/null; then
+        print_error "Go not found. Please install Go first."
+        exit 1
+    fi
+    
+    # Build using make
+    print_info "Running: make install"
+    if make install; then
+        print_success "pokerchaind built and installed successfully"
+        
+        # Verify installation
+        local gobin="${GOBIN:-${GOPATH:-$HOME/go}/bin}"
+        if [ -f "$gobin/pokerchaind" ]; then
+            print_success "Binary location: $gobin/pokerchaind"
+            pokerchaind version 2>/dev/null || true
+        else
+            print_error "Build succeeded but binary not found in $gobin"
+            exit 1
+        fi
+    else
+        print_error "Failed to build pokerchaind"
+        exit 1
+    fi
+}
+
+# Verify public endpoints are accessible
+verify_public_endpoints() {
+    local host=$1
+    
+    echo ""
+    print_info "Verifying public endpoint accessibility on $host..."
+    echo ""
+    
+    local all_success=true
+    
+    # Test RPC endpoint
+    print_info "Testing RPC endpoint (port $RPC_PORT)..."
+    if curl -s --max-time 5 "http://$host:$RPC_PORT/status" > /dev/null 2>&1; then
+        print_success "RPC (${RPC_PORT}): ✅ Responding"
+        echo "     $(curl -s http://$host:$RPC_PORT/status | grep -o '"network":"[^"]*"' || echo 'Status OK')"
+    else
+        print_error "RPC (${RPC_PORT}): ❌ Not accessible"
+        echo "     Check firewall rules and ensure pokerchaind is running"
+        all_success=false
+    fi
+    
+    # Test API endpoint
+    print_info "Testing API endpoint (port $API_PORT)..."
+    if curl -s --max-time 5 "http://$host:$API_PORT/cosmos/base/tendermint/v1beta1/node_info" > /dev/null 2>&1; then
+        print_success "API (${API_PORT}): ✅ Responding"
+    else
+        print_warning "API (${API_PORT}): ⚠️  Not accessible or not enabled"
+        echo "     This may be normal if API is disabled in app.toml"
+    fi
+    
+    # Test P2P port (just check if port is open)
+    print_info "Testing P2P endpoint (port $P2P_PORT)..."
+    if timeout 3 bash -c "echo > /dev/tcp/$host/$P2P_PORT" 2>/dev/null; then
+        print_success "P2P (${P2P_PORT}): ✅ Port is open"
+    else
+        print_warning "P2P (${P2P_PORT}): ⚠️  Cannot verify (may require peer connection)"
+    fi
+    
+    # Test gRPC port
+    print_info "Testing gRPC endpoint (port $GRPC_PORT)..."
+    if timeout 3 bash -c "echo > /dev/tcp/$host/$GRPC_PORT" 2>/dev/null; then
+        print_success "gRPC (${GRPC_PORT}): ✅ Port is open"
+    else
+        print_warning "gRPC (${GRPC_PORT}): ⚠️  Not accessible or not enabled"
+    fi
+    
+    echo ""
+    if [ "$all_success" = true ]; then
+        print_success "All critical endpoints are publicly accessible!"
+    else
+        print_warning "Some endpoints are not accessible. Review the results above."
+    fi
+    
+    echo ""
+    echo "🌐 Public Endpoints:"
+    echo "   RPC:      http://$host:$RPC_PORT"
+    echo "   API:      http://$host:$API_PORT"
+    echo "   gRPC:     $host:$GRPC_PORT"
+    echo "   P2P:      $host:$P2P_PORT"
+    echo ""
+    
+    return 0
+}
+
 # Stop pokerchaind if running
 stop_pokerchaind() {
     print_info "Checking if pokerchaind is running..."
@@ -489,6 +590,12 @@ setup_local_genesis_node() {
     # Check Go environment
     check_go_environment
     
+    # Ask if user wants to build first
+    read -p "Build pokerchaind from source before setup? (y/n): " BUILD_FIRST
+    if [[ $BUILD_FIRST == "y" ]]; then
+        build_pokerchaind
+    fi
+    
     # Check current system status
     check_system_status
     
@@ -585,6 +692,26 @@ setup_local_genesis_node() {
         echo "  sudo systemctl start pokerchaind   # Start the service"
         echo "  sudo systemctl status pokerchaind  # Check status"
         echo "  journalctl -u pokerchaind -f       # View logs"
+        
+        # Ask if user wants to start now
+        echo ""
+        read -p "Start pokerchaind service now? (y/n): " START_NOW
+        if [[ $START_NOW == "y" ]]; then
+            print_info "Enabling and starting pokerchaind service..."
+            sudo systemctl enable pokerchaind
+            sudo systemctl start pokerchaind
+            sleep 3
+            
+            # Check status
+            if sudo systemctl is-active --quiet pokerchaind; then
+                print_success "pokerchaind service is running!"
+                echo ""
+                sudo systemctl status pokerchaind --no-pager -l
+            else
+                print_error "pokerchaind service failed to start"
+                echo "Check logs with: journalctl -u pokerchaind -n 50"
+            fi
+        fi
     fi
     
     echo ""
@@ -629,8 +756,27 @@ deploy_to_remote() {
     
     print_info "Deploying to remote server: $remote_user@$remote_host"
     
+    # Ensure we're in the project directory
+    ensure_project_directory
+    
     # Check required files
     check_required_files
+    
+    # Ask if user wants to build first
+    read -p "Build pokerchaind from source before deployment? (y/n): " BUILD_FIRST
+    if [[ $BUILD_FIRST == "y" ]]; then
+        build_pokerchaind
+    fi
+    
+    # Verify pokerchaind binary exists locally
+    local gobin="${GOBIN:-${GOPATH:-$HOME/go}/bin}"
+    if [ ! -f "$gobin/pokerchaind" ]; then
+        print_error "pokerchaind binary not found at $gobin/pokerchaind"
+        echo "Please build it first with: make install"
+        exit 1
+    fi
+    
+    print_success "Found local pokerchaind binary: $gobin/pokerchaind"
     
     # Test SSH connection
     print_info "Testing SSH connection..."
@@ -644,22 +790,50 @@ deploy_to_remote() {
     fi
     print_success "SSH connection successful"
     
+    # Stop remote pokerchaind if running
+    print_info "Stopping remote pokerchaind service..."
+    ssh "$remote_user@$remote_host" "
+        if systemctl list-units --full -all | grep -q 'pokerchaind.service'; then
+            sudo systemctl stop pokerchaind 2>/dev/null || true
+            echo 'Service stopped'
+        fi
+        pkill pokerchaind 2>/dev/null || true
+    "
+    print_success "Remote pokerchaind stopped"
+    
     # Create remote directory
     print_info "Creating remote directories..."
     ssh "$remote_user@$remote_host" "mkdir -p ~/.pokerchain/config ~/.pokerchain/data"
     
+    # Get remote GOBIN path
+    print_info "Determining remote Go bin directory..."
+    REMOTE_GOBIN=$(ssh "$remote_user@$remote_host" "echo \${GOBIN:-\${GOPATH:-\$HOME/go}/bin}")
+    print_success "Remote Go bin: $REMOTE_GOBIN"
+    
+    # Create remote GOBIN directory if it doesn't exist
+    ssh "$remote_user@$remote_host" "mkdir -p $REMOTE_GOBIN"
+    
+    # Copy pokerchaind binary to remote server
+    print_info "Copying pokerchaind binary to remote server..."
+    scp "$gobin/pokerchaind" "$remote_user@$remote_host:$REMOTE_GOBIN/"
+    ssh "$remote_user@$remote_host" "chmod +x $REMOTE_GOBIN/pokerchaind"
+    print_success "Binary copied to $REMOTE_GOBIN/pokerchaind"
+    
+    # Verify remote binary
+    print_info "Verifying remote binary..."
+    REMOTE_VERSION=$(ssh "$remote_user@$remote_host" "$REMOTE_GOBIN/pokerchaind version 2>/dev/null || echo 'unknown'")
+    print_success "Remote pokerchaind version: $REMOTE_VERSION"
+    
     # Copy required files
-    print_info "Copying files to remote server..."
+    print_info "Copying configuration files to remote server..."
     scp genesis.json "$remote_user@$remote_host:~/.pokerchain/config/"
     scp app.toml "$remote_user@$remote_host:~/.pokerchain/config/"
     scp config.toml "$remote_user@$remote_host:~/.pokerchain/config/"
     
     # Copy setup scripts
-    if [ -f "install-from-source.sh" ]; then
-        scp install-from-source.sh "$remote_user@$remote_host:~/"
-    fi
     if [ -f "get-node-info.sh" ]; then
         scp get-node-info.sh "$remote_user@$remote_host:~/"
+        ssh "$remote_user@$remote_host" "chmod +x ~/get-node-info.sh"
     fi
     
     print_success "Files copied to remote server"
@@ -667,85 +841,33 @@ deploy_to_remote() {
     # Create remote setup script
     print_info "Creating remote setup script..."
     
-    cat > /tmp/remote-setup.sh <<'REMOTE_SCRIPT'
+    cat > /tmp/remote-setup.sh <<REMOTE_SCRIPT
 #!/bin/bash
 set -e
 
 echo "🔧 Setting up genesis node on remote server..."
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+# Configuration
+REMOTE_GOBIN="$REMOTE_GOBIN"
+CHAIN_ID="$CHAIN_ID"
+MONIKER="$MONIKER"
 
-echo "📁 Working directory: $SCRIPT_DIR"
-
-# Stop pokerchaind if running
-echo "🛑 Checking for running pokerchaind processes..."
-if systemctl list-units --full -all | grep -q "pokerchaind.service"; then
-    if systemctl is-active --quiet pokerchaind; then
-        echo "⚠️  Stopping pokerchaind service..."
-        sudo systemctl stop pokerchaind
-        sleep 2
-        echo "✅ Service stopped"
-    fi
-    if systemctl is-enabled --quiet pokerchaind 2>/dev/null; then
-        echo "📋 Disabling pokerchaind service temporarily..."
-        sudo systemctl disable pokerchaind
-    fi
-fi
-
-if pgrep -x pokerchaind > /dev/null; then
-    echo "⚠️  Stopping pokerchaind processes..."
-    pkill -TERM pokerchaind
-    sleep 3
-    if pgrep -x pokerchaind > /dev/null; then
-        pkill -KILL pokerchaind
-        sleep 1
-    fi
-    echo "✅ All processes stopped"
-fi
-
-# Check Go environment
-echo "🔍 Checking Go environment..."
-if ! command -v go &> /dev/null; then
-    echo "⚠️  Go not found. Please install Go first."
+# Verify pokerchaind binary
+if [ ! -f "\$REMOTE_GOBIN/pokerchaind" ]; then
+    echo "❌ pokerchaind binary not found at \$REMOTE_GOBIN/pokerchaind"
     exit 1
 fi
 
-GO_VERSION=$(go version | awk '{print $3}')
-echo "✅ Go version: $GO_VERSION"
+echo "✅ pokerchaind binary found: \$REMOTE_GOBIN/pokerchaind"
+echo "   Version: \$(\$REMOTE_GOBIN/pokerchaind version)"
 
-# Check GOPATH/GOBIN
-GOBIN="${GOBIN:-${GOPATH:-$HOME/go}/bin}"
-echo "📁 Go bin directory: $GOBIN"
-
-# Add GOBIN to PATH if not already there
-if [[ ":$PATH:" != *":$GOBIN:"* ]]; then
-    export PATH="$GOBIN:$PATH"
-    echo "✅ Added $GOBIN to PATH"
-fi
-
-# Check if pokerchaind is installed
-if ! command -v pokerchaind &> /dev/null; then
-    echo "❌ pokerchaind not found. Installing..."
-    if [ -f ~/install-from-source.sh ]; then
-        echo "Running install-from-source.sh..."
-        chmod +x ~/install-from-source.sh
-        ~/install-from-source.sh
-    else
-        echo "Please install pokerchaind manually with:"
-        echo "  cd /path/to/pokerchain"
-        echo "  make install"
-        exit 1
-    fi
-fi
-
-echo "✅ pokerchaind found: $(which pokerchaind)"
+# Add GOBIN to PATH
+export PATH="\$REMOTE_GOBIN:\$PATH"
 
 # Initialize node if needed
-if [ ! -f ~/.pokerchain/config/genesis.json ]; then
+if [ ! -d ~/.pokerchain/config ]; then
     echo "🔧 Initializing node..."
-    pokerchaind init "node1.block52.xyz" --chain-id pokerchain
+    pokerchaind init "\$MONIKER" --chain-id "\$CHAIN_ID"
     echo "✅ Node initialized"
 fi
 
@@ -762,17 +884,17 @@ detect_genesis_cmd() {
 
 # Validate genesis
 echo "✅ Validating genesis..."
-VALIDATE_CMD=$(detect_genesis_cmd)
+VALIDATE_CMD=\$(detect_genesis_cmd)
 
-if [ -n "$VALIDATE_CMD" ]; then
+if [ -n "\$VALIDATE_CMD" ]; then
     cd ~/.pokerchain/config
-    if pokerchaind $VALIDATE_CMD; then
+    if pokerchaind \$VALIDATE_CMD; then
         echo "✅ Genesis file is valid"
     else
         echo "❌ Genesis validation failed"
         exit 1
     fi
-    cd "$SCRIPT_DIR"
+    cd ~
 else
     echo "⚠️  Genesis validation command not available"
     echo "    Skipping validation (will verify during startup)"
@@ -818,8 +940,10 @@ echo "✅ File permissions set"
 
 # Setup UFW firewall
 echo "🔒 Setting up firewall..."
-sudo apt-get update -qq
-sudo apt-get install -y ufw
+if ! command -v ufw &> /dev/null; then
+    sudo apt-get update -qq
+    sudo apt-get install -y ufw
+fi
 
 # Configure firewall rules
 echo "🔧 Configuring firewall rules..."
@@ -842,28 +966,47 @@ Description=Pokerchain Daemon
 After=network-online.target
 
 [Service]
-User=$(whoami)
-ExecStart=$(which pokerchaind) start --minimum-gas-prices="0.01stake"
+User=\$(whoami)
+ExecStart=\$REMOTE_GOBIN/pokerchaind start --minimum-gas-prices="0.01stake"
 Restart=always
 RestartSec=3
 LimitNOFILE=4096
 Environment="DAEMON_NAME=pokerchaind"
-Environment="DAEMON_HOME=$HOME/.pokerchain"
-Environment="PATH=$GOBIN:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="DAEMON_HOME=\$HOME/.pokerchain"
+Environment="PATH=\$REMOTE_GOBIN:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
+echo "✅ Systemd service created"
+
+# Enable and start the service
+echo "🚀 Enabling and starting pokerchaind service..."
+sudo systemctl enable pokerchaind
+sudo systemctl restart pokerchaind
+
+# Wait for service to start
+sleep 5
+
+# Check service status
+if sudo systemctl is-active --quiet pokerchaind; then
+    echo "✅ pokerchaind service is running!"
+    sudo systemctl status pokerchaind --no-pager -l
+else
+    echo "❌ pokerchaind service failed to start"
+    echo "Check logs with: journalctl -u pokerchaind -n 50"
+    exit 1
+fi
 
 echo ""
 echo "✅ Remote setup complete!"
 echo ""
-echo "📋 Next steps:"
-echo "  sudo systemctl enable pokerchaind   # Enable on boot"
-echo "  sudo systemctl start pokerchaind    # Start the service"
-echo "  journalctl -u pokerchaind -f        # View logs"
+echo "📋 Service Management:"
+echo "  sudo systemctl status pokerchaind    # Check status"
+echo "  sudo systemctl restart pokerchaind   # Restart service"
+echo "  journalctl -u pokerchaind -f         # View logs"
 echo ""
 echo "🔍 Verify installation:"
 echo "  pokerchaind version"
@@ -871,6 +1014,7 @@ echo "  curl http://localhost:26657/status"
 REMOTE_SCRIPT
     
     # Copy and execute remote setup script
+    print_info "Executing remote setup script..."
     scp /tmp/remote-setup.sh "$remote_user@$remote_host:~/remote-setup.sh"
     ssh "$remote_user@$remote_host" "chmod +x ~/remote-setup.sh && ~/remote-setup.sh"
     
@@ -878,13 +1022,67 @@ REMOTE_SCRIPT
     rm /tmp/remote-setup.sh
     
     print_success "Remote deployment complete!"
+    
+    # Verify public endpoints
+    echo ""
+    read -p "Verify public endpoint accessibility? (y/n): " VERIFY_ENDPOINTS
+    if [[ $VERIFY_ENDPOINTS == "y" ]]; then
+        print_info "Waiting 10 seconds for node to fully start..."
+        sleep 10
+        verify_public_endpoints "$remote_host"
+    fi
+    
     echo ""
     echo "📋 Remote node is ready!"
     echo ""
-    echo "To manage the remote node:"
+    echo "🌐 Access your node:"
     echo "  ssh $remote_user@$remote_host"
-    echo "  sudo systemctl status pokerchaind"
-    echo "  journalctl -u pokerchaind -f"
+    echo ""
+    echo "🔧 Manage the service:"
+    echo "  sudo systemctl status pokerchaind     # Check status"
+    echo "  sudo systemctl restart pokerchaind    # Restart"
+    echo "  sudo systemctl stop pokerchaind       # Stop"
+    echo "  journalctl -u pokerchaind -f          # View logs"
+    echo ""
+    echo "🌐 Public Endpoints:"
+    echo "  RPC:  http://$remote_host:$RPC_PORT/status"
+    echo "  API:  http://$remote_host:$API_PORT/cosmos/base/tendermint/v1beta1/node_info"
+    echo ""
+    echo "📊 Quick checks:"
+    echo "  curl http://$remote_host:$RPC_PORT/status"
+    echo "  curl http://$remote_host:$API_PORT/cosmos/base/tendermint/v1beta1/node_info"
+}
+
+# Verify local node
+verify_local_node() {
+    print_info "Verifying local node..."
+    
+    # Check if service is running
+    if systemctl is-active --quiet pokerchaind; then
+        print_success "pokerchaind service is running"
+        
+        # Wait a moment for RPC to be ready
+        sleep 3
+        
+        # Check localhost endpoints
+        echo ""
+        print_info "Testing localhost endpoints..."
+        
+        if curl -s --max-time 5 http://localhost:$RPC_PORT/status > /dev/null 2>&1; then
+            print_success "RPC endpoint responding on localhost:$RPC_PORT"
+            echo ""
+            echo "Node status:"
+            curl -s http://localhost:$RPC_PORT/status | grep -o '"network":"[^"]*"\|"latest_block_height":"[^"]*"' || true
+        else
+            print_warning "RPC endpoint not yet responding (node may still be starting)"
+        fi
+    elif pgrep -x pokerchaind > /dev/null; then
+        print_success "pokerchaind is running (not as service)"
+    else
+        print_warning "pokerchaind is not running"
+        echo "Start it with: sudo systemctl start pokerchaind"
+        echo "Or manually: pokerchaind start --minimum-gas-prices=\"0.01stake\""
+    fi
 }
 
 # Main menu
