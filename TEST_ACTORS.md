@@ -1,21 +1,5 @@
 # Test Actors
 
-For testing and development purpose**Address:** `b521xe9xv26qtdern5k84csy2c6jxxfa33vxn6s0aw`  
-**Seed Phrase:** `access execute loyal tag grid demise cloth desk dolphin pelican trumpet frown note level sibling dumb upon unfold wedding party success hint need fruit`  
-**Usage:** Lucky player, good for testing winning scenarios
-
-## Test Actor 9 - "Iris"
-
-**Address:** `b52102v4aqqm8pxtl5k2kv5229xx7vfwlu66ev0p3h`  
-**Seed Phrase:** `any antenna globe forget neglect race advice admit market guilt clay tunnel anxiety aim morning scrap visit sibling royal during proud flee maid fiscal`  
-**Usage:** Passive player, good for testing check/call patterns
-
-## Test Actor 10 - "Jack"
-
-**Address:** `b521dyqcaeuhwp6ryzc58gpyqaz8rxrt95sdcltdsq`  
-**Seed Phrase:** `digital option before hawk alcohol uncover expire faint enact shield bike uncle kangaroo museum domain heart purchase under answer topple timber hole height glance`  
-**Usage:** Bluffer player, good for testing deception strategiestest actors with their addresses and seed phrases. These can be used to test poker game functionality.
-
 **⚠️ Warning: These are test accounts only. Never use these seed phrases on mainnet or with real funds.**
 
 ## Test Actor 1 - "Alice"
