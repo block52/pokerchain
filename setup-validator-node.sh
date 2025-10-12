@@ -21,6 +21,12 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REMOTE_NODE="node1.block52.xyz"
 GITHUB_RAW_URL="https://raw.githubusercontent.com/block52/pokerchain/main"
 
+# Deployment mode
+DEPLOYMENT_MODE=""  # "local" or "remote"
+REMOTE_USER=""
+REMOTE_HOST=""
+REMOTE_HOME_DIR=""
+
 # Ports
 P2P_PORT=26656
 RPC_PORT=26657
@@ -62,37 +68,204 @@ command_exists() {
     command -v "$1" &> /dev/null
 }
 
+# Execute command locally or remotely based on mode
+exec_cmd() {
+    local cmd="$1"
+    
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        ssh "$REMOTE_USER@$REMOTE_HOST" "$cmd"
+    else
+        eval "$cmd"
+    fi
+}
+
+# Copy file to remote or local based on mode
+copy_file() {
+    local src="$1"
+    local dest="$2"
+    
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        scp "$src" "$REMOTE_USER@$REMOTE_HOST:$dest"
+    else
+        cp "$src" "$dest"
+    fi
+}
+
+# Test SSH connection
+test_ssh_connection() {
+    print_info "Testing SSH connection to $REMOTE_USER@$REMOTE_HOST..."
+    
+    if ! ssh -o ConnectTimeout=5 "$REMOTE_USER@$REMOTE_HOST" "echo 'Connection successful'" &> /dev/null; then
+        print_error "Cannot connect to $REMOTE_USER@$REMOTE_HOST"
+        echo "Please ensure:"
+        echo "  1. SSH is accessible"
+        echo "  2. You have the correct credentials"
+        echo "  3. The hostname is correct"
+        exit 1
+    fi
+    
+    print_success "SSH connection successful"
+}
+
+# Select deployment mode
+select_deployment_mode() {
+    print_header "Deployment Mode Selection"
+    
+    echo ""
+    echo "Where do you want to deploy the validator?"
+    echo ""
+    echo "1) Local machine (this computer)"
+    echo "2) Remote Linux server (via SSH)"
+    echo ""
+    read -p "Enter choice [1-2]: " DEPLOY_CHOICE
+    
+    case $DEPLOY_CHOICE in
+        1)
+            DEPLOYMENT_MODE="local"
+            HOME_DIR="$HOME/.pokerchain"
+            print_success "Selected local deployment"
+            ;;
+        2)
+            DEPLOYMENT_MODE="remote"
+            echo ""
+            read -p "Enter remote username: " REMOTE_USER
+            read -p "Enter remote hostname or IP: " REMOTE_HOST
+            
+            if [ -z "$REMOTE_USER" ] || [ -z "$REMOTE_HOST" ]; then
+                print_error "Username and hostname are required"
+                exit 1
+            fi
+            
+            # Test connection
+            test_ssh_connection
+            
+            # Get remote home directory
+            REMOTE_HOME_DIR=$(ssh "$REMOTE_USER@$REMOTE_HOST" "echo \$HOME")
+            HOME_DIR="$REMOTE_HOME_DIR/.pokerchain"
+            
+            print_success "Selected remote deployment: $REMOTE_USER@$REMOTE_HOST"
+            print_info "Remote home directory: $REMOTE_HOME_DIR"
+            
+            echo ""
+            print_info "For remote deployment:"
+            echo "  ✓ Binary will be built locally"
+            echo "  ✓ Binary will be copied to remote server"
+            echo "  ✓ Configuration will be done remotely"
+            echo "  ✓ Service will be created on remote server"
+            ;;
+        *)
+            print_error "Invalid choice. Defaulting to local."
+            DEPLOYMENT_MODE="local"
+            HOME_DIR="$HOME/.pokerchain"
+            ;;
+    esac
+    
+    export DEPLOYMENT_MODE
+    export REMOTE_USER
+    export REMOTE_HOST
+    export HOME_DIR
+    export REMOTE_HOME_DIR
+}
+
 # Stop any running pokerchaind processes
 stop_pokerchaind() {
     print_info "Checking for running pokerchaind processes..."
     
-    if systemctl list-units --full -all 2>/dev/null | grep -q "pokerchaind.service"; then
-        if systemctl is-active --quiet pokerchaind 2>/dev/null; then
-            print_warning "Stopping pokerchaind service..."
-            sudo systemctl stop pokerchaind
-            sleep 2
-            print_success "Service stopped"
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        # Remote stop
+        ssh "$REMOTE_USER@$REMOTE_HOST" "
+            if systemctl list-units --full -all 2>/dev/null | grep -q 'pokerchaind.service'; then
+                if systemctl is-active --quiet pokerchaind 2>/dev/null; then
+                    echo 'Stopping pokerchaind service...'
+                    sudo systemctl stop pokerchaind
+                    sleep 2
+                    echo 'Service stopped'
+                fi
+            fi
+            
+            if pgrep -x pokerchaind > /dev/null; then
+                echo 'Stopping pokerchaind processes...'
+                pkill -TERM pokerchaind 2>/dev/null || true
+                sleep 3
+                
+                if pgrep -x pokerchaind > /dev/null; then
+                    pkill -KILL pokerchaind 2>/dev/null || true
+                    sleep 1
+                fi
+                echo 'All pokerchaind processes stopped'
+            else
+                echo 'No pokerchaind processes running'
+            fi
+        "
+    else
+        # Local stop
+        if systemctl list-units --full -all 2>/dev/null | grep -q "pokerchaind.service"; then
+            if systemctl is-active --quiet pokerchaind 2>/dev/null; then
+                print_warning "Stopping pokerchaind service..."
+                sudo systemctl stop pokerchaind
+                sleep 2
+                print_success "Service stopped"
+            fi
         fi
-    fi
-    
-    if pgrep -x pokerchaind > /dev/null; then
-        print_warning "Stopping pokerchaind processes..."
-        pkill -TERM pokerchaind 2>/dev/null || true
-        sleep 3
         
         if pgrep -x pokerchaind > /dev/null; then
-            pkill -KILL pokerchaind 2>/dev/null || true
-            sleep 1
+            print_warning "Stopping pokerchaind processes..."
+            pkill -TERM pokerchaind 2>/dev/null || true
+            sleep 3
+            
+            if pgrep -x pokerchaind > /dev/null; then
+                pkill -KILL pokerchaind 2>/dev/null || true
+                sleep 1
+            fi
+            print_success "All pokerchaind processes stopped"
+        else
+            print_success "No pokerchaind processes running"
         fi
-        print_success "All pokerchaind processes stopped"
-    else
-        print_success "No pokerchaind processes running"
     fi
 }
 
-# Build pokerchaind from source
-build_pokerchaind() {
-    print_header "Building pokerchaind from source"
+# Build or verify pokerchaind binary
+prepare_binary() {
+    print_header "Preparing pokerchaind binary"
+    
+    local gobin="${GOBIN:-${GOPATH:-$HOME/go}/bin}"
+    
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        # For remote deployment, ensure we have a local binary to deploy
+        print_info "Remote deployment - checking for local binary..."
+        
+        if [ -f "$gobin/pokerchaind" ]; then
+            print_success "Found existing binary: $gobin/pokerchaind"
+            local version=$(pokerchaind version 2>/dev/null || echo "unknown")
+            print_info "Local version: $version"
+        else
+            print_warning "Binary not found - building from source..."
+            build_local_binary
+        fi
+        
+        # Now deploy to remote
+        deploy_binary_to_remote
+    else
+        # For local deployment, ask user
+        if [ -f "$gobin/pokerchaind" ]; then
+            print_success "Found existing pokerchaind: $gobin/pokerchaind"
+            local version=$(pokerchaind version 2>/dev/null || echo "unknown")
+            print_info "Version: $version"
+            
+            read -p "Rebuild pokerchaind from source? (y/n): " REBUILD
+            if [[ $REBUILD =~ ^[Yy]$ ]]; then
+                build_local_binary
+            fi
+        else
+            print_warning "Binary not found - building from source..."
+            build_local_binary
+        fi
+    fi
+}
+
+# Build binary locally
+build_local_binary() {
+    print_info "Building pokerchaind locally..."
     
     if [ ! -f "Makefile" ]; then
         print_error "Makefile not found. Please run from the pokerchain project directory"
@@ -124,6 +297,36 @@ build_pokerchaind() {
         print_error "Failed to build pokerchaind"
         exit 1
     fi
+}
+
+# Deploy binary to remote server
+deploy_binary_to_remote() {
+    print_info "Deploying binary to remote server..."
+    
+    local local_gobin="${GOBIN:-${GOPATH:-$HOME/go}/bin}"
+    local local_binary="$local_gobin/pokerchaind"
+    
+    if [ ! -f "$local_binary" ]; then
+        print_error "Local binary not found at $local_binary"
+        exit 1
+    fi
+    
+    # Get remote GOBIN path
+    local remote_gobin=$(ssh "$REMOTE_USER@$REMOTE_HOST" "echo \${GOBIN:-\${GOPATH:-\$HOME/go}/bin}")
+    print_info "Remote Go bin: $remote_gobin"
+    
+    # Create remote directory
+    ssh "$REMOTE_USER@$REMOTE_HOST" "mkdir -p $remote_gobin"
+    
+    # Copy binary
+    print_info "Copying binary to remote..."
+    scp "$local_binary" "$REMOTE_USER@$REMOTE_HOST:$remote_gobin/"
+    ssh "$REMOTE_USER@$REMOTE_HOST" "chmod +x $remote_gobin/pokerchaind"
+    
+    # Verify remote binary
+    local remote_version=$(ssh "$REMOTE_USER@$REMOTE_HOST" "$remote_gobin/pokerchaind version 2>/dev/null || echo 'unknown'")
+    print_success "Binary deployed to remote: $remote_gobin/pokerchaind"
+    print_info "Remote version: $remote_version"
 }
 
 # Fetch genesis from remote node or GitHub
@@ -258,28 +461,63 @@ select_validator_profile() {
 initialize_validator_node() {
     print_header "Initializing validator node"
     
-    if [ -d "$HOME_DIR" ]; then
-        print_warning "$HOME_DIR already exists"
-        read -p "Remove existing data and reinitialize? (y/n): " REINIT
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        # Remote initialization
+        local node_exists=$(ssh "$REMOTE_USER@$REMOTE_HOST" "[ -d $HOME_DIR ] && echo 'yes' || echo 'no'")
         
-        if [[ $REINIT =~ ^[Yy]$ ]]; then
-            print_info "Creating backup..."
-            local backup_dir="$HOME_DIR.backup.$(date +%Y%m%d_%H%M%S)"
-            mv "$HOME_DIR" "$backup_dir"
-            print_success "Backup created: $backup_dir"
-        else
-            print_info "Keeping existing installation"
-            return 0
+        if [ "$node_exists" = "yes" ]; then
+            print_warning "$HOME_DIR already exists on remote server"
+            read -p "Remove existing data and reinitialize? (y/n): " REINIT
+            
+            if [[ $REINIT =~ ^[Yy]$ ]]; then
+                print_info "Creating backup on remote server..."
+                ssh "$REMOTE_USER@$REMOTE_HOST" "
+                    backup_dir=\"${HOME_DIR}.backup.\$(date +%Y%m%d_%H%M%S)\"
+                    mv $HOME_DIR \$backup_dir
+                    echo \"Backup created: \$backup_dir\"
+                "
+                print_success "Remote backup created"
+            else
+                print_info "Keeping existing installation"
+                return 0
+            fi
         fi
+        
+        print_info "Initializing node on remote server..."
+        print_info "Moniker: $VALIDATOR_MONIKER"
+        
+        ssh "$REMOTE_USER@$REMOTE_HOST" "
+            export PATH=\"\${GOBIN:-\${GOPATH:-\$HOME/go}/bin}:/usr/local/go/bin:\$PATH\"
+            pokerchaind init '$VALIDATOR_MONIKER' --chain-id '$CHAIN_ID'
+            mkdir -p $HOME_DIR/config
+            mkdir -p $HOME_DIR/data
+        "
+        print_success "Node initialized on remote server"
+    else
+        # Local initialization
+        if [ -d "$HOME_DIR" ]; then
+            print_warning "$HOME_DIR already exists"
+            read -p "Remove existing data and reinitialize? (y/n): " REINIT
+            
+            if [[ $REINIT =~ ^[Yy]$ ]]; then
+                print_info "Creating backup..."
+                local backup_dir="$HOME_DIR.backup.$(date +%Y%m%d_%H%M%S)"
+                mv "$HOME_DIR" "$backup_dir"
+                print_success "Backup created: $backup_dir"
+            else
+                print_info "Keeping existing installation"
+                return 0
+            fi
+        fi
+        
+        print_info "Initializing node with chain-id: $CHAIN_ID"
+        print_info "Moniker: $VALIDATOR_MONIKER"
+        pokerchaind init "$VALIDATOR_MONIKER" --chain-id "$CHAIN_ID"
+        print_success "Node initialized"
+        
+        mkdir -p "$HOME_DIR/config"
+        mkdir -p "$HOME_DIR/data"
     fi
-    
-    print_info "Initializing node with chain-id: $CHAIN_ID"
-    print_info "Moniker: $VALIDATOR_MONIKER"
-    pokerchaind init "$VALIDATOR_MONIKER" --chain-id "$CHAIN_ID"
-    print_success "Node initialized"
-    
-    mkdir -p "$HOME_DIR/config"
-    mkdir -p "$HOME_DIR/data"
 }
 
 # Handle validator keys
@@ -299,19 +537,38 @@ setup_validator_keys() {
         1)
             print_info "Generating new validator keys..."
             # Keys are automatically generated during init
-            if [ -f "$HOME_DIR/config/priv_validator_key.json" ]; then
-                print_success "Validator keys generated"
+            
+            if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+                # Verify keys exist on remote
+                local key_exists=$(ssh "$REMOTE_USER@$REMOTE_HOST" "[ -f $HOME_DIR/config/priv_validator_key.json ] && echo 'yes' || echo 'no'")
                 
-                # Show validator address
-                local val_address=$(pokerchaind tendermint show-validator 2>/dev/null)
-                print_info "Validator consensus address: $val_address"
-                
-                # Show account address
-                local node_id=$(pokerchaind tendermint show-node-id 2>/dev/null)
-                print_info "Node ID: $node_id"
+                if [ "$key_exists" = "yes" ]; then
+                    print_success "Validator keys generated on remote"
+                    
+                    # Show validator address from remote
+                    print_info "Getting validator info from remote..."
+                    ssh "$REMOTE_USER@$REMOTE_HOST" "
+                        export PATH=\"\${GOBIN:-\${GOPATH:-\$HOME/go}/bin}:/usr/local/go/bin:\$PATH\"
+                        echo \"Validator consensus pubkey: \$(pokerchaind tendermint show-validator 2>/dev/null)\"
+                        echo \"Node ID: \$(pokerchaind tendermint show-node-id 2>/dev/null)\"
+                    "
+                else
+                    print_error "Failed to generate validator keys on remote"
+                    exit 1
+                fi
             else
-                print_error "Failed to generate validator keys"
-                exit 1
+                if [ -f "$HOME_DIR/config/priv_validator_key.json" ]; then
+                    print_success "Validator keys generated"
+                    
+                    local val_address=$(pokerchaind tendermint show-validator 2>/dev/null)
+                    print_info "Validator consensus address: $val_address"
+                    
+                    local node_id=$(pokerchaind tendermint show-node-id 2>/dev/null)
+                    print_info "Node ID: $node_id"
+                else
+                    print_error "Failed to generate validator keys"
+                    exit 1
+                fi
             fi
             ;;
         2)
@@ -320,8 +577,13 @@ setup_validator_keys() {
             read -p "Enter path to priv_validator_key.json: " KEY_PATH
             
             if [ -f "$KEY_PATH" ]; then
-                cp "$KEY_PATH" "$HOME_DIR/config/priv_validator_key.json"
-                chmod 600 "$HOME_DIR/config/priv_validator_key.json"
+                if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+                    scp "$KEY_PATH" "$REMOTE_USER@$REMOTE_HOST:$HOME_DIR/config/priv_validator_key.json"
+                    ssh "$REMOTE_USER@$REMOTE_HOST" "chmod 600 $HOME_DIR/config/priv_validator_key.json"
+                else
+                    cp "$KEY_PATH" "$HOME_DIR/config/priv_validator_key.json"
+                    chmod 600 "$HOME_DIR/config/priv_validator_key.json"
+                fi
                 print_success "Validator key imported"
             else
                 print_error "Key file not found: $KEY_PATH"
@@ -331,13 +593,22 @@ setup_validator_keys() {
             # Import state if available
             read -p "Enter path to priv_validator_state.json (or press Enter to skip): " STATE_PATH
             if [ -n "$STATE_PATH" ] && [ -f "$STATE_PATH" ]; then
-                cp "$STATE_PATH" "$HOME_DIR/data/priv_validator_state.json"
-                chmod 600 "$HOME_DIR/data/priv_validator_state.json"
+                if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+                    scp "$STATE_PATH" "$REMOTE_USER@$REMOTE_HOST:$HOME_DIR/data/priv_validator_state.json"
+                    ssh "$REMOTE_USER@$REMOTE_HOST" "chmod 600 $HOME_DIR/data/priv_validator_state.json"
+                else
+                    cp "$STATE_PATH" "$HOME_DIR/data/priv_validator_state.json"
+                    chmod 600 "$HOME_DIR/data/priv_validator_state.json"
+                fi
                 print_success "Validator state imported"
             else
                 # Create default state
-                echo '{"height":"0","round":0,"step":0}' > "$HOME_DIR/data/priv_validator_state.json"
-                chmod 600 "$HOME_DIR/data/priv_validator_state.json"
+                if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+                    ssh "$REMOTE_USER@$REMOTE_HOST" "echo '{\"height\":\"0\",\"round\":0,\"step\":0}' > $HOME_DIR/data/priv_validator_state.json && chmod 600 $HOME_DIR/data/priv_validator_state.json"
+                else
+                    echo '{"height":"0","round":0,"step":0}' > "$HOME_DIR/data/priv_validator_state.json"
+                    chmod 600 "$HOME_DIR/data/priv_validator_state.json"
+                fi
             fi
             ;;
         3)
@@ -361,13 +632,23 @@ setup_validator_keys() {
             local test_state_path="$PROJECT_DIR/.testnets/$validator_id/data/priv_validator_state.json"
             
             if [ -f "$test_key_path" ]; then
-                cp "$test_key_path" "$HOME_DIR/config/priv_validator_key.json"
-                chmod 600 "$HOME_DIR/config/priv_validator_key.json"
+                if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+                    scp "$test_key_path" "$REMOTE_USER@$REMOTE_HOST:$HOME_DIR/config/priv_validator_key.json"
+                    ssh "$REMOTE_USER@$REMOTE_HOST" "chmod 600 $HOME_DIR/config/priv_validator_key.json"
+                else
+                    cp "$test_key_path" "$HOME_DIR/config/priv_validator_key.json"
+                    chmod 600 "$HOME_DIR/config/priv_validator_key.json"
+                fi
                 print_success "Test validator key copied for $VALIDATOR_NAME"
                 
                 if [ -f "$test_state_path" ]; then
-                    cp "$test_state_path" "$HOME_DIR/data/priv_validator_state.json"
-                    chmod 600 "$HOME_DIR/data/priv_validator_state.json"
+                    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+                        scp "$test_state_path" "$REMOTE_USER@$REMOTE_HOST:$HOME_DIR/data/priv_validator_state.json"
+                        ssh "$REMOTE_USER@$REMOTE_HOST" "chmod 600 $HOME_DIR/data/priv_validator_state.json"
+                    else
+                        cp "$test_state_path" "$HOME_DIR/data/priv_validator_state.json"
+                        chmod 600 "$HOME_DIR/data/priv_validator_state.json"
+                    fi
                     print_success "Test validator state copied"
                 fi
             else
@@ -381,9 +662,16 @@ setup_validator_keys() {
     esac
     
     # Ensure state file exists
-    if [ ! -f "$HOME_DIR/data/priv_validator_state.json" ]; then
-        echo '{"height":"0","round":0,"step":0}' > "$HOME_DIR/data/priv_validator_state.json"
-        chmod 600 "$HOME_DIR/data/priv_validator_state.json"
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        ssh "$REMOTE_USER@$REMOTE_HOST" "
+            [ ! -f $HOME_DIR/data/priv_validator_state.json ] && echo '{\"height\":\"0\",\"round\":0,\"step\":0}' > $HOME_DIR/data/priv_validator_state.json
+            chmod 600 $HOME_DIR/data/priv_validator_state.json
+        "
+    else
+        if [ ! -f "$HOME_DIR/data/priv_validator_state.json" ]; then
+            echo '{"height":"0","round":0,"step":0}' > "$HOME_DIR/data/priv_validator_state.json"
+            chmod 600 "$HOME_DIR/data/priv_validator_state.json"
+        fi
     fi
 }
 
@@ -393,13 +681,21 @@ configure_validator_node() {
     
     # Copy genesis
     print_info "Installing genesis.json..."
-    cp /tmp/genesis.json "$HOME_DIR/config/genesis.json"
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        scp /tmp/genesis.json "$REMOTE_USER@$REMOTE_HOST:$HOME_DIR/config/genesis.json"
+    else
+        cp /tmp/genesis.json "$HOME_DIR/config/genesis.json"
+    fi
     print_success "Genesis installed"
     
     # Copy app.toml if available
     if [ -f "/tmp/app.toml" ]; then
         print_info "Installing app.toml..."
-        cp /tmp/app.toml "$HOME_DIR/config/app.toml"
+        if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+            scp /tmp/app.toml "$REMOTE_USER@$REMOTE_HOST:$HOME_DIR/config/app.toml"
+        else
+            cp /tmp/app.toml "$HOME_DIR/config/app.toml"
+        fi
         print_success "app.toml installed"
     fi
     
@@ -410,17 +706,31 @@ configure_validator_node() {
     local peer_info=$(get_remote_node_info)
     
     if [ -f "/tmp/config.toml" ]; then
-        cp /tmp/config.toml "$HOME_DIR/config/config.toml"
+        if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+            scp /tmp/config.toml "$REMOTE_USER@$REMOTE_HOST:$HOME_DIR/config/config.toml"
+        else
+            cp /tmp/config.toml "$HOME_DIR/config/config.toml"
+        fi
         print_success "config.toml installed from local copy"
     else
-        if [ -n "$peer_info" ]; then
-            sed -i.bak "s/^persistent_peers = .*/persistent_peers = \"$peer_info\"/" "$HOME_DIR/config/config.toml"
-            print_success "Configured persistent_peers: $peer_info"
+        if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+            if [ -n "$peer_info" ]; then
+                ssh "$REMOTE_USER@$REMOTE_HOST" "
+                    sed -i.bak 's/^persistent_peers = .*/persistent_peers = \"$peer_info\"/' $HOME_DIR/config/config.toml
+                    sed -i.bak 's/^pex = .*/pex = true/' $HOME_DIR/config/config.toml
+                    sed -i.bak 's/^addr_book_strict = .*/addr_book_strict = false/' $HOME_DIR/config/config.toml
+                "
+                print_success "Configured persistent_peers on remote: $peer_info"
+            fi
+        else
+            if [ -n "$peer_info" ]; then
+                sed -i.bak "s/^persistent_peers = .*/persistent_peers = \"$peer_info\"/" "$HOME_DIR/config/config.toml"
+                print_success "Configured persistent_peers: $peer_info"
+            fi
+            
+            sed -i.bak 's/^pex = .*/pex = true/' "$HOME_DIR/config/config.toml"
+            sed -i.bak 's/^addr_book_strict = .*/addr_book_strict = false/' "$HOME_DIR/config/config.toml"
         fi
-        
-        # Enable p2p settings
-        sed -i.bak 's/^pex = .*/pex = true/' "$HOME_DIR/config/config.toml"
-        sed -i.bak 's/^addr_book_strict = .*/addr_book_strict = false/' "$HOME_DIR/config/config.toml"
         print_success "Configured P2P settings"
     fi
 }
@@ -549,25 +859,66 @@ prepare_create_validator() {
 set_permissions() {
     print_header "Setting secure file permissions"
     
-    chmod 755 "$HOME_DIR/config"
-    chmod 755 "$HOME_DIR/data"
-    chmod 644 "$HOME_DIR/config/genesis.json"
-    chmod 600 "$HOME_DIR/config/config.toml"
-    chmod 600 "$HOME_DIR/config/app.toml" 2>/dev/null || true
-    chmod 600 "$HOME_DIR/config/priv_validator_key.json"
-    chmod 600 "$HOME_DIR/data/priv_validator_state.json"
-    chmod 700 "$HOME_DIR/data"
-    
-    print_success "File permissions set"
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        ssh "$REMOTE_USER@$REMOTE_HOST" "
+            chmod 755 $HOME_DIR/config
+            chmod 755 $HOME_DIR/data
+            chmod 644 $HOME_DIR/config/genesis.json
+            chmod 600 $HOME_DIR/config/config.toml
+            [ -f $HOME_DIR/config/app.toml ] && chmod 600 $HOME_DIR/config/app.toml
+            chmod 600 $HOME_DIR/config/priv_validator_key.json
+            chmod 600 $HOME_DIR/data/priv_validator_state.json
+            chmod 700 $HOME_DIR/data
+        "
+        print_success "File permissions set on remote"
+    else
+        chmod 755 "$HOME_DIR/config"
+        chmod 755 "$HOME_DIR/data"
+        chmod 644 "$HOME_DIR/config/genesis.json"
+        chmod 600 "$HOME_DIR/config/config.toml"
+        chmod 600 "$HOME_DIR/config/app.toml" 2>/dev/null || true
+        chmod 600 "$HOME_DIR/config/priv_validator_key.json"
+        chmod 600 "$HOME_DIR/data/priv_validator_state.json"
+        chmod 700 "$HOME_DIR/data"
+        
+        print_success "File permissions set"
+    fi
 }
 
 # Create systemd service
 create_systemd_service() {
     print_header "Creating systemd service"
     
-    local gobin="${GOBIN:-${GOPATH:-$HOME/go}/bin}"
-    
-    sudo tee /etc/systemd/system/pokerchaind.service > /dev/null <<EOF
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        local remote_gobin=$(ssh "$REMOTE_USER@$REMOTE_HOST" "echo \${GOBIN:-\${GOPATH:-\$HOME/go}/bin}")
+        
+        ssh "$REMOTE_USER@$REMOTE_HOST" "
+            sudo tee /etc/systemd/system/pokerchaind.service > /dev/null <<EOF
+[Unit]
+Description=Pokerchain Validator Node
+After=network-online.target
+
+[Service]
+Type=simple
+User=\$(whoami)
+ExecStart=$remote_gobin/pokerchaind start --minimum-gas-prices=\"0.01stake\"
+Restart=always
+RestartSec=3
+LimitNOFILE=4096
+Environment=\"DAEMON_NAME=pokerchaind\"
+Environment=\"DAEMON_HOME=$HOME_DIR\"
+Environment=\"PATH=$remote_gobin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin\"
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            sudo systemctl daemon-reload
+        "
+        print_success "Systemd service created on remote"
+    else
+        local gobin="${GOBIN:-${GOPATH:-$HOME/go}/bin}"
+        
+        sudo tee /etc/systemd/system/pokerchaind.service > /dev/null <<EOF
 [Unit]
 Description=Pokerchain Validator Node
 After=network-online.target
@@ -586,39 +937,65 @@ Environment="PATH=$gobin:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
 [Install]
 WantedBy=multi-user.target
 EOF
-    
-    sudo systemctl daemon-reload
-    print_success "Systemd service created"
+        
+        sudo systemctl daemon-reload
+        print_success "Systemd service created"
+    fi
 }
 
 # Verify setup
 verify_setup() {
     print_header "Verifying setup"
     
-    if command_exists pokerchaind; then
-        print_success "pokerchaind: $(which pokerchaind)"
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        # Verify remote setup
+        ssh "$REMOTE_USER@$REMOTE_HOST" "
+            export PATH=\"\${GOBIN:-\${GOPATH:-\$HOME/go}/bin}:/usr/local/go/bin:\$PATH\"
+            
+            echo 'Checking pokerchaind...'
+            if command -v pokerchaind &> /dev/null; then
+                echo '✅ pokerchaind: '\$(which pokerchaind)
+            else
+                echo '❌ pokerchaind: not found'
+            fi
+            
+            echo 'Checking configuration files...'
+            [ -f $HOME_DIR/config/genesis.json ] && echo '✅ genesis.json: present' || echo '❌ genesis.json: missing'
+            [ -f $HOME_DIR/config/priv_validator_key.json ] && echo '✅ validator key: present' || echo '❌ validator key: missing'
+            
+            if [ -f $HOME_DIR/config/priv_validator_key.json ]; then
+                echo 'Validator info:'
+                echo '  Pubkey: '\$(pokerchaind tendermint show-validator 2>/dev/null)
+                echo '  Node ID: '\$(pokerchaind tendermint show-node-id 2>/dev/null)
+            fi
+        "
     else
-        print_error "pokerchaind not found"
-    fi
-    
-    if [ -f "$HOME_DIR/config/genesis.json" ]; then
-        print_success "genesis.json: present"
-    else
-        print_error "genesis.json: missing"
-    fi
-    
-    if [ -f "$HOME_DIR/config/priv_validator_key.json" ]; then
-        print_success "validator key: present"
+        # Verify local setup
+        if command_exists pokerchaind; then
+            print_success "pokerchaind: $(which pokerchaind)"
+        else
+            print_error "pokerchaind not found"
+        fi
         
-        # Show validator info
-        local val_pubkey=$(pokerchaind tendermint show-validator 2>/dev/null)
-        print_info "Validator pubkey: $val_pubkey"
-    else
-        print_error "validator key: missing"
-    fi
-    
-    if [ -n "${VALIDATOR_ADDRESS:-}" ]; then
-        print_success "Validator address: $VALIDATOR_ADDRESS"
+        if [ -f "$HOME_DIR/config/genesis.json" ]; then
+            print_success "genesis.json: present"
+        else
+            print_error "genesis.json: missing"
+        fi
+        
+        if [ -f "$HOME_DIR/config/priv_validator_key.json" ]; then
+            print_success "validator key: present"
+            
+            # Show validator info
+            local val_pubkey=$(pokerchaind tendermint show-validator 2>/dev/null)
+            print_info "Validator pubkey: $val_pubkey"
+        else
+            print_error "validator key: missing"
+        fi
+        
+        if [ -n "${VALIDATOR_ADDRESS:-}" ]; then
+            print_success "Validator address: $VALIDATOR_ADDRESS"
+        fi
     fi
 }
 
@@ -644,23 +1021,17 @@ main() {
     
     cd "$PROJECT_DIR"
     
+    # Select deployment mode (local or remote)
+    select_deployment_mode
+    
     # Select validator profile
     select_validator_profile
     
     # Stop any running nodes
     stop_pokerchaind
     
-    # Build pokerchaind
-    read -p "Build pokerchaind from source? (y/n): " BUILD
-    if [[ $BUILD =~ ^[Yy]$ ]]; then
-        build_pokerchaind
-    else
-        if ! command_exists pokerchaind; then
-            print_error "pokerchaind not found. Please build it or install it first."
-            exit 1
-        fi
-        print_success "Using existing pokerchaind: $(which pokerchaind)"
-    fi
+    # Prepare binary (build locally and deploy if remote)
+    prepare_binary
     
     # Fetch genesis and configs
     fetch_genesis
@@ -675,8 +1046,13 @@ main() {
     # Configure node
     configure_validator_node
     
-    # Create validator account
-    create_validator_account
+    # Create validator account (only for local, remote needs manual key management)
+    if [ "$DEPLOYMENT_MODE" = "local" ]; then
+        create_validator_account
+    else
+        print_warning "Validator account creation skipped for remote deployment"
+        print_info "You'll need to import/create the validator account on the remote server"
+    fi
     
     # Set permissions
     set_permissions
@@ -690,14 +1066,20 @@ main() {
     # Verify setup
     verify_setup
     
-    # Prepare create-validator tx
-    prepare_create_validator
+    # Prepare create-validator tx (only for local)
+    if [ "$DEPLOYMENT_MODE" = "local" ]; then
+        prepare_create_validator
+    fi
     
     # Final summary
     print_header "Setup Complete!"
     
     echo ""
     echo "📋 Validator Node Configuration:"
+    echo "   Deployment: $DEPLOYMENT_MODE"
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        echo "   Remote Host: $REMOTE_USER@$REMOTE_HOST"
+    fi
     echo "   Name: $VALIDATOR_NAME"
     echo "   Moniker: $VALIDATOR_MONIKER"
     echo "   Home: $HOME_DIR"
@@ -706,30 +1088,69 @@ main() {
         echo "   Address: $VALIDATOR_ADDRESS"
     fi
     echo ""
-    echo "🚀 Start the validator node:"
-    if systemctl list-units --full -all 2>/dev/null | grep -q "pokerchaind.service"; then
+    
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        echo "🚀 Start the remote validator node:"
+        echo "   ssh $REMOTE_USER@$REMOTE_HOST"
         echo "   sudo systemctl enable pokerchaind"
         echo "   sudo systemctl start pokerchaind"
         echo "   journalctl -u pokerchaind -f"
+        echo ""
+        echo "📊 Monitor remote sync progress:"
+        echo "   ssh $REMOTE_USER@$REMOTE_HOST 'curl http://localhost:$RPC_PORT/status | jq .result.sync_info'"
     else
-        echo "   pokerchaind start --minimum-gas-prices=\"0.01stake\""
+        echo "🚀 Start the validator node:"
+        if systemctl list-units --full -all 2>/dev/null | grep -q "pokerchaind.service"; then
+            echo "   sudo systemctl enable pokerchaind"
+            echo "   sudo systemctl start pokerchaind"
+            echo "   journalctl -u pokerchaind -f"
+        else
+            echo "   pokerchaind start --minimum-gas-prices=\"0.01stake\""
+        fi
+        echo ""
+        echo "📊 Monitor sync progress:"
+        echo "   curl http://localhost:$RPC_PORT/status | jq '.result.sync_info'"
     fi
-    echo ""
-    echo "📊 Monitor sync progress:"
-    echo "   curl http://localhost:$RPC_PORT/status | jq '.result.sync_info'"
+    
     echo ""
     echo "⚠️  IMPORTANT NEXT STEPS:"
     echo "   1. Wait for node to fully sync with the network"
     echo "   2. Ensure your account has sufficient tokens"
-    echo "   3. Broadcast the create-validator transaction"
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        echo "   3. Create validator account on remote server"
+        echo "   4. Broadcast the create-validator transaction from remote"
+    else
+        echo "   3. Broadcast the create-validator transaction"
+    fi
     echo "   4. Monitor validator status and uptime"
     echo ""
-    echo "💡 After syncing, check validator status:"
-    echo "   pokerchaind query staking validator \$(pokerchaind keys show $VALIDATOR_NAME --bech val -a --keyring-backend=test)"
+    
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        echo "💡 Remote validator management:"
+        echo "   Connect: ssh $REMOTE_USER@$REMOTE_HOST"
+        echo "   Logs: ssh $REMOTE_USER@$REMOTE_HOST 'journalctl -u pokerchaind -f'"
+        echo "   Status: ssh $REMOTE_USER@$REMOTE_HOST 'curl -s localhost:$RPC_PORT/status | jq'"
+    else
+        echo "💡 After syncing, check validator status:"
+        echo "   pokerchaind query staking validator \$(pokerchaind keys show $VALIDATOR_NAME --bech val -a --keyring-backend=test)"
+    fi
     echo ""
     
-    # Ask if user wants to start now
-    if systemctl list-units --full -all 2>/dev/null | grep -q "pokerchaind.service"; then
+    # Ask if user wants to start now (only for remote or if systemd service exists locally)
+    if [ "$DEPLOYMENT_MODE" = "remote" ]; then
+        read -p "Start the remote validator node now? (y/n): " START_NOW
+        if [[ $START_NOW =~ ^[Yy]$ ]]; then
+            print_info "Starting remote pokerchaind service..."
+            ssh "$REMOTE_USER@$REMOTE_HOST" "
+                sudo systemctl enable pokerchaind
+                sudo systemctl start pokerchaind
+                sleep 3
+                systemctl is-active --quiet pokerchaind && echo 'Service started successfully!' || echo 'Service failed to start'
+            "
+            echo ""
+            echo "View remote logs: ssh $REMOTE_USER@$REMOTE_HOST 'journalctl -u pokerchaind -f'"
+        fi
+    elif systemctl list-units --full -all 2>/dev/null | grep -q "pokerchaind.service"; then
         read -p "Start the validator node now? (y/n): " START_NOW
         if [[ $START_NOW =~ ^[Yy]$ ]]; then
             print_info "Starting pokerchaind service..."
