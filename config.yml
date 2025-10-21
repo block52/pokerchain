@@ -1,55 +1,57 @@
-version: 1
 validation: sovereign
-default_denom: stake
+version: 1
 accounts:
     - name: alice
       coins:
-          - 100usdc
-          - 52000stake
+        - 100usdc
+        - 52000stake
     - name: bob
       coins:
-          - 100usdc
-          - 52000stake
+        - 100usdc
+        - 52000stake
     - name: charlie
       coins:
-          - 100usdc
-          - 52000stake
+        - 100usdc
+        - 52000stake
     - name: diana
       coins:
-          - 100usdc
-          - 52000stake
+        - 100usdc
+        - 52000stake
     - name: eve
       coins:
-          - 100usdc
-          - 52000stake
+        - 100usdc
+        - 52000stake
     - name: frank
       coins:
-          - 100usdc
-          - 52000stake
+        - 100usdc
+        - 52000stake
     - name: grace
       coins:
-          - 100usdc
-          - 52000stake
+        - 100usdc
+        - 52000stake
     - name: henry
       coins:
-          - 100usdc
-          - 52000stake
+        - 100usdc
+        - 52000stake
     - name: iris
       coins:
-          - 100usdc
-          - 52000stake
+        - 100usdc
+        - 52000stake
     - name: jack
       coins:
-          - 100usdc
-          - 52000stake
-client:
-    openapi:
-        path: docs/static/openapi.json
+        - 100usdc
+        - 52000stake
 faucet:
     name: alice
     coins:
         - 5usdc
         - 1000stake
+client:
+    typescript:
+        path: ts-client
+    openapi:
+        path: docs/static/openapi.json
+default_denom: stake
 validators:
     - name: alice
       bonded: 50000stake
@@ -71,12 +73,3 @@ validators:
       bonded: 50000stake
     - name: jack
       bonded: 50000stake
-
-# Bridge Configuration
-bridge:
-    enabled: true
-    ethereum_rpc_url: "https://mainnet.base.org"
-    deposit_contract_address: "0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B" # CosmosBridge on Base
-    usdc_contract_address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" # USDC on Base
-    polling_interval_seconds: 15
-    starting_block: 36469223 # Block where CosmosBridge was deployed
