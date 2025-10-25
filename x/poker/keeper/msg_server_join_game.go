@@ -12,17 +12,28 @@ import (
 )
 
 func (k msgServer) JoinGame(ctx context.Context, msg *types.MsgJoinGame) (*types.MsgJoinGameResponse, error) {
+	// Log the join game request for debugging
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	sdkCtx.Logger().Info("🎮 JoinGame called",
+		"gameId", msg.GameId,
+		"player", msg.Player,
+		"seat", msg.Seat,
+		"buyInAmount", msg.BuyInAmount)
+
 	// Validate player address
 	playerAddr, err := k.addressCodec.StringToBytes(msg.Player)
 	if err != nil {
+		sdkCtx.Logger().Error("❌ Invalid player address", "error", err, "player", msg.Player)
 		return nil, errorsmod.Wrap(err, "invalid player address")
 	}
 
 	// Check if game exists
 	game, err := k.Games.Get(ctx, msg.GameId)
 	if err != nil {
+		sdkCtx.Logger().Error("❌ Game not found", "error", err, "gameId", msg.GameId)
 		return nil, errorsmod.Wrapf(types.ErrGameNotFound, "game not found: %s", msg.GameId)
 	}
+	sdkCtx.Logger().Info("✅ Game found", "gameId", msg.GameId, "creator", game.Creator)
 
 	// Verify buy-in amount is within game limits
 	if msg.BuyInAmount < game.MinBuyIn || msg.BuyInAmount > game.MaxBuyIn {
@@ -35,12 +46,21 @@ func (k msgServer) JoinGame(ctx context.Context, msg *types.MsgJoinGame) (*types
 	playerBalance := k.bankKeeper.SpendableCoins(ctx, playerAddr)
 	buyInCoin := sdk.NewCoin(types.TokenDenom, math.NewInt(int64(msg.BuyInAmount)))
 
+	sdkCtx.Logger().Info("💰 Checking player balance",
+		"playerBalance", playerBalance.String(),
+		"requiredBuyIn", buyInCoin.String(),
+		"playerUSDC", playerBalance.AmountOf(types.TokenDenom).String())
+
 	if !playerBalance.IsAllGTE(sdk.NewCoins(buyInCoin)) {
+		sdkCtx.Logger().Error("❌ Insufficient funds",
+			"required", buyInCoin.String(),
+			"available", playerBalance.AmountOf(types.TokenDenom).String())
 		return nil, errorsmod.Wrapf(sdkerrors.ErrInsufficientFunds,
 			"player needs %s to join, but only has %s",
 			buyInCoin.String(),
 			playerBalance.AmountOf(types.TokenDenom).String())
 	}
+	sdkCtx.Logger().Info("✅ Player has sufficient balance")
 
 	// Transfer buy-in amount from player to module account (game pot)
 	if err := k.bankKeeper.SendCoinsFromAccountToModule(
@@ -85,7 +105,6 @@ func (k msgServer) JoinGame(ctx context.Context, msg *types.MsgJoinGame) (*types
 	}
 
 	// Emit event
-	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	sdkCtx.EventManager().EmitEvents(sdk.Events{
 		sdk.NewEvent(
 			"player_joined_game",

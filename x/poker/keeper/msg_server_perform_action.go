@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	errorsmod "cosmossdk.io/errors"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/block52/pokerchain/x/poker/types"
 )
 
@@ -91,17 +92,28 @@ func (k msgServer) PerformAction(ctx context.Context, msg *types.MsgPerformActio
 
 // callGameEngine makes a JSON-RPC call to the game engine with game state and options
 func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action string, amount uint64) error {
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	sdkCtx.Logger().Info("🎲 callGameEngine called",
+		"gameId", gameId,
+		"playerId", playerId,
+		"action", action,
+		"amount", amount)
+
 	// Fetch game state from GameStates collection
 	gameState, err := k.GameStates.Get(ctx, gameId)
 	if err != nil {
-		return fmt.Errorf("failed to get game state: %w", err)
+		sdkCtx.Logger().Error("❌ Failed to get game state", "error", err, "gameId", gameId)
+		return fmt.Errorf("failed to get game state for gameId=%s: %w", gameId, err)
 	}
+	sdkCtx.Logger().Info("✅ Game state retrieved", "gameId", gameId, "players", len(gameState.Players))
 
 	// Fetch game options from Games collection
 	game, err := k.Games.Get(ctx, gameId)
 	if err != nil {
-		return fmt.Errorf("failed to get game: %w", err)
+		sdkCtx.Logger().Error("❌ Failed to get game", "error", err, "gameId", gameId)
+		return fmt.Errorf("failed to get game for gameId=%s: %w", gameId, err)
 	}
+	sdkCtx.Logger().Info("✅ Game retrieved", "gameId", gameId, "creator", game.Creator)
 
 	// Convert game state to JSON
 	gameStateJson, err := json.Marshal(gameState)
