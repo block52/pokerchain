@@ -88,11 +88,11 @@ proto-gen:
 
 lint:
 	@echo "--> Running linter"
-	@go tool github.com/golangci/golangci-lint/cmd/golangci-lint run ./... --timeout 15m
+	@go tool github.com/golangci-lint-lint/cmd/golangci-lint run ./... --timeout 15m
 
 lint-fix:
 	@echo "--> Running linter and fixing issues"
-	@go tool github.com/golangci/golangci-lint/cmd/golangci-lint run ./... --fix --timeout 15m
+	@go tool github.com/golangci-lint-lint/cmd/golangci-lint run ./... --fix --timeout 15m
 
 .PHONY: lint lint-fix
 
@@ -110,3 +110,22 @@ govulncheck:
 	@govulncheck ./...
 
 .PHONY: govet govulncheck
+
+# Docker targets
+
+docker-build:
+	docker build -t pokerchain:latest .
+
+docker-run:
+	docker run --rm -it \
+	  -p 26656:26656 -p 26657:26657 -p 1317:1317 -p 9090:9090 \
+	  -v pokerchain-data:/home/pokerchain/.pokerchain \
+	  --name pokerchain-node pokerchain:latest
+
+docker-compose-up:
+	docker compose up --build
+
+docker-compose-down:
+	docker compose down
+
+.PHONY: docker-build docker-run docker-compose-up docker-compose-down

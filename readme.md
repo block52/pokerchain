@@ -5,6 +5,7 @@ Get your Pokerchain node up and running in minutes!
 ## 📦 Available Scripts
 
 ### Setup Scripts
+
 ```bash
 ./setup-network.sh            # 🎛️  Interactive menu (recommended for first time)
 ./setup-sync-node.sh          # 🔄 Setup local sync node
@@ -13,12 +14,14 @@ Get your Pokerchain node up and running in minutes!
 ```
 
 ### Node Control
+
 ```bash
 ./start-node.sh               # ▶️  Start your local node
 ./stop-node.sh                # ⏹️  Stop your local node
 ```
 
 ### Documentation
+
 ```bash
 QUICK_START.md               # This file - quick reference
 NETWORK_SETUP.md             # Complete network setup guide
@@ -42,6 +45,7 @@ TEST_ACTORS.md               # Test accounts with seed phrases
 ```
 
 **What happens**:
+
 1. Builds pokerchaind from source
 2. Fetches genesis from node1.block52.xyz
 3. Configures sync-only mode
@@ -79,6 +83,7 @@ TEST_ACTORS.md               # Test accounts with seed phrases
 ```
 
 **What happens**:
+
 1. Builds pokerchaind locally
 2. Copies binary to remote server
 3. Deploys genesis and configs
@@ -93,26 +98,29 @@ TEST_ACTORS.md               # Test accounts with seed phrases
 **Goal**: Become a validator and participate in consensus
 
 **Prerequisites**:
-- Network is already running
-- You have tokens for staking
-- You understand validator responsibilities
+
+-   Network is already running
+-   You have tokens for staking
+-   You understand validator responsibilities
 
 ```bash
 ./setup-validator-node.sh
 ```
 
 **Interactive Setup**:
+
 1. Choose validator profile (Bob, Charlie, Diana, Eve, or custom)
 2. Select key management:
-   - Generate new validator keys
-   - Import existing keys
-   - Use pre-configured test keys
+    - Generate new validator keys
+    - Import existing keys
+    - Use pre-configured test keys
 3. Create or import validator account
 4. Review validator creation parameters
 5. Wait for node to sync
 6. Broadcast create-validator transaction
 
 **After Setup**:
+
 ```bash
 # Start your validator node
 ./start-node.sh
@@ -131,17 +139,19 @@ pokerchaind query slashing signing-info \
 ```
 
 **⚠️ Validator Responsibilities**:
-- Maintain high uptime (>95% recommended)
-- Keep node synced and updated
-- Monitor for slashing events
-- Secure your validator keys
-- Have backup/redundancy strategy
+
+-   Maintain high uptime (>95% recommended)
+-   Keep node synced and updated
+-   Monitor for slashing events
+-   Secure your validator keys
+-   Have backup/redundancy strategy
 
 ---
 
 ## 📊 Quick Commands
 
 ### Check if Node is Running
+
 ```bash
 # Quick check
 pgrep pokerchaind && echo "Running" || echo "Not running"
@@ -151,6 +161,7 @@ curl -s http://localhost:26657/status | jq '.result.sync_info'
 ```
 
 ### View Sync Progress
+
 ```bash
 # Current block height
 curl -s http://localhost:26657/status | jq -r '.result.sync_info.latest_block_height'
@@ -160,6 +171,7 @@ curl -s http://localhost:26657/status | jq -r '.result.sync_info.catching_up'
 ```
 
 ### Check Logs
+
 ```bash
 # If using systemd
 journalctl -u pokerchaind -f
@@ -172,11 +184,12 @@ journalctl -u pokerchaind --since "1 hour ago"
 ```
 
 ### Test Endpoints
+
 ```bash
 # RPC endpoint
 curl http://localhost:26657/status
 
-# API endpoint  
+# API endpoint
 curl http://localhost:1317/cosmos/base/tendermint/v1beta1/node_info
 
 # Check peers
@@ -184,6 +197,7 @@ curl http://localhost:26657/net_info | jq '.result.n_peers'
 ```
 
 ### Validator Commands
+
 ```bash
 # Show your validator info
 pokerchaind query staking validator \
@@ -219,6 +233,7 @@ pokerchaind tx staking delegate \
 ## 🔧 Troubleshooting
 
 ### pokerchaind: command not found
+
 ```bash
 # Add to PATH
 export PATH="$HOME/go/bin:$PATH"
@@ -229,6 +244,7 @@ make install
 ```
 
 ### Node won't start
+
 ```bash
 # Check logs
 journalctl -u pokerchaind -n 50
@@ -241,6 +257,7 @@ lsof -i :26657
 ```
 
 ### Not syncing / No peers
+
 ```bash
 # Check persistent_peers
 cat ~/.pokerchain/config/config.toml | grep persistent_peers
@@ -253,6 +270,7 @@ curl http://node1.block52.xyz:26657/status
 ```
 
 ### Permission errors
+
 ```bash
 # Fix ownership
 sudo chown -R $USER:$USER ~/.pokerchain
@@ -283,16 +301,18 @@ chmod 644 ~/.pokerchain/config/genesis.json
 ## 🌐 Network Information
 
 ### Genesis Node (node1.block52.xyz)
-- **RPC**: http://node1.block52.xyz:26657
-- **API**: http://node1.block52.xyz:1317  
-- **Chain ID**: pokerchain
-- **Role**: Primary validator
+
+-   **RPC**: http://node1.block52.xyz:26657
+-   **API**: http://node1.block52.xyz:1317
+-   **Chain ID**: pokerchain
+-   **Role**: Primary validator
 
 ### Local Sync Node
-- **RPC**: http://localhost:26657
-- **API**: http://localhost:1317
-- **Role**: Read-only sync node
-- **Purpose**: Local development & testing
+
+-   **RPC**: http://localhost:26657
+-   **API**: http://localhost:1317
+-   **Role**: Read-only sync node
+-   **Purpose**: Local development & testing
 
 ---
 
@@ -309,6 +329,7 @@ chmod 644 ~/.pokerchain/config/genesis.json
 ## 🆘 Getting Help
 
 ### Quick Checks
+
 ```bash
 # 1. Is pokerchaind installed?
 which pokerchaind
@@ -325,6 +346,7 @@ curl http://node1.block52.xyz:26657/status
 ```
 
 ### Still stuck?
+
 1. Check [NETWORK_SETUP.md](./NETWORK_SETUP.md) for detailed guide
 2. Review logs: `journalctl -u pokerchaind -n 100`
 3. Verify configs are correct
@@ -337,28 +359,65 @@ curl http://node1.block52.xyz:26657/status
 Once your node is running:
 
 1. **Test the poker module**
-   ```bash
-   # Import test accounts
-   pokerchaind keys add alice --recover --keyring-backend test
-   
-   # Create a game
-   pokerchaind tx poker create-game 1000 10000 2 6 50 100 30 "texas-holdem" \
-     --from alice --keyring-backend test --chain-id pokerchain --fees 1000stake --yes
-   ```
+
+    ```bash
+    # Import test accounts
+    pokerchaind keys add alice --recover --keyring-backend test
+
+    # Create a game
+    pokerchaind tx poker create-game 1000 10000 2 6 50 100 30 "texas-holdem" \
+      --from alice --keyring-backend test --chain-id pokerchain --fees 1000stake --yes
+    ```
 
 2. **Query blockchain data**
-   ```bash
-   # Get node info
-   curl http://localhost:26657/status
-   
-   # Query accounts
-   curl http://localhost:1317/cosmos/auth/v1beta1/accounts
-   ```
+
+    ```bash
+    # Get node info
+    curl http://localhost:26657/status
+
+    # Query accounts
+    curl http://localhost:1317/cosmos/auth/v1beta1/accounts
+    ```
 
 3. **Build your application**
-   - Use localhost:26657 for RPC calls
-   - Use localhost:1317 for REST API
-   - All standard Cosmos SDK queries work
+    - Use localhost:26657 for RPC calls
+    - Use localhost:1317 for REST API
+    - All standard Cosmos SDK queries work
+
+---
+
+## 🐳 Docker & Docker Compose
+
+### Build and Run with Docker
+
+```bash
+# Build the Docker image
+make docker-build
+
+# Run a single node container
+make docker-run
+```
+
+### Multi-Node with Docker Compose
+
+```bash
+# Start all services (node, validator, etc.)
+make docker-compose-up
+
+# Stop all services
+make docker-compose-down
+```
+
+-   The main node exposes ports 26656 (P2P), 26657 (RPC), 1317 (REST API), 9090 (gRPC)
+-   Config and genesis files are mounted from your repo into the container
+-   Data is persisted in Docker volumes (`pokerchain-data`, `pokerchain-validator-data`)
+
+#### Notes
+
+-   You can customize the config and genesis files before running Docker Compose.
+-   The default chain ID is `pokerchain` (set in docker-compose.yml and Makefile).
+-   For multi-node/validator setups, use the `validator` profile in Docker Compose.
+-   Healthchecks are included for the main node.
 
 ---
 

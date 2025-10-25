@@ -1,0 +1,64 @@
+version: "3.8"
+
+services:
+    pokerchain-node:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: pokerchain-node
+        image: pokerchain:latest
+        ports:
+            - "26656:26656" # P2P
+            - "26657:26657" # RPC
+            - "1317:1317" # REST API
+            - "9090:9090" # gRPC
+        volumes:
+            - pokerchain-data:/home/pokerchain/.pokerchain
+            - ./genesis.json:/home/pokerchain/.pokerchain/config/genesis.json:ro
+            - ./config.toml:/home/pokerchain/.pokerchain/config/config.toml:ro
+            - ./app.toml:/home/pokerchain/.pokerchain/config/app.toml:ro
+        environment:
+            - CHAIN_ID=pokerchain
+        networks:
+            - pokerchain-network
+        restart: unless-stopped
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:26657/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 40s
+
+    # Optional: Add a validator node
+    pokerchain-validator:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: pokerchain-validator
+        image: pokerchain:latest
+        ports:
+            - "26666:26656" # P2P
+            - "26667:26657" # RPC
+            - "1327:1317" # REST API
+            - "9091:9090" # gRPC
+        volumes:
+            - pokerchain-validator-data:/home/pokerchain/.pokerchain
+        environment:
+            - CHAIN_ID=pokerchain
+        networks:
+            - pokerchain-network
+        restart: unless-stopped
+        depends_on:
+            - pokerchain-node
+        profiles:
+            - validator
+
+volumes:
+    pokerchain-data:
+        driver: local
+    pokerchain-validator-data:
+        driver: local
+
+networks:
+    pokerchain-network:
+        driver: bridge
