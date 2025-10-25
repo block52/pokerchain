@@ -64,9 +64,9 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 				},
 				{
 					RpcMethod:      "JoinGame",
-					Use:            "join-game [game-id] [seat] [buy-in]",
+					Use:            "join-game [game-id] [seat] [buy-in-amount]",
 					Short:          "Send a join-game tx",
-					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "game_id"}, {ProtoField: "seat"}, {ProtoField: "buy_in"}},
+					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "game_id"}, {ProtoField: "seat"}, {ProtoField: "buy_in_amount"}},
 				},
 				{
 					RpcMethod:      "LeaveGame",

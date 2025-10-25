@@ -22,7 +22,7 @@ func SimulateMsgJoinGame(
 	) (simtypes.OperationMsg, []simtypes.FutureOperation, error) {
 		simAccount, _ := simtypes.RandomAcc(r, accs)
 		msg := &types.MsgJoinGame{
-			Creator: simAccount.Address.String(),
+			Player: simAccount.Address.String(),
 		}
 
 		// TODO: Handle the JoinGame simulation

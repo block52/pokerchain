@@ -1,8 +1,8 @@
 package types
 
-func NewMsgPerformAction(creator string, gameId string, action string, amount uint64) *MsgPerformAction {
+func NewMsgPerformAction(player string, gameId string, action string, amount uint64) *MsgPerformAction {
 	return &MsgPerformAction{
-		Creator: creator,
+		Player:  player,
 		GameId:  gameId,
 		Action:  action,
 		Amount:  amount,

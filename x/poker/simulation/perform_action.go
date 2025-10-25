@@ -22,7 +22,7 @@ func SimulateMsgPerformAction(
 	) (simtypes.OperationMsg, []simtypes.FutureOperation, error) {
 		simAccount, _ := simtypes.RandomAcc(r, accs)
 		msg := &types.MsgPerformAction{
-			Creator: simAccount.Address.String(),
+			Player: simAccount.Address.String(),
 		}
 
 		// TODO: Handle the PerformAction simulation

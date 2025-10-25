@@ -62,8 +62,8 @@ type JSONRPCResponse struct {
 }
 
 func (k msgServer) PerformAction(ctx context.Context, msg *types.MsgPerformAction) (*types.MsgPerformActionResponse, error) {
-	if _, err := k.addressCodec.StringToBytes(msg.Creator); err != nil {
-		return nil, errorsmod.Wrap(err, "invalid authority address")
+	if _, err := k.addressCodec.StringToBytes(msg.Player); err != nil {
+		return nil, errorsmod.Wrap(err, "invalid player address")
 	}
 
 	// Validate the action type
@@ -78,7 +78,7 @@ func (k msgServer) PerformAction(ctx context.Context, msg *types.MsgPerformActio
 	}
 
 	// Make JSON-RPC call to game engine with game state
-	err = k.callGameEngine(ctx, msg.Creator, msg.GameId, msg.Action, msg.Amount)
+	err = k.callGameEngine(ctx, msg.Player, msg.GameId, msg.Action, msg.Amount)
 	if err != nil {
 		return nil, errorsmod.Wrap(err, "failed to call game engine")
 	}

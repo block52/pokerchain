@@ -1,10 +1,10 @@
 package types
 
-func NewMsgJoinGame(creator string, gameId string, seat uint64, buyIn uint64) *MsgJoinGame {
+func NewMsgJoinGame(player string, gameId string, seat uint64, buyInAmount uint64) *MsgJoinGame {
 	return &MsgJoinGame{
-		Creator: creator,
-		GameId:  gameId,
-		Seat:    seat,
-		BuyIn:   buyIn,
+		Player:      player,
+		GameId:      gameId,
+		Seat:        seat,
+		BuyInAmount: buyInAmount,
 	}
 }
