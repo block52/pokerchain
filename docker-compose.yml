@@ -19,6 +19,7 @@ services:
             - ./app.toml:/home/pokerchain/.pokerchain/config/app.toml:ro
         environment:
             - CHAIN_ID=pokerchain
+            - POKERCHAIND_MINIMUM_GAS_PRICES=0.01b52Token
         networks:
             - pokerchain-network
         restart: unless-stopped
@@ -45,6 +46,7 @@ services:
             - pokerchain-validator-data:/home/pokerchain/.pokerchain
         environment:
             - CHAIN_ID=pokerchain
+            - POKERCHAIND_MINIMUM_GAS_PRICES=0.01b52Token
         networks:
             - pokerchain-network
         restart: unless-stopped
