@@ -144,3 +144,10 @@ docker-compose-down:
 	docker compose down
 
 .PHONY: docker-build docker-run docker-compose-up docker-compose-down
+
+# Build the pokerchaind binary into the project directory
+build:
+	@echo "--> building $(APPNAME)d in project directory"
+	@go build $(BUILD_FLAGS) -o ./$(APPNAME)d ./cmd/$(APPNAME)d
+
+.PHONY: build
