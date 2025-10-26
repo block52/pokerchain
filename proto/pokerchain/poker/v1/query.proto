@@ -41,6 +41,39 @@ service Query {
   rpc GameState(QueryGameStateRequest) returns (QueryGameStateResponse) {
     option (google.api.http).get = "/block52/pokerchain/poker/v1/game_state/{game_id}";
   }
+
+  // Equity calculates player equity for a given hand.
+  rpc Equity(QueryEquityRequest) returns (QueryEquityResponse) {
+    option (google.api.http).post = "/block52/pokerchain/poker/v1/equity";
+    option (google.api.http).body = "*";
+  }
+
+
+// QueryEquityRequest defines the request for equity calculation.
+message QueryEquityRequest {
+  string game_id = 1;
+  repeated PlayerHand player_hands = 2;
+  repeated string community_cards = 3;
+  int32 simulations = 4;
+}
+
+// PlayerHand represents a player's hand.
+message PlayerHand {
+  repeated string cards = 1; // e.g. ["AS", "KH"]
+}
+
+// QueryEquityResponse defines the response for equity calculation.
+message QueryEquityResponse {
+  repeated EquityResult results = 1;
+}
+
+// EquityResult contains the equity calculation results for one player.
+message EquityResult {
+  int32 player_index = 1;
+  double win_percent = 2;
+  double tie_percent = 3;
+  int32 hands = 4;
+}
 }
 
 // QueryParamsRequest is request type for the Query/Params RPC method.
