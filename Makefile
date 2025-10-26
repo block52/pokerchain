@@ -120,6 +120,9 @@ docker-run:
 	docker run --rm -it \
 	  -p 26656:26656 -p 26657:26657 -p 1317:1317 -p 9090:9090 \
 	  -v pokerchain-data:/home/pokerchain/.pokerchain \
+	  -v $(PWD)/genesis-minimal-b52Token.json:/home/pokerchain/.pokerchain/config/genesis.json:ro \
+	  -v $(PWD)/config.toml:/home/pokerchain/.pokerchain/config/config.toml:ro \
+	  -v $(PWD)/app.toml:/home/pokerchain/.pokerchain/config/app.toml:ro \
 	  -e POKERCHAIND_MINIMUM_GAS_PRICES=0.01b52Token \
 	  --name pokerchain-node pokerchain:latest
 
