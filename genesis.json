@@ -53,7 +53,7 @@
           "address": "b521xkh7eznh50km2lxh783sqqyml8fjwl0tqjsc0c",
           "coins": [
             {
-              "denom": "b52Token",
+              "denom": "stake",
               "amount": "52000"
             },
             {
@@ -66,7 +66,7 @@
           "address": "b521dfe7r39q88zeqtde44efdqeky9thdtwngkzy2y",
           "coins": [
             {
-              "denom": "b52Token",
+              "denom": "stake",
               "amount": "1000000000000"
             },
             {
@@ -79,7 +79,7 @@
           "address": "b521hg93rsm2f5v3zlepf20ru88uweajt3nf492s2p",
           "coins": [
             {
-              "denom": "b52Token",
+              "denom": "stake",
               "amount": "52000"
             },
             {
@@ -91,7 +91,7 @@
       ],
       "supply": [
         {
-          "denom": "b52Token",
+          "denom": "stake",
           "amount": "1000000104000"
         },
         {
@@ -99,24 +99,7 @@
           "amount": "10200"
         }
       ],
-      "denom_metadata": [
-        {
-          "description": "The native staking and fee token for PokerChain.",
-          "denom_units": [
-            {
-              "denom": "b52Token",
-              "exponent": 0,
-              "aliases": [
-                "b52"
-              ]
-            }
-          ],
-          "base": "b52Token",
-          "display": "b52Token",
-          "name": "PokerChain B52 Token",
-          "symbol": "B52"
-        }
-      ],
+      "denom_metadata": [],
       "send_enabled": []
     },
     "circuit": {
@@ -216,239 +199,243 @@
                   "key": "ePndEh1mRQkNKedQ2sd829s0XTZNhdOFdaNwlwPk3DI="
                 },
                 "value": {
-                  "denom": "b52Token",
-                  "amount": "100000000000"{
-                    "denom": "b52Token",
-                    "amount": "1000000104000"
-                  },
-                  "timeout_height": "0",
-                  "unordered": false,
-                  "timeout_timestamp": null,
-                  "extension_options": [],
-                  "non_critical_extension_options": []
+                  "denom": "stake",
+                  "amount": "100000000000"
+                }
+              }
+            ],
+            "memo": "ca45690655ef3cac0db5221180417bae3cb713a3@192.168.86.45:26656",
+            "timeout_height": "0",
+            "unordered": false,
+            "timeout_timestamp": null,
+            "extension_options": [],
+            "non_critical_extension_options": []
+          },
+          "auth_info": {
+            "signer_infos": [
+              {
+                "public_key": {
+                  "@type": "/cosmos.crypto.secp256k1.PubKey",
+                  "key": "A9iVLcqyrUfrOOFOHpxygT8qgmy6sxHtBDwf7goBWsXu"
                 },
-                "auth_info": {
-                  "signer_infos": [
-                    {
-                      "public_key": {
-                        "@type": "/cosmos.crypto.secp256k1.PubKey",
-                        "key": "A9iVLcqyrUfrOOFOHpxygT8qgmy6sxHtBDwf7goBWsXu"
-                      },
-                      "mode_info": {
-                        "single": {
-                          "mode": "SIGN_MODE_DIRECT"{
-                            "denom": "b52Token",
-                            "amount": "52000"
-                          },
-                        ],
-                        "fee": {
-                          "amount": [],
-                          "gas_limit": "200000",
-                          "payer": "",
-                          "granter": ""
-                        },
-                        "tip": null
-                      },
-                      "signatures": [
-                        "6ewCMhPkfIWrf9PrsedX9UAKB8fl7YjADKxXxr6tOx9/IvhrQxaglBiCXEivCkQJwNjIAYjZCL8rTaApfV1yAA=="{
-                          "denom": "b52Token",
-                          "amount": "1000000000000"
-                        },
-                        "gov": {
-                          "starting_proposal_id": "1",
-                          "deposits": [],
-                          "votes": [],
-                          "proposals": [],
-                          "deposit_params": null,
-                          "voting_params": null,
-                          "tally_params": null,
-                          "params": {
-                            "min_deposit": [
-                              {
-                                "denom": "stake",
-                                "amount": "10000000"{
-                                  "denom": "b52Token",
-                                  "amount": "52000"
-                                },
-                                "quorum": "0.334000000000000000",
-                                "threshold": "0.500000000000000000",
-                                "veto_threshold": "0.334000000000000000",
-                                "min_initial_deposit_ratio": "0.000000000000000000",
-                                "proposal_cancel_ratio": "0.500000000000000000",
-                                "proposal_cancel_dest": "",
-                                "expedited_voting_period": "86400s",
-                                "expedited_threshold": "0.667000000000000000",
-                                "expedited_min_deposit": [
-                                  {
-                                    "denom": "stake",
-                                    "amount": "50000000"
-                                  }
-                                ],
-                                "burn_vote_quorum": false,
-                                "burn_proposal_deposit_prevote": false,
-                                "burn_vote_veto": true,
-                                "min_deposit_ratio": "0.010000000000000000"
-                              },
-                              "constitution": ""
-                            },
-                            "group": {
-                              "group_seq": "0",
-                              "groups": [],
-                              "group_members": [],
-                              "group_policy_seq": "0",
-                              "group_policies": [],
-                              "proposal_seq": "0",
-                              "proposals": [],
-                              "votes": []
-                            },
-                            "ibc": {
-                              "client_genesis": {
-                                "clients": [],
-                                "clients_consensus": [],
-                                "clients_metadata": [],
-                                "params": {
-                                  "allowed_clients": [
-                                    "*"
-                                  ]
-                                },
-                                "create_localhost": false,
-                                "next_client_sequence": "0"
-                              },
-                              "connection_genesis": {
-                                "connections": [],
-                                "client_connection_paths": [],
-                                "next_connection_sequence": "0",
-                                "params": {
-                                  "max_expected_time_per_block": "30000000000"
-                                }
-                              },
-                              "channel_genesis": {
-                                "channels": [],
-                                "acknowledgements": [],
-                                "commitments": [],
-                                "receipts": [],
-                                "send_sequences": [],
-                                "recv_sequences": [],
-                                "ack_sequences": [],
-                                "next_channel_sequence": "0"
-                              },
-                              "client_v2_genesis": {
-                                "counterparty_infos": []
-                              },
-                              "channel_v2_genesis": {
-                                "acknowledgements": [],
-                                "commitments": [],
-                                "receipts": [],
-                                "async_packets": [],
-                                "send_sequences": []
-                              }
-                            },
-                            "interchainaccounts": {
-                              "controller_genesis_state": {
-                                "active_channels": [],
-                                "interchain_accounts": [],
-                                "ports": [],
-                                "params": {
-                                  "controller_enabled": true
-                                }
-                              },
-                              "host_genesis_state": {
-                                "active_channels": [],
-                                "interchain_accounts": [],
-                                "port": "icahost",
-                                "params": {
-                                  "host_enabled": true,
-                                  "allow_messages": [
-                                    "*"
-                                  ]
-                                }
-                              }
-                            },
-                            "mint": {
-                              "minter": {
-                                "inflation": "0.130000000000000000",
-                                "annual_provisions": "0.000000000000000000"
-                              },
-                              "params": {
-                                "mint_denom": "b52Token",
-                                "inflation_rate_change": "0.130000000000000000",
-                                "inflation_max": "0.200000000000000000",
-                                "inflation_min": "0.070000000000000000",
-                                "goal_bonded": "0.670000000000000000",
-                                "blocks_per_year": "6311520"
-                              }
-                            },
-                            "nft": {
-                              "classes": [],
-                              "entries": []
-                            },
-                            "params": null,
-                            "poker": {
-                              "params": {}
-                            },
-                            "runtime": null,
-                            "slashing": {
-                              "params": {
-                                "signed_blocks_window": "100",
-                                "min_signed_per_window": "0.500000000000000000",
-                                "downtime_jail_duration": "600s",
-                                "slash_fraction_double_sign": "0.050000000000000000",
-                                "slash_fraction_downtime": "0.010000000000000000"
-                              },
-                              "signing_infos": [],
-                              "missed_blocks": []
-                            },
-                            "staking": {
-                              "params": {
-                                "unbonding_time": "1814400s",
-                                "max_validators": 100,
-                                "max_entries": 7,
-                                "historical_entries": 10000,
-                                "bond_denom": "b52Token",
-                                "min_commission_rate": "0.000000000000000000"
-                              },
-                              "last_total_power": "0",
-                              "last_validator_powers": [],
-                              "validators": [],
-                              "delegations": [],
-                              "unbonding_delegations": [],
-                              "redelegations": [],
-                              "exported": false
-                            },
-                            "transfer": {
-                              "port_id": "transfer",
-                              "denoms": [],
-                              "params": {
-                                "send_enabled": true,
-                                "receive_enabled": true
-                              },
-                              "total_escrowed": []
-                            },
-                            "upgrade": {},
-                            "vesting": {}
-                          },
-                          "consensus": {
-                            "params": {
-                              "block": {
-                                "max_bytes": "22020096",
-                                "max_gas": "-1"
-                              },
-                              "evidence": {
-                                "max_age_num_blocks": "100000",
-                                "max_age_duration": "172800000000000",
-                                "max_bytes": "1048576"
-                              },
-                              "validator": {
-                                "pub_key_types": [
-                                  "ed25519"
-                                ]
-                              },
-                              "version": {
-                                "app": "0"
-                              },
-                              "abci": {
-                                "vote_extensions_enable_height": "0"
-                              }
-                            }
-                          }
-                        }
+                "mode_info": {
+                  "single": {
+                    "mode": "SIGN_MODE_DIRECT"
+                  }
+                },
+                "sequence": "0"
+              }
+            ],
+            "fee": {
+              "amount": [],
+              "gas_limit": "200000",
+              "payer": "",
+              "granter": ""
+            },
+            "tip": null
+          },
+          "signatures": [
+            "6ewCMhPkfIWrf9PrsedX9UAKB8fl7YjADKxXxr6tOx9/IvhrQxaglBiCXEivCkQJwNjIAYjZCL8rTaApfV1yAA=="
+          ]
+        }
+      ]
+    },
+    "gov": {
+      "starting_proposal_id": "1",
+      "deposits": [],
+      "votes": [],
+      "proposals": [],
+      "deposit_params": null,
+      "voting_params": null,
+      "tally_params": null,
+      "params": {
+        "min_deposit": [
+          {
+            "denom": "stake",
+            "amount": "10000000"
+          }
+        ],
+        "max_deposit_period": "172800s",
+        "voting_period": "172800s",
+        "quorum": "0.334000000000000000",
+        "threshold": "0.500000000000000000",
+        "veto_threshold": "0.334000000000000000",
+        "min_initial_deposit_ratio": "0.000000000000000000",
+        "proposal_cancel_ratio": "0.500000000000000000",
+        "proposal_cancel_dest": "",
+        "expedited_voting_period": "86400s",
+        "expedited_threshold": "0.667000000000000000",
+        "expedited_min_deposit": [
+          {
+            "denom": "stake",
+            "amount": "50000000"
+          }
+        ],
+        "burn_vote_quorum": false,
+        "burn_proposal_deposit_prevote": false,
+        "burn_vote_veto": true,
+        "min_deposit_ratio": "0.010000000000000000"
+      },
+      "constitution": ""
+    },
+    "group": {
+      "group_seq": "0",
+      "groups": [],
+      "group_members": [],
+      "group_policy_seq": "0",
+      "group_policies": [],
+      "proposal_seq": "0",
+      "proposals": [],
+      "votes": []
+    },
+    "ibc": {
+      "client_genesis": {
+        "clients": [],
+        "clients_consensus": [],
+        "clients_metadata": [],
+        "params": {
+          "allowed_clients": [
+            "*"
+          ]
+        },
+        "create_localhost": false,
+        "next_client_sequence": "0"
+      },
+      "connection_genesis": {
+        "connections": [],
+        "client_connection_paths": [],
+        "next_connection_sequence": "0",
+        "params": {
+          "max_expected_time_per_block": "30000000000"
+        }
+      },
+      "channel_genesis": {
+        "channels": [],
+        "acknowledgements": [],
+        "commitments": [],
+        "receipts": [],
+        "send_sequences": [],
+        "recv_sequences": [],
+        "ack_sequences": [],
+        "next_channel_sequence": "0"
+      },
+      "client_v2_genesis": {
+        "counterparty_infos": []
+      },
+      "channel_v2_genesis": {
+        "acknowledgements": [],
+        "commitments": [],
+        "receipts": [],
+        "async_packets": [],
+        "send_sequences": []
+      }
+    },
+    "interchainaccounts": {
+      "controller_genesis_state": {
+        "active_channels": [],
+        "interchain_accounts": [],
+        "ports": [],
+        "params": {
+          "controller_enabled": true
+        }
+      },
+      "host_genesis_state": {
+        "active_channels": [],
+        "interchain_accounts": [],
+        "port": "icahost",
+        "params": {
+          "host_enabled": true,
+          "allow_messages": [
+            "*"
+          ]
+        }
+      }
+    },
+    "mint": {
+      "minter": {
+        "inflation": "0.130000000000000000",
+        "annual_provisions": "0.000000000000000000"
+      },
+      "params": {
+        "mint_denom": "stake",
+        "inflation_rate_change": "0.130000000000000000",
+        "inflation_max": "0.200000000000000000",
+        "inflation_min": "0.070000000000000000",
+        "goal_bonded": "0.670000000000000000",
+        "blocks_per_year": "6311520"
+      }
+    },
+    "nft": {
+      "classes": [],
+      "entries": []
+    },
+    "params": null,
+    "poker": {
+      "params": {}
+    },
+    "runtime": null,
+    "slashing": {
+      "params": {
+        "signed_blocks_window": "100",
+        "min_signed_per_window": "0.500000000000000000",
+        "downtime_jail_duration": "600s",
+        "slash_fraction_double_sign": "0.050000000000000000",
+        "slash_fraction_downtime": "0.010000000000000000"
+      },
+      "signing_infos": [],
+      "missed_blocks": []
+    },
+    "staking": {
+      "params": {
+        "unbonding_time": "1814400s",
+        "max_validators": 100,
+        "max_entries": 7,
+        "historical_entries": 10000,
+        "bond_denom": "stake",
+        "min_commission_rate": "0.000000000000000000"
+      },
+      "last_total_power": "0",
+      "last_validator_powers": [],
+      "validators": [],
+      "delegations": [],
+      "unbonding_delegations": [],
+      "redelegations": [],
+      "exported": false
+    },
+    "transfer": {
+      "port_id": "transfer",
+      "denoms": [],
+      "params": {
+        "send_enabled": true,
+        "receive_enabled": true
+      },
+      "total_escrowed": []
+    },
+    "upgrade": {},
+    "vesting": {}
+  },
+  "consensus": {
+    "params": {
+      "block": {
+        "max_bytes": "22020096",
+        "max_gas": "-1"
+      },
+      "evidence": {
+        "max_age_num_blocks": "100000",
+        "max_age_duration": "172800000000000",
+        "max_bytes": "1048576"
+      },
+      "validator": {
+        "pub_key_types": [
+          "ed25519"
+        ]
+      },
+      "version": {
+        "app": "0"
+      },
+      "abci": {
+        "vote_extensions_enable_height": "0"
+      }
+    }
+  }
+}
