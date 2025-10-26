@@ -41,6 +41,11 @@ service Query {
   rpc GameState(QueryGameStateRequest) returns (QueryGameStateResponse) {
     option (google.api.http).get = "/block52/pokerchain/poker/v1/game_state/{game_id}";
   }
+
+  // NextPlayerToAct Queries the next player to act for a game.
+  rpc NextPlayerToAct(QueryNextPlayerToActRequest) returns (QueryNextPlayerToActResponse) {
+    option (google.api.http).get = "/block52/pokerchain/poker/v1/next_player_to_act/{game_id}";
+  }
 }
 
 // QueryParamsRequest is request type for the Query/Params RPC method.
@@ -102,4 +107,14 @@ message QueryGameStateRequest {
 // QueryGameStateResponse defines the QueryGameStateResponse message.
 message QueryGameStateResponse {
   string game_state = 1;
+}
+
+// QueryNextPlayerToActRequest defines the QueryNextPlayerToActRequest message.
+message QueryNextPlayerToActRequest {
+  string game_id = 1;
+}
+
+// QueryNextPlayerToActResponse defines the QueryNextPlayerToActResponse message.
+message QueryNextPlayerToActResponse {
+  string next_player = 1;
 }
