@@ -52,10 +52,21 @@ test: govet govulncheck test-unit
 all: install
 
 install:
-	@echo "--> ensure dependencies have not been modified"
-	@go mod verify
-	@echo "--> installing $(APPNAME)d"
-	@go install $(BUILD_FLAGS) -mod=readonly ./cmd/$(APPNAME)d
+		@echo "--> removing old chain data and genesis.json"
+		rm -rf $$HOME/.pokerchain/data
+		rm -f $$HOME/.pokerchain/config/genesis.json
+		@echo "--> copying minimal genesis file"
+		mkdir -p $$HOME/.pokerchain/config
+		cp ./genesis-minimal-b52Token.json $$HOME/.pokerchain/config/genesis.json
+		@echo "--> ensuring priv_validator_state.json exists"
+		mkdir -p $$HOME/.pokerchain/data
+		if [ ! -f $$HOME/.pokerchain/data/priv_validator_state.json ]; then \
+			cp ./priv_validator_state_template.json $$HOME/.pokerchain/data/priv_validator_state.json; \
+		fi
+		@echo "--> ensure dependencies have not been modified"
+		@go mod verify
+		@echo "--> installing $(APPNAME)d"
+		@go install $(BUILD_FLAGS) -mod=readonly ./cmd/$(APPNAME)d
 
 clean:
 	@echo "--> cleaning build cache and binaries"

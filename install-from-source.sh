@@ -58,9 +58,16 @@ LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "main")
 echo "Checking out $LATEST_TAG..."
 git checkout "$LATEST_TAG"
 
+
 # Build and install
 echo "Building pokerchaind..."
 make install
+
+# Add Go bin to PATH for this session
+export PATH="$HOME/go/bin:$PATH"
+echo 'export PATH="$HOME/go/bin:$PATH"' >> "$HOME/.bashrc"
+echo 'export PATH="$HOME/go/bin:$PATH"' >> "$HOME/.zshrc"
+
 
 # Verify installation
 echo "Verifying installation..."

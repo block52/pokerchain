@@ -9,7 +9,7 @@ REMOTE_HOST="$1"
 REMOTE_USER="${2:-$(whoami)}"
 WITH_GENESIS="$3"
 LOCAL_BINARY="$(go env GOPATH)/bin/pokerchaind"
-GENESIS_FILE="./genesis.json"
+GENESIS_FILE="./genesis-minimal-b52Token.json"
 REMOTE_PATH="/usr/local/bin/pokerchaind"
 REMOTE_HOME="/home/$REMOTE_USER"
 
@@ -63,6 +63,8 @@ if [[ "$WITH_GENESIS" == "--with-genesis" ]]; then
         exit 1
     fi
     
+    # Remove any old genesis files in the remote home directory
+    ssh "$REMOTE_USER@$REMOTE_HOST" 'rm -f ~/genesis.json ~/.pokerchain/config/genesis.json'
     # Copy genesis file to remote home directory
     scp "$GENESIS_FILE" "$REMOTE_USER@$REMOTE_HOST:~/genesis.json"
     echo "✅ Genesis file copied to $REMOTE_HOME/genesis.json"

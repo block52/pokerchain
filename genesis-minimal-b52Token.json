@@ -19,11 +19,25 @@
                 "send_enabled": [],
                 "default_send_enabled": true
             },
-            "balances": [],
+            "balances": [
+                {
+                    "address": "b521dfe7r39q88zeqtde44efdqeky9thdtwngkzy2y",
+                    "coins": [
+                        {
+                            "denom": "b52Token",
+                            "amount": "52000000000000"
+                        }
+                    ]
+                }
+            ],
             "supply": [
                 {
                     "denom": "b52Token",
-                    "amount": "1000000000000"
+                    "amount": "52000000000000"
+                },
+                {
+                    "denom": "b52usd",
+                    "amount": "0"
                 }
             ],
             "denom_metadata": [
@@ -42,6 +56,22 @@
                     "display": "b52Token",
                     "name": "PokerChain B52 Token",
                     "symbol": "B52"
+                },
+                {
+                    "description": "PokerChain USD stablecoin.",
+                    "denom_units": [
+                        {
+                            "denom": "b52usd",
+                            "exponent": 0,
+                            "aliases": [
+                                "usd"
+                            ]
+                        }
+                    ],
+                    "base": "b52usd",
+                    "display": "b52usd",
+                    "name": "PokerChain USD Stablecoin",
+                    "symbol": "B52USD"
                 }
             ],
             "send_enabled": []
