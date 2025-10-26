@@ -26,6 +26,10 @@
                         {
                             "denom": "b52Token",
                             "amount": "52000000000000"
+                        },
+                        {
+                            "denom": "b52usd",
+                            "amount": "0"
                         }
                     ]
                 }

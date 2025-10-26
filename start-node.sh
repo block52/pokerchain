@@ -85,6 +85,14 @@ if pgrep -x pokerchaind > /dev/null; then
     exit 0
 fi
 
+
+# Ensure priv_validator_state.json exists
+if [ ! -f "$HOME_DIR/data/priv_validator_state.json" ]; then
+    echo "Copying priv_validator_state_template.json to $HOME_DIR/data/priv_validator_state.json ..."
+    mkdir -p "$HOME_DIR/data"
+    cp "$(dirname "$0")/priv_validator_state_template.json" "$HOME_DIR/data/priv_validator_state.json"
+fi
+
 # Node is not running, let's start it
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
