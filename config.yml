@@ -4,58 +4,58 @@ accounts:
     - name: alice
       coins:
           - 10000000000000b52Token
-          - 0b52usd
+          - 1000000000usdc
       mnemonic: cement shadow leave crash crisp aisle model hip lend february library ten cereal soul bind boil bargain barely rookie odor panda artwork damage reason
     - name: bob
       coins:
           - 10000000000000b52Token
-          - 0b52usd
+          - 1000000000usdc
       mnemonic: vanish legend pelican blush control spike useful usage into any remove wear flee short october naive swear wall spy cup sort avoid agent credit
     - name: charlie
       coins:
           - 10000000000000b52Token
-          - 0b52usd
+          - 1000000000usdc
       mnemonic: video short denial minimum vague arm dose parrot poverty saddle kingdom life buyer globe fashion topic vicious theme voice keep try jacket fresh potato
     - name: diana
       coins:
           - 10000000000000b52Token
-          - 0b52usd
+          - 1000000000usdc
       mnemonic: twice bacon whale space improve galaxy liberty trumpet outside sunny action reflect doll hill ugly torch ride gossip snack fork talk market proud nothing
     - name: eve
       coins:
           - 10000000000000b52Token
-          - 0b52usd
+          - 1000000000usdc
       mnemonic: raven mix autumn dismiss degree husband street slender maple muscle inch radar winner agent claw permit autumn expose power minute master scrub asthma retreat
     - name: frank
       coins:
           - 10000000000000b52Token
-          - 0b52usd
+          - 1000000000usdc
       mnemonic: alpha satoshi civil spider expand bread pitch keen define helmet tourist rib habit cereal impulse earn milk need obscure ski purchase question vocal author
     - name: grace
       coins:
           - 10000000000000b52Token
-          - 0b52usd
+          - 1000000000usdc
       mnemonic: letter stumble apology garlic liquid loyal bid board silver web ghost jewel lift direct green silk urge guitar nest erase remind jaguar decrease skin
     - name: henry
       coins:
           - 10000000000000b52Token
-          - 0b52usd
+          - 1000000000usdc
       mnemonic: access execute loyal tag grid demise cloth desk dolphin pelican trumpet frown note level sibling dumb upon unfold wedding party success hint need fruit
     - name: iris
       coins:
           - 10000000000000b52Token
-          - 0b52usd
+          - 1000000000usdc
       mnemonic: any antenna globe forget neglect race advice admit market guilt clay tunnel anxiety aim morning scrap visit sibling royal during proud flee maid fiscal
     - name: jack
       coins:
           - 10000000000000b52Token
-          - 0b52usd
+          - 1000000000usdc
       mnemonic: digital option before hawk alcohol uncover expire faint enact shield bike uncle kangaroo museum domain heart purchase under answer topple timber hole height glance
 faucet:
     name: alice
     coins:
         - 1000000000b52Token
-        - 0b52usd
+        - 1000000000usdc
 client:
     typescript:
         path: ts-client
