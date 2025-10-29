@@ -79,7 +79,8 @@ func (k msgServer) PerformAction(ctx context.Context, msg *types.MsgPerformActio
 	}
 
 	// Make JSON-RPC call to game engine with game state
-	err = k.callGameEngine(ctx, msg.Player, msg.GameId, msg.Action, msg.Amount)
+	// For perform_action (not join), seat is not used, pass 0
+	err = k.callGameEngine(ctx, msg.Player, msg.GameId, msg.Action, msg.Amount, 0)
 	if err != nil {
 		return nil, errorsmod.Wrap(err, "failed to call game engine")
 	}
@@ -91,7 +92,7 @@ func (k msgServer) PerformAction(ctx context.Context, msg *types.MsgPerformActio
 }
 
 // callGameEngine makes a JSON-RPC call to the game engine with game state and options
-func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action string, amount uint64) error {
+func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action string, amount uint64, seat uint64) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	sdkCtx.Logger().Info("🎲 callGameEngine called",
 		"gameId", gameId,
@@ -141,11 +142,12 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 
 	// Create JSON-RPC request with new params format:
 	// [from, to, action, value, index, gameStateJson, gameOptionsJson, data]
-	// Action index starts at 1, if ActionCount is 0 (first command), use 1, otherwise increment
-	actionIndex := gameState.ActionCount + 1
-	if gameState.ActionCount == 0 {
-		actionIndex = 1 // Ensure first action starts at index 1
-	}
+	// Match PVM's getActionIndex() logic: actionCount + previousActions.length + 1
+	actionIndex := gameState.ActionCount + len(gameState.PreviousActions) + 1
+
+	// Format seat parameter for data field
+	// PVM requires explicit seat number - keeper should have resolved seat=0 to actual seat
+	seatData := fmt.Sprintf("seat=%d", seat)
 
 	request := JSONRPCRequest{
 		Method: "perform_action",
@@ -157,7 +159,7 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 			actionIndex,                    // index (current action count)
 			string(gameStateJson),          // gameStateJson
 			string(gameOptionsJson),        // gameOptionsJson
-			`seat=1`,                       // data with seat parameter
+			seatData,                       // data with seat parameter (empty = auto-assign)
 		},
 		ID:      1,
 		JSONRPC: "2.0",

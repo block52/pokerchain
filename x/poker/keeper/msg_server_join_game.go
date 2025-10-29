@@ -6,9 +6,9 @@ import (
 
 	errorsmod "cosmossdk.io/errors"
 	"cosmossdk.io/math"
+	"github.com/block52/pokerchain/x/poker/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
-	"github.com/block52/pokerchain/x/poker/types"
 )
 
 func (k msgServer) JoinGame(ctx context.Context, msg *types.MsgJoinGame) (*types.MsgJoinGameResponse, error) {
@@ -72,9 +72,44 @@ func (k msgServer) JoinGame(ctx context.Context, msg *types.MsgJoinGame) (*types
 		return nil, errorsmod.Wrap(err, "failed to transfer buy-in amount")
 	}
 
+	// Determine seat number
+	// If seat=0, we need to find the next available seat
+	// The PVM requires a specific seat number, it doesn't support auto-assignment
+	seatNumber := msg.Seat
+	if seatNumber == 0 {
+		// Get current game state to find occupied seats
+		gameState, err := k.GameStates.Get(ctx, msg.GameId)
+		if err != nil {
+			return nil, errorsmod.Wrap(err, "failed to get game state for seat selection")
+		}
+
+		// Find next available seat (1 to maxPlayers)
+		occupiedSeats := make(map[int]bool)
+		for _, player := range gameState.Players {
+			occupiedSeats[player.Seat] = true
+		}
+
+		// Find first available seat
+		found := false
+		for seat := int(1); int64(seat) <= game.MaxPlayers; seat++ {
+			if !occupiedSeats[seat] {
+				seatNumber = uint64(seat)
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return nil, errorsmod.Wrap(types.ErrInvalidRequest, "no available seats in game")
+		}
+
+		sdkCtx.Logger().Info("🎲 Auto-assigned seat", "seat", seatNumber, "gameId", msg.GameId)
+	}
+
 	// Call PVM to add player to game
 	// Use "join" action to add player to the game state
-	err = k.callGameEngine(ctx, msg.Player, msg.GameId, "join", msg.BuyInAmount)
+	// Pass specific seat number (PVM requires explicit seat, doesn't support auto-assignment)
+	err = k.callGameEngine(ctx, msg.Player, msg.GameId, "join", msg.BuyInAmount, seatNumber)
 	if err != nil {
 		// Refund buy-in if game engine call fails
 		if refundErr := k.bankKeeper.SendCoinsFromModuleToAccount(
