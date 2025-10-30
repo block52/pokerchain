@@ -81,11 +81,11 @@ setup_genesis() {
     echo "Setting up Genesis Node (node1.block52.xyz)"
     echo ""
     
-    if check_script "./setup-genesis-node.sh"; then
-        chmod +x ./setup-genesis-node.sh
-        ./setup-genesis-node.sh
+    if check_script "./deploy-master-node.sh"; then
+        chmod +x ./deploy-master-node.sh
+        ./deploy-master-node.sh
     else
-        echo "Please ensure setup-genesis-node.sh is in the current directory"
+        echo "Please ensure deploy-master-node.sh is in the current directory"
         read -p "Press Enter to continue..."
     fi
 }
@@ -253,7 +253,7 @@ setup_validator() {
 verify_network() {
     print_header
     echo ""
-    echo "Verifying Network Connectivity"
+    echo "Verifying Network Connectivity & Block Production"
     echo ""
     
     local remote_node="node1.block52.xyz"
@@ -271,12 +271,73 @@ verify_network() {
         # Get network info
         echo ""
         echo "Network Information:"
-        curl -s "http://$remote_node:$rpc_port/status" | jq -r '
+        local status_output=$(curl -s "http://$remote_node:$rpc_port/status")
+        echo "$status_output" | jq -r '
             "  Chain ID: " + .result.node_info.network,
             "  Node ID: " + .result.node_info.id,
             "  Latest Block: " + .result.sync_info.latest_block_height,
             "  Catching Up: " + (.result.sync_info.catching_up | tostring)
         ' 2>/dev/null || echo "  (jq not installed - raw data available via curl)"
+        
+        # Test block production
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo -e "${BLUE}Testing Block Production...${NC}"
+        echo ""
+        
+        # Get initial block height
+        local block1=$(echo "$status_output" | jq -r '.result.sync_info.latest_block_height' 2>/dev/null)
+        local time1=$(echo "$status_output" | jq -r '.result.sync_info.latest_block_time' 2>/dev/null)
+        
+        if [ -n "$block1" ] && [ "$block1" != "null" ]; then
+            echo "Initial block height: $block1"
+            echo "Block time: $time1"
+            echo ""
+            echo "Waiting 10 seconds to check if new blocks are produced..."
+            
+            # Wait 10 seconds
+            for i in {10..1}; do
+                echo -ne "\rWaiting: $i seconds remaining...  "
+                sleep 1
+            done
+            echo ""
+            
+            # Get new block height
+            local status_output2=$(curl -s "http://$remote_node:$rpc_port/status")
+            local block2=$(echo "$status_output2" | jq -r '.result.sync_info.latest_block_height' 2>/dev/null)
+            local time2=$(echo "$status_output2" | jq -r '.result.sync_info.latest_block_time' 2>/dev/null)
+            
+            if [ -n "$block2" ] && [ "$block2" != "null" ]; then
+                echo ""
+                echo "New block height: $block2"
+                echo "Block time: $time2"
+                echo ""
+                
+                local blocks_produced=$((block2 - block1))
+                
+                if [ $blocks_produced -gt 0 ]; then
+                    echo -e "${GREEN}✅ BLOCK PRODUCTION ACTIVE!${NC}"
+                    echo -e "${GREEN}   Produced $blocks_produced block(s) in 10 seconds${NC}"
+                    local blocks_per_min=$(echo "scale=1; $blocks_produced * 6" | bc 2>/dev/null || echo "~$((blocks_produced * 6))")
+                    echo -e "${GREEN}   Rate: ~$blocks_per_min blocks/minute${NC}"
+                elif [ $blocks_produced -eq 0 ]; then
+                    echo -e "${YELLOW}⚠️  NO NEW BLOCKS PRODUCED${NC}"
+                    echo -e "${YELLOW}   Node may be stalled or block time is very slow${NC}"
+                    echo ""
+                    echo "   Troubleshooting steps:"
+                    echo "   1. Check if node is running: ssh node1.block52.xyz 'systemctl status pokerchaind'"
+                    echo "   2. Check for errors: ssh node1.block52.xyz 'journalctl -u pokerchaind -n 50'"
+                    echo "   3. Verify validators: curl http://$remote_node:$rpc_port/validators"
+                else
+                    echo -e "${YELLOW}⚠️  Block height decreased (chain may have restarted)${NC}"
+                fi
+            else
+                echo -e "${YELLOW}⚠️  Could not get updated block height${NC}"
+            fi
+        else
+            echo -e "${YELLOW}⚠️  Could not parse block height (jq may not be installed)${NC}"
+        fi
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     else
         echo -e "${YELLOW}❌ Not accessible${NC}"
     fi

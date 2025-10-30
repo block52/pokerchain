@@ -10,7 +10,7 @@ Get your Pokerchain node up and running in minutes!
 ./setup-network.sh            # 🎛️  Interactive menu (recommended for first time)
 ./setup-sync-node.sh          # 🔄 Setup local sync node
 ./setup-validator-node.sh     # 👑 Setup validator node
-./setup-genesis-node.sh       # 🌐 Deploy genesis node to node1.block52.xyz
+./deploy-master-node.sh       # 🌐 Deploy genesis node to node1.block52.xyz
 ```
 
 ### Node Control
@@ -20,13 +20,21 @@ Get your Pokerchain node up and running in minutes!
 ./stop-node.sh                # ⏹️  Stop your local node
 ```
 
+### Verification & Testing
+
+```bash
+./check-block-production.sh   # 🔍 Test if node1 is producing blocks
+./setup-network.sh            # 🎛️  Then select option 5 for full network check
+```
+
 ### Documentation
 
 ```bash
-QUICK_START.md               # This file - quick reference
-NETWORK_SETUP.md             # Complete network setup guide
-VALIDATOR_GUIDE.md           # Comprehensive validator guide
-TEST_ACTORS.md               # Test accounts with seed phrases
+QUICK_START.md                    # This file - quick reference
+NETWORK_SETUP.md                  # Complete network setup guide
+VALIDATOR_GUIDE.md                # Comprehensive validator guide
+TEST_ACTORS.md                    # Test accounts with seed phrases
+BLOCK-PRODUCTION-TESTING.md       # Guide for testing block production
 ```
 
 ## 🎯 Common Scenarios
