@@ -26,6 +26,9 @@ echo "Home Directory: $HOME_DIR"
 echo "Seed Node: $SEED_NODE_ID@$SEED_NODE_HOST:$SEED_NODE_PORT"
 echo ""
 
+# Remove existing local data before setup
+rm -rf "$HOME_DIR/data" "$HOME_DIR/config"
+
 # Step 1: Build binary
 echo -e "${BLUE}📦 Step 1: Building binary...${NC}"
 echo "-----------------------------"
@@ -157,7 +160,7 @@ echo "------------------------------------"
 
 echo "📊 Configuration summary:"
 echo "  Chain ID: $CHAIN_ID"
-echo "  Node Moniker: $(grep '^moniker = ' $HOME_DIR/config/config.toml | cut -d'"' -f2)"
+echo "  Node Moniker: LocalSyncNode"
 echo "  Home: $HOME_DIR"
 echo ""
 echo "🌐 API Configuration:"
