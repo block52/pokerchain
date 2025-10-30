@@ -40,27 +40,34 @@ show_menu() {
     echo "   - Does NOT participate in consensus"
     echo "   - Perfect for development and testing"
     echo ""
-    echo -e "${GREEN}3)${NC} Validator Node (additional validator)"
+    echo -e "${GREEN}3)${NC} Remote Sync Node (deploy to remote server)"
+    echo "   Deploy a read-only sync node to a remote Linux server"
+    echo "   - Builds and uploads binary"
+    echo "   - Configures systemd service"
+    echo "   - Connects to node1.block52.xyz as peer"
+    echo "   - Syncs blockchain data from the network"
+    echo ""
+    echo -e "${GREEN}4)${NC} Validator Node (additional validator)"
     echo "   Sets up a new validator node to join the network"
     echo "   - Participates in consensus"
     echo "   - Creates and signs blocks"
     echo "   - Requires validator keys"
     echo ""
-    echo -e "${GREEN}4)${NC} Start Local Node"
+    echo -e "${GREEN}5)${NC} Start Local Node"
     echo "   Start your local pokerchaind node"
     echo "   - Start via systemd (if configured)"
     echo "   - Start manually if no service"
     echo "   - View sync status and logs"
     echo ""
-    echo -e "${GREEN}5)${NC} Verify Network Connectivity"
+    echo -e "${GREEN}6)${NC} Verify Network Connectivity"
     echo "   Test connectivity to node1.block52.xyz"
     echo "   - Check RPC/API endpoints"
     echo "   - View network status"
     echo "   - Get node information"
     echo ""
-    echo -e "${GREEN}6)${NC} Exit"
+    echo -e "${GREEN}7)${NC} Exit"
     echo ""
-    echo -n "Enter your choice [1-6]: "
+    echo -n "Enter your choice [1-7]: "
 }
 
 # Check if script exists
@@ -104,6 +111,49 @@ setup_sync() {
         echo "Please ensure setup-sync-node.sh is in the current directory"
         read -p "Press Enter to continue..."
     fi
+}
+
+# Setup remote sync node
+setup_remote_sync() {
+    print_header
+    echo ""
+    echo "Deploying Remote Sync Node"
+    echo ""
+    
+    if check_script "./deploy-sync-node.sh"; then
+        # Get remote host from user
+        echo -e "${BLUE}Enter the remote server details:${NC}"
+        echo ""
+        read -p "Remote host (e.g., node2.example.com or 192.168.1.100): " remote_host
+        
+        if [ -z "$remote_host" ]; then
+            echo -e "${RED}❌ Remote host cannot be empty${NC}"
+            read -p "Press Enter to continue..."
+            return
+        fi
+        
+        read -p "Remote user (default: root): " remote_user
+        remote_user=${remote_user:-root}
+        
+        echo ""
+        echo "📋 Deployment Configuration:"
+        echo "   Remote Host: $remote_host"
+        echo "   Remote User: $remote_user"
+        echo "   Seed Node: node1.block52.xyz"
+        echo ""
+        read -p "Continue with deployment? (y/n): " confirm
+        
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+            chmod +x ./deploy-sync-node.sh
+            ./deploy-sync-node.sh "$remote_host" "$remote_user"
+        else
+            echo "Deployment cancelled."
+        fi
+    else
+        echo "Please ensure deploy-sync-node.sh is in the current directory"
+    fi
+    
+    read -p "Press Enter to continue..."
 }
 
 # Start local node
@@ -377,15 +427,18 @@ main() {
                 setup_sync
                 ;;
             3)
-                setup_validator
+                setup_remote_sync
                 ;;
             4)
-                start_local_node
+                setup_validator
                 ;;
             5)
-                verify_network
+                start_local_node
                 ;;
             6)
+                verify_network
+                ;;
+            7)
                 print_header
                 echo ""
                 echo "Thank you for using Pokerchain Network Setup!"
@@ -394,7 +447,7 @@ main() {
                 ;;
             *)
                 echo ""
-                echo -e "${YELLOW}Invalid option. Please choose 1-6.${NC}"
+                echo -e "${YELLOW}Invalid option. Please choose 1-7.${NC}"
                 sleep 2
                 ;;
         esac

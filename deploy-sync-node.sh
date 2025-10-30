@@ -1,0 +1,326 @@
+#!/bin/bash
+
+# Deploy sync node to a remote Linux server
+# Usage: ./deploy-sync-node.sh [REMOTE_HOST] [REMOTE_USER]
+# Example: ./deploy-sync-node.sh node2.example.com root
+
+set -e
+
+# Configuration
+REMOTE_HOST="${1:-}"
+REMOTE_USER="${2:-root}"
+SEED_NODE_HOST="node1.block52.xyz"
+SEED_NODE_ID="a429c82669d8932602ca43139733f98c42817464"
+SEED_NODE_PORT="26656"
+
+# Color codes
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Check if remote host is provided
+if [ -z "$REMOTE_HOST" ]; then
+    echo -e "${RED}❌ Error: Remote host not provided${NC}"
+    echo ""
+    echo "Usage: $0 <REMOTE_HOST> [REMOTE_USER]"
+    echo ""
+    echo "Example:"
+    echo "  $0 node2.example.com root"
+    echo "  $0 192.168.1.100 ubuntu"
+    echo ""
+    exit 1
+fi
+
+echo -e "${BLUE}🚀 Pokerchain Sync Node Deployment${NC}"
+echo "===================================="
+echo "Target: $REMOTE_USER@$REMOTE_HOST"
+echo "Seed Node: $SEED_NODE_ID@$SEED_NODE_HOST:$SEED_NODE_PORT"
+echo ""
+
+# Step 1: Build binary
+echo -e "${BLUE}📦 Step 1: Building binary...${NC}"
+echo "-----------------------------"
+
+# Create build directory in repo
+BUILD_DIR="./build"
+mkdir -p "$BUILD_DIR"
+
+# Clean previous builds
+echo "🧹 Cleaning previous builds..."
+go clean -cache
+rm -f "$BUILD_DIR/pokerchaind"
+
+# Build the binary
+echo "🔧 Building pokerchaind..."
+if ! go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
+    echo -e "${RED}❌ Build failed${NC}"
+    exit 1
+fi
+
+LOCAL_BINARY="$BUILD_DIR/pokerchaind"
+chmod +x "$LOCAL_BINARY"
+
+BINARY_VERSION=$(${LOCAL_BINARY} version 2>/dev/null || echo "unknown")
+BINARY_SIZE=$(ls -lh "$LOCAL_BINARY" | awk '{print $5}')
+echo -e "${GREEN}✅ Build successful!${NC}"
+echo "   Location: $LOCAL_BINARY"
+echo "   Version: $BINARY_VERSION"
+echo "   Size: $BINARY_SIZE"
+
+# Step 2: Check configuration files
+echo ""
+echo -e "${BLUE}📋 Step 2: Checking configuration files...${NC}"
+echo "------------------------------------------"
+
+if [ ! -f "./genesis.json" ]; then
+    echo -e "${RED}❌ Genesis file not found at ./genesis.json${NC}"
+    exit 1
+fi
+
+if [ ! -f "./app.toml" ]; then
+    echo -e "${RED}❌ app.toml not found${NC}"
+    exit 1
+fi
+
+if [ ! -f "./config.toml" ]; then
+    echo -e "${RED}❌ config.toml not found${NC}"
+    exit 1
+fi
+
+if [ ! -f "./pokerchaind.service" ]; then
+    echo -e "${RED}❌ pokerchaind.service not found${NC}"
+    exit 1
+fi
+
+LOCAL_GENESIS_HASH=$(sha256sum "./genesis.json" | cut -d' ' -f1)
+echo -e "${GREEN}✅ All files present!${NC}"
+echo "   Genesis hash: $LOCAL_GENESIS_HASH"
+
+# Step 3: Test connectivity to remote host
+echo ""
+echo -e "${BLUE}🌐 Step 3: Testing connectivity...${NC}"
+echo "----------------------------------"
+
+if ! ssh -o ConnectTimeout=10 "$REMOTE_USER@$REMOTE_HOST" "echo 'Connected'" &>/dev/null; then
+    echo -e "${RED}❌ Cannot connect to $REMOTE_USER@$REMOTE_HOST${NC}"
+    echo "Please check:"
+    echo "  - SSH access is configured"
+    echo "  - Remote host is reachable"
+    echo "  - User has proper permissions"
+    exit 1
+fi
+echo -e "${GREEN}✅ Connection successful${NC}"
+
+# Step 4: Stop remote services
+echo ""
+echo -e "${BLUE}⏹️  Step 4: Stopping services on remote node...${NC}"
+echo "----------------------------------------------"
+
+ssh "$REMOTE_USER@$REMOTE_HOST" << 'ENDSSH'
+echo '🛑 Stopping pokerchaind service...'
+sudo systemctl stop pokerchaind 2>/dev/null || true
+sleep 2
+echo '🔍 Checking for running processes...'
+if pgrep pokerchaind; then
+    echo '💥 Force killing pokerchaind processes...'
+    sudo pkill -9 pokerchaind || true
+    sleep 2
+fi
+echo '✅ Services stopped'
+ENDSSH
+
+# Step 5: Backup and clean old data
+echo ""
+echo -e "${BLUE}🗑️  Step 5: Cleaning old data on remote node...${NC}"
+echo "-----------------------------------------------"
+
+ssh "$REMOTE_USER@$REMOTE_HOST" << 'ENDSSH'
+echo '📦 Creating backup of old data...'
+BACKUP_DIR="/root/pokerchain-backup-$(date +%Y%m%d-%H%M%S)"
+if [ -d '/root/.pokerchain' ]; then
+    mkdir -p "$BACKUP_DIR"
+    cp -r /root/.pokerchain/* "$BACKUP_DIR/" 2>/dev/null || true
+    echo "✅ Backup created at $BACKUP_DIR"
+else
+    echo 'ℹ️  No existing data to backup'
+fi
+
+echo '🗑️  Removing old installation...'
+sudo rm -f /usr/local/bin/pokerchaind
+rm -rf /root/.pokerchain
+echo '✅ Old data removed'
+ENDSSH
+
+# Step 6: Copy binary to remote
+echo ""
+echo -e "${BLUE}📤 Step 6: Copying binary to remote node...${NC}"
+echo "-------------------------------------------"
+
+scp "$LOCAL_BINARY" "$REMOTE_USER@$REMOTE_HOST:/tmp/pokerchaind"
+ssh "$REMOTE_USER@$REMOTE_HOST" << 'ENDSSH'
+sudo mv /tmp/pokerchaind /usr/local/bin/pokerchaind
+sudo chmod +x /usr/local/bin/pokerchaind
+sudo chown root:root /usr/local/bin/pokerchaind
+echo '✅ Binary installed to /usr/local/bin/pokerchaind'
+
+# Verify binary
+REMOTE_VERSION=$(pokerchaind version 2>/dev/null || echo 'unknown')
+echo "📌 Remote binary version: $REMOTE_VERSION"
+ENDSSH
+
+# Step 7: Initialize node and copy configuration
+echo ""
+echo -e "${BLUE}⚙️  Step 7: Initializing node and copying config...${NC}"
+echo "--------------------------------------------------"
+
+# Create temporary config files with updated persistent_peers
+echo "📝 Preparing configuration files..."
+TEMP_CONFIG=$(mktemp)
+TEMP_APP=$(mktemp)
+
+# Copy config.toml and update persistent_peers
+cp "./config.toml" "$TEMP_CONFIG"
+sed -i "s|^persistent_peers = .*|persistent_peers = \"${SEED_NODE_ID}@${SEED_NODE_HOST}:${SEED_NODE_PORT}\"|" "$TEMP_CONFIG"
+
+# Copy app.toml (no changes needed)
+cp "./app.toml" "$TEMP_APP"
+
+echo "📤 Uploading configuration files..."
+scp "./genesis.json" "$REMOTE_USER@$REMOTE_HOST:/tmp/genesis.json"
+scp "$TEMP_APP" "$REMOTE_USER@$REMOTE_HOST:/tmp/app.toml"
+scp "$TEMP_CONFIG" "$REMOTE_USER@$REMOTE_HOST:/tmp/config.toml"
+
+# Clean up temp files
+rm -f "$TEMP_CONFIG" "$TEMP_APP"
+
+# Get a unique moniker for this node
+MONIKER="${REMOTE_HOST%%.*}-sync"
+
+ssh "$REMOTE_USER@$REMOTE_HOST" << ENDSSH
+echo '🔧 Initializing pokerchaind...'
+pokerchaind init "$MONIKER" --chain-id pokerchain --home /root/.pokerchain
+
+echo '📋 Installing genesis file...'
+rm -f /root/.pokerchain/config/genesis.json
+cp /tmp/genesis.json /root/.pokerchain/config/genesis.json
+
+echo '⚙️  Installing configuration files...'
+cp /tmp/app.toml /root/.pokerchain/config/app.toml
+cp /tmp/config.toml /root/.pokerchain/config/config.toml
+
+echo '🔍 Verifying genesis hash...'
+REMOTE_HASH=\$(sha256sum /root/.pokerchain/config/genesis.json | cut -d' ' -f1)
+echo "Remote genesis hash: \$REMOTE_HASH"
+
+echo '🧹 Cleaning temporary files...'
+rm -f /tmp/genesis.json /tmp/app.toml /tmp/config.toml
+
+echo '✅ Configuration installed!'
+ENDSSH
+
+# Step 8: Setup systemd service
+echo ""
+echo -e "${BLUE}🔧 Step 8: Setting up systemd service...${NC}"
+echo "----------------------------------------"
+
+scp "./pokerchaind.service" "$REMOTE_USER@$REMOTE_HOST:/tmp/"
+
+ssh "$REMOTE_USER@$REMOTE_HOST" << 'ENDSSH'
+echo '📝 Installing systemd service...'
+sudo mv /tmp/pokerchaind.service /etc/systemd/system/
+sudo chown root:root /etc/systemd/system/pokerchaind.service
+sudo chmod 644 /etc/systemd/system/pokerchaind.service
+
+echo '🔄 Reloading systemd...'
+sudo systemctl daemon-reload
+
+echo '🚀 Enabling pokerchaind service...'
+sudo systemctl enable pokerchaind
+
+echo '✅ Systemd service configured!'
+ENDSSH
+
+# Step 9: Verify configuration
+echo ""
+echo -e "${BLUE}🔍 Step 9: Verifying configuration...${NC}"
+echo "------------------------------------"
+
+ssh "$REMOTE_USER@$REMOTE_HOST" << 'ENDSSH'
+echo '📊 Configuration summary:'
+echo "  Chain ID: pokerchain"
+echo "  Node Moniker: $(grep '^moniker = ' /root/.pokerchain/config/config.toml | cut -d'"' -f2)"
+echo '  Home: /root/.pokerchain'
+
+echo ''
+echo '🌐 API Configuration:'
+grep -A 3 '\[api\]' /root/.pokerchain/config/app.toml | grep 'enable\|address\|swagger' || true
+
+echo ''
+echo '⚡ RPC Configuration:'
+grep 'laddr = ' /root/.pokerchain/config/config.toml | head -1 || true
+
+echo ''
+echo '👥 Persistent Peers:'
+grep '^persistent_peers = ' /root/.pokerchain/config/config.toml || true
+
+echo ''
+echo '🆔 Node ID:'
+pokerchaind tendermint show-node-id --home /root/.pokerchain
+ENDSSH
+
+# Step 10: Start service
+echo ""
+echo -e "${BLUE}🚀 Step 10: Starting pokerchaind service...${NC}"
+echo "-----------------------------------------"
+
+ssh "$REMOTE_USER@$REMOTE_HOST" << 'ENDSSH'
+echo '▶️  Starting pokerchaind service...'
+sudo systemctl start pokerchaind
+sleep 3
+
+echo '📊 Service status:'
+sudo systemctl status pokerchaind --no-pager -l || true
+
+echo ''
+echo '🔍 Checking if node is running...'
+sleep 5
+if curl -s http://localhost:26657/status > /dev/null 2>&1; then
+    echo '✅ Node is responding on RPC port 26657'
+    echo ''
+    echo '📊 Initial sync status:'
+    curl -s http://localhost:26657/status | jq '.result.sync_info' || true
+else
+    echo '⚠️  RPC not responding yet (may take a moment to start)'
+fi
+ENDSSH
+
+# Step 11: Display info
+echo ""
+echo -e "${GREEN}🎉 Deployment Complete!${NC}"
+echo "======================"
+echo ""
+echo "🖥️  Sync Node Information:"
+echo "   Host: $REMOTE_HOST"
+echo "   Chain ID: pokerchain"
+echo "   Moniker: $MONIKER"
+echo "   Mode: Read-Only Sync Node"
+echo ""
+echo "🌐 Network Endpoints:"
+echo "   P2P:     $REMOTE_HOST:26656"
+echo "   RPC:     http://$REMOTE_HOST:26657"
+echo "   API:     http://$REMOTE_HOST:1317"
+echo ""
+echo "🔗 Connected to Seed Node:"
+echo "   $SEED_NODE_ID@$SEED_NODE_HOST:$SEED_NODE_PORT"
+echo ""
+echo "📊 Monitor the service:"
+echo "   ssh $REMOTE_USER@$REMOTE_HOST 'sudo systemctl status pokerchaind'"
+echo "   ssh $REMOTE_USER@$REMOTE_HOST 'sudo journalctl -u pokerchaind -f'"
+echo ""
+echo "🔍 Check sync status:"
+echo "   ssh $REMOTE_USER@$REMOTE_HOST 'curl -s http://localhost:26657/status | jq .result.sync_info'"
+echo ""
+echo "⚠️  Note: The node will sync blocks from the network. This may take time."
+echo ""
