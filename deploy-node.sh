@@ -23,19 +23,23 @@ echo ""
 echo "🔨 Step 1: Building pokerchaind locally..."
 echo "----------------------------------------"
 
+# Create build directory
+BUILD_DIR="./build"
+mkdir -p "$BUILD_DIR"
+
 # Clean and build
 echo "Cleaning previous builds..."
 go clean -cache
-make clean 2>/dev/null || true
+rm -f "$BUILD_DIR/pokerchaind"
 
 echo "Building pokerchaind..."
-make install
-
-LOCAL_BINARY="$(go env GOPATH)/bin/pokerchaind"
-if [ ! -f "$LOCAL_BINARY" ]; then
-    echo "❌ Build failed. Binary not found at $LOCAL_BINARY"
+if ! go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
+    echo "❌ Build failed"
     exit 1
 fi
+
+LOCAL_BINARY="$BUILD_DIR/pokerchaind"
+chmod +x "$LOCAL_BINARY"
 
 BINARY_VERSION=$(${LOCAL_BINARY} version 2>/dev/null || echo "unknown")
 echo "✅ Build successful! Version: $BINARY_VERSION"

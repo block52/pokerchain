@@ -34,18 +34,26 @@ if [ ! -d "$HOME_DIR" ]; then
 fi
 
 # Check if pokerchaind is installed
-if ! command -v pokerchaind &> /dev/null; then
-    print_error "pokerchaind not found in PATH"
+POKERCHAIND_BIN=""
+
+# First check for binary in repo build directory
+if [ -f "./build/pokerchaind" ]; then
+    POKERCHAIND_BIN="./build/pokerchaind"
+    print_success "Using repo binary: $POKERCHAIND_BIN"
+elif command -v pokerchaind &> /dev/null; then
+    POKERCHAIND_BIN="pokerchaind"
+    print_warning "Using system pokerchaind: $(which pokerchaind)"
+    print_info "Consider using repo binary: ./build/pokerchaind"
+else
+    print_error "pokerchaind not found"
     echo ""
-    echo "Please install pokerchaind:"
-    echo "  make install"
+    echo "Please build pokerchaind:"
+    echo "  go build -o ./build/pokerchaind ./cmd/pokerchaind"
     echo ""
-    echo "Or add to PATH:"
-    echo "  export PATH=\"\$HOME/go/bin:\$PATH\""
+    echo "Or use the deployment script which builds automatically:"
+    echo "  ./deploy-master-node.sh"
     exit 1
 fi
-
-print_success "pokerchaind found: $(which pokerchaind)"
 
 # Check if already running
 if pgrep -x pokerchaind > /dev/null; then
@@ -172,7 +180,7 @@ else
         echo ""
         
         # Start in foreground
-        pokerchaind start --minimum-gas-prices="0.01stake"
+        $POKERCHAIND_BIN start --minimum-gas-prices="0.01stake"
     else
         echo "Cancelled."
         echo ""

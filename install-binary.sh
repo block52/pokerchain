@@ -8,7 +8,8 @@ set -e
 REMOTE_HOST="$1"
 REMOTE_USER="${2:-$(whoami)}"
 WITH_GENESIS="$3"
-LOCAL_BINARY="$(go env GOPATH)/bin/pokerchaind"
+BUILD_DIR="./build"
+LOCAL_BINARY="$BUILD_DIR/pokerchaind"
 GENESIS_FILE="./genesis-minimal-b52Token.json"
 REMOTE_PATH="/usr/local/bin/pokerchaind"
 REMOTE_HOME="/home/$REMOTE_USER"
@@ -22,16 +23,22 @@ fi
 echo "🚀 Installing pokerchaind on $REMOTE_USER@$REMOTE_HOST"
 echo "=================================="
 
-# Check if binary exists locally
+# Build binary if it doesn't exist
 if [ ! -f "$LOCAL_BINARY" ]; then
     echo "❌ Binary not found at $LOCAL_BINARY"
     echo "Building pokerchaind..."
-    make install
     
-    if [ ! -f "$LOCAL_BINARY" ]; then
+    # Create build directory
+    mkdir -p "$BUILD_DIR"
+    
+    # Build to build directory
+    go clean -cache
+    if ! go build -o "$LOCAL_BINARY" ./cmd/pokerchaind; then
         echo "❌ Build failed. Please check the build process."
         exit 1
     fi
+    
+    chmod +x "$LOCAL_BINARY"
     echo "✅ pokerchaind built successfully"
 else
     echo "✅ Using existing binary at $LOCAL_BINARY"
