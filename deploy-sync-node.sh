@@ -220,9 +220,44 @@ rm -f /tmp/genesis.json /tmp/app.toml /tmp/config.toml
 echo '✅ Configuration installed!'
 ENDSSH
 
-# Step 8: Setup systemd service
+# Step 8: Configure firewall
 echo ""
-echo -e "${BLUE}🔧 Step 8: Setting up systemd service...${NC}"
+echo -e "${BLUE}🔥 Step 8: Configuring firewall (UFW)...${NC}"
+echo "---------------------------------------"
+
+ssh "$REMOTE_USER@$REMOTE_HOST" << 'ENDSSH'
+echo '🔍 Checking if UFW is installed...'
+if command -v ufw &> /dev/null; then
+    echo '✅ UFW is installed'
+    
+    echo '🔧 Configuring UFW rules...'
+    
+    # Allow SSH (important - don't lock yourself out!)
+    sudo ufw allow 22/tcp comment 'SSH' 2>/dev/null || true
+    
+    # Allow Pokerchain ports
+    sudo ufw allow 26656/tcp comment 'Pokerchain P2P' 2>/dev/null || true
+    sudo ufw allow 26657/tcp comment 'Pokerchain RPC' 2>/dev/null || true
+    sudo ufw allow 1317/tcp comment 'Pokerchain API' 2>/dev/null || true
+    
+    # Enable UFW if not already enabled
+    echo '🚀 Enabling UFW...'
+    sudo ufw --force enable 2>/dev/null || true
+    
+    echo ''
+    echo '📋 Current UFW status:'
+    sudo ufw status numbered
+    
+    echo '✅ Firewall configured!'
+else
+    echo '⚠️  UFW not installed, skipping firewall configuration'
+    echo 'Install with: sudo apt-get install ufw'
+fi
+ENDSSH
+
+# Step 9: Setup systemd service
+echo ""
+echo -e "${BLUE}🔧 Step 9: Setting up systemd service...${NC}"
 echo "----------------------------------------"
 
 scp "./pokerchaind.service" "$REMOTE_USER@$REMOTE_HOST:/tmp/"
@@ -242,10 +277,10 @@ sudo systemctl enable pokerchaind
 echo '✅ Systemd service configured!'
 ENDSSH
 
-# Step 9: Verify configuration
+# Step 10: Verify configuration
 echo ""
-echo -e "${BLUE}🔍 Step 9: Verifying configuration...${NC}"
-echo "------------------------------------"
+echo -e "${BLUE}🔍 Step 10: Verifying configuration...${NC}"
+echo "-------------------------------------"
 
 ssh "$REMOTE_USER@$REMOTE_HOST" << 'ENDSSH'
 echo '📊 Configuration summary:'
@@ -270,10 +305,10 @@ echo '🆔 Node ID:'
 pokerchaind tendermint show-node-id --home /root/.pokerchain
 ENDSSH
 
-# Step 10: Start service
+# Step 11: Start service
 echo ""
-echo -e "${BLUE}🚀 Step 10: Starting pokerchaind service...${NC}"
-echo "-----------------------------------------"
+echo -e "${BLUE}🚀 Step 11: Starting pokerchaind service...${NC}"
+echo "------------------------------------------"
 
 ssh "$REMOTE_USER@$REMOTE_HOST" << 'ENDSSH'
 echo '▶️  Starting pokerchaind service...'
@@ -296,7 +331,7 @@ else
 fi
 ENDSSH
 
-# Step 11: Display info
+# Step 12: Display info
 echo ""
 echo -e "${GREEN}🎉 Deployment Complete!${NC}"
 echo "======================"

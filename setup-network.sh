@@ -104,11 +104,11 @@ setup_sync() {
     echo "Setting up Sync Node (local read-only)"
     echo ""
     
-    if check_script "./setup-sync-node.sh"; then
-        chmod +x ./setup-sync-node.sh
-        ./setup-sync-node.sh
+    if check_script "./setup-local-sync-node.sh"; then
+        chmod +x ./setup-local-sync-node.sh
+        ./setup-local-sync-node.sh
     else
-        echo "Please ensure setup-sync-node.sh is in the current directory"
+        echo "Please ensure setup-local-sync-node.sh is in the current directory"
         read -p "Press Enter to continue..."
     fi
 }
