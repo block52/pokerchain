@@ -40,28 +40,34 @@ echo "Seed Node: $SEED_NODE_ID@$SEED_NODE_HOST:$SEED_NODE_PORT"
 echo ""
 
 # Step 1: Build binary
-echo -e "${BLUE}📦 Step 1: Building binary...${NC}"
-echo "-----------------------------"
-
-# Create build directory in repo
 BUILD_DIR="./build"
-mkdir -p "$BUILD_DIR"
-
-# Clean previous builds
-echo "🧹 Cleaning previous builds..."
-go clean -cache
-rm -f "$BUILD_DIR/pokerchaind"
-
-# Build the binary
-echo "🔧 Building pokerchaind..."
-if ! go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
-    echo -e "${RED}❌ Build failed${NC}"
-    exit 1
+# Check if binary already exists
+if [ -f "$BUILD_DIR/pokerchaind" ]; then
+    echo -e "${YELLOW}⚠️  Found existing build at $BUILD_DIR/pokerchaind.${NC}"
+    read -p "Do you want to rebuild it? (y/n): " REBUILD_CHOICE
+    if [[ "$REBUILD_CHOICE" =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}🔧 Rebuilding pokerchaind...${NC}"
+        go clean -cache
+        rm -f "$BUILD_DIR/pokerchaind"
+        if ! go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
+            echo -e "${RED}❌ Build failed${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${GREEN}✅ Using existing build.${NC}"
+    fi
+else
+    echo -e "${BLUE}🔧 Building pokerchaind...${NC}"
+    go clean -cache
+    rm -f "$BUILD_DIR/pokerchaind"
+    if ! go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
+        echo -e "${RED}❌ Build failed${NC}"
+        exit 1
+    fi
 fi
 
 LOCAL_BINARY="$BUILD_DIR/pokerchaind"
 chmod +x "$LOCAL_BINARY"
-
 BINARY_VERSION=$(${LOCAL_BINARY} version 2>/dev/null || echo "unknown")
 BINARY_SIZE=$(ls -lh "$LOCAL_BINARY" | awk '{print $5}')
 echo -e "${GREEN}✅ Build successful!${NC}"

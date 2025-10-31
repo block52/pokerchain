@@ -76,7 +76,7 @@ fi
 # Test 5: Check deployment scripts
 echo ""
 echo "🛠️  Test 5: Deployment scripts check"
-SCRIPTS=("deploy-node.sh" "install-binary.sh" "second-node.sh" "connect-to-network.sh" "get-node-info.sh" "setup-network.sh")
+SCRIPTS=("install-binary.sh" "second-node.sh" "connect-to-network.sh" "get-node-info.sh" "setup-network.sh")
 
 for script in "${SCRIPTS[@]}"; do
     if [ -f "./$script" ] && [ -x "./$script" ]; then
@@ -101,8 +101,3 @@ echo "✅ Deployment scripts ready"
 echo ""
 echo "🚀 Ready for deployment!"
 echo ""
-echo "To deploy to a remote node:"
-echo "./deploy-node.sh <hostname> [username] [moniker]"
-echo ""
-echo "Example:"
-echo "./deploy-node.sh node1.block52.xyz ubuntu node1.block52.xyz"

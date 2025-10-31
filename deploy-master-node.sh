@@ -21,16 +21,37 @@ echo "-----------------------------"
 BUILD_DIR="./build"
 mkdir -p "$BUILD_DIR"
 
-# Clean previous builds
-echo "🧹 Cleaning previous builds..."
-go clean -cache
-rm -f "$BUILD_DIR/pokerchaind"
-
-# Build the binary
-echo "🔧 Building pokerchaind..."
-if ! go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
-    echo "❌ Build failed"
-    exit 1
+# Check if binary already exists
+if [ -f "$BUILD_DIR/pokerchaind" ]; then
+    echo "⚠️  Found existing build at $BUILD_DIR/pokerchaind."
+    read -p "Do you want to rebuild it? (y/n): " REBUILD_CHOICE
+    if [[ "$REBUILD_CHOICE" =~ ^[Yy]$ ]]; then
+        echo "🔧 Rebuilding pokerchaind..."
+        # Clean previous builds
+        echo "🧹 Cleaning previous builds..."
+        go clean -cache
+        rm -f "$BUILD_DIR/pokerchaind"
+        # Build the binary
+        echo "🔧 Building pokerchaind..."
+        if ! go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
+            echo "❌ Build failed"
+            exit 1
+        fi
+    else
+        echo "✅ Using existing build."
+    fi
+else
+    echo "🔧 Building pokerchaind..."
+    # Clean previous builds
+    echo "🧹 Cleaning previous builds..."
+    go clean -cache
+    rm -f "$BUILD_DIR/pokerchaind"
+    # Build the binary
+    echo "🔧 Building pokerchaind..."
+    if ! go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
+        echo "❌ Build failed"
+        exit 1
+    fi
 fi
 
 LOCAL_BINARY="$BUILD_DIR/pokerchaind"

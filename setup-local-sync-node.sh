@@ -30,13 +30,25 @@ echo ""
 rm -rf "$HOME_DIR/data" "$HOME_DIR/config"
 
 # Step 1: Build binary
-echo -e "${BLUE}📦 Step 1: Building binary...${NC}"
-echo "-----------------------------"
-
-echo "🔧 Building pokerchaind with make..."
-if ! make install; then
-    echo -e "${RED}❌ Build failed${NC}"
-    exit 1
+BINARY_PATH="$HOME/go/bin/pokerchaind"
+if [ -f "$BINARY_PATH" ]; then
+    echo -e "${YELLOW}⚠️  Found existing pokerchaind binary at $BINARY_PATH.${NC}"
+    read -p "Do you want to rebuild it? (y/n): " REBUILD_CHOICE
+    if [[ "$REBUILD_CHOICE" =~ ^[Yy]$ ]]; then
+        echo "🔧 Rebuilding pokerchaind with make..."
+        if ! make install; then
+            echo -e "${RED}❌ Build failed${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${GREEN}✅ Using existing binary.${NC}"
+    fi
+else
+    echo "🔧 Building pokerchaind with make..."
+    if ! make install; then
+        echo -e "${RED}❌ Build failed${NC}"
+        exit 1
+    fi
 fi
 
 # Verify installation and add to PATH if needed
