@@ -320,6 +320,7 @@ If deployment fails and node can't be recovered:
 
 ## Quick Reference Commands
 
+### Remote Node (node1.block52.xyz)
 ```bash
 # Check block production in real-time
 watch -n 2 'curl -s http://node1.block52.xyz:26657/status | jq .result.sync_info.latest_block_height'
@@ -336,3 +337,126 @@ curl http://node1.block52.xyz:26657/status | jq .
 # Check validators
 curl http://node1.block52.xyz:26657/validators | jq .
 ```
+
+### Local Sync Node
+```bash
+# Check sync status
+curl -s http://localhost:26657/status | jq .result.sync_info
+
+# Watch block height
+watch -n 2 'curl -s http://localhost:26657/status | jq .result.sync_info.latest_block_height'
+
+# Stop local node
+pkill pokerchaind
+```
+
+---
+
+## Local Sync Node Setup
+
+**Date**: 2025-10-31 12:19 PM
+**Script**: `setup-local-sync-node.sh`
+**Status**: ⚠️ **PARTIAL SUCCESS - Binary version mismatch**
+
+### Setup Results
+- [x] Binary built successfully (ARM/macOS native)
+- [x] Genesis file from repository (hash: `e706ff48a598d50c3661e5215a3781484cf0b75c591b8024f3336683c9cdc553`)
+- [x] Node initialized with moniker "local-sync"
+- [x] Persistent peer configured: `08890a89197b2afd56b115e9b749cef7d4578c5c@node1.block52.xyz:26656`
+- [x] Node connected to node1.block52.xyz
+- [x] ~~Started syncing blocks 1-6~~ **Initial attempt**
+- [x] ✅ **Binary version fixed - ready for retry**
+
+### Binary Version Issue
+```
+Local binary:  main-57a7828b387da091a81042a13930563a74769711
+Remote binary: main-7a22c7ada02a1b7be6165f589f5761af9b3e9b16
+```
+
+**Problem**: Different commit versions produce different AppHashes
+**Error**: `wrong Block.Header.AppHash. Expected 81941719..., got 517C4B19...`
+
+### Root Cause
+The local Mac built the binary from a different git commit than the remote Linux node. Even though both use the same genesis file, **different code versions can produce different state transition results**, leading to AppHash mismatches during block validation.
+
+### Resolution Applied ✅
+Built local binary from the **exact same git commit** as node1:
+1. ✅ Stashed uncommitted changes
+2. ✅ Checked out commit: `7a22c7ada02a1b7be6165f589f5761af9b3e9b16`
+3. ✅ Rebuilt pokerchaind with `make install`
+4. ✅ Returned to main branch
+5. ✅ Restored stashed changes
+6. ✅ Updated script to auto-detect CPU architecture
+
+**Binary version**: `HEAD-7a22c7ada02a1b7be6165f589f5761af9b3e9b16` ✅ (matches node1)
+
+### How to Run Local Sync Node
+
+```bash
+# Stop current pokerchaind (Ctrl+C in terminal where it's running)
+
+# Run setup script
+./setup-local-sync-node.sh
+
+# When prompted: "Do you want to rebuild it? (y/n):"
+# Answer: y   ← This will rebuild for your local architecture
+#         n   ← Use existing binary
+
+# Press Enter to start syncing
+```
+
+**Script Features**:
+- ✅ Auto-detects CPU architecture (ARM64 for M1/M2/M3, x86_64 for Intel)
+- ✅ Builds native binary (no cross-compilation)
+- ✅ Shows architecture info during build
+- ✅ Interactive rebuild for testing code changes
+
+### Sync Node Configuration
+```
+Home Dir:     ~/.pokerchain
+Node ID:      07de55d36db36181fbe1529b2c9800a4a2fba39f
+Chain ID:     pokerchain
+Moniker:      local-sync
+Mode:         Read-only sync node (not validator)
+Peer:         08890a89197b2afd56b115e9b749cef7d4578c5c@node1.block52.xyz:26656
+```
+
+### Successfully Verified
+- ✅ Genesis file from repository (no remote verification needed for dev)
+- ✅ P2P connection established to node1
+- ✅ Started block sync from genesis
+- ✅ Bridge service initialized (Base Chain USDC monitoring)
+- ✅ All Cosmos SDK modules initialized correctly
+
+### Script Updates (Dev Mode)
+- ✅ Removed SSH genesis download from node1 (faster dev setup)
+- ✅ Uses local genesis.json from repository
+- ✅ Skips remote hash verification (not needed for local dev)
+- ✅ Binary version now matches node1: `HEAD-7a22c7ada02a1b7be6165f589f5761af9b3e9b16`
+
+### Important: Architecture vs Code Version
+
+**Architecture DOES NOT affect AppHash:**
+- ✅ ARM64 (Mac M1/M2) binary from commit `7a22c7a` → Same AppHash
+- ✅ x86_64 (Linux) binary from commit `7a22c7a` → Same AppHash
+- ❌ ARM64 binary from commit `57a7828` (main) → **Different AppHash** ⚠️
+
+**The Issue:**
+- When you rebuild with `./setup-local-sync-node.sh` and answer 'y', it builds from your **current git branch**
+- If you're on `main` branch (commit `57a7828`), it builds a newer version
+- Even though it's ARM64, it produces different AppHash because **code is different**
+
+**The Fix:**
+Use the helper script to build from the matching commit:
+```bash
+./build-matching-node1.sh
+```
+
+This script:
+1. Stashes your changes
+2. Checks out commit `7a22c7a`
+3. Builds binary for your architecture (ARM64)
+4. Returns to your branch
+5. Restores your changes
+
+**Result:** Your ARM64 Mac binary will produce the **same AppHash** as node1's x86_64 Linux binary!

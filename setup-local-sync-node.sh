@@ -1,16 +1,37 @@
 #!/bin/bash
 
 # Local Sync Node Setup Script
-# Sets up a local read-only sync node using the same approach as remote deployment
+# Sets up a local read-only sync node that syncs from node1.block52.xyz
+#
+# Features:
+# - Auto-detects CPU architecture and builds native binary
+#   * ARM64 (M1/M2/M3 Mac)
+#   * x86_64 (Intel Mac, Linux)
+# - Uses local genesis.json file from repository
+# - Configures node to connect to node1.block52.xyz as persistent peer
+# - Runs in terminal foreground (not as systemd service)
+# - macOS and Linux compatible
+# - Development-friendly: no remote genesis verification (faster setup)
+# - Interactive rebuild option for testing
+#
 # Usage: ./setup-local-sync-node.sh
+#
+# Note: When prompted to rebuild, answer 'y' to test with latest code changes
 
 set -e
+
+# Detect OS and set sha256 command
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    SHA256="shasum -a 256"
+else
+    SHA256="sha256sum"
+fi
 
 # Configuration
 CHAIN_ID="pokerchain"
 HOME_DIR="$HOME/.pokerchain"
 SEED_NODE_HOST="node1.block52.xyz"
-SEED_NODE_ID="a429c82669d8932602ca43139733f98c42817464"
+SEED_NODE_ID="08890a89197b2afd56b115e9b749cef7d4578c5c"
 SEED_NODE_PORT="26656"
 
 # Color codes
@@ -30,26 +51,45 @@ echo ""
 rm -rf "$HOME_DIR/data" "$HOME_DIR/config"
 
 # Step 1: Build binary
+echo -e "${BLUE}🔧 Step 1: Building pokerchaind binary...${NC}"
+echo "----------------------------------------"
+
+# Detect architecture
+ARCH=$(uname -m)
+OS=$(uname -s)
+echo "Detected: $OS / $ARCH"
+
 BINARY_PATH="$HOME/go/bin/pokerchaind"
 if [ -f "$BINARY_PATH" ]; then
-    echo -e "${YELLOW}⚠️  Found existing pokerchaind binary at $BINARY_PATH.${NC}"
+    EXISTING_VERSION=$(pokerchaind version 2>/dev/null || echo "unknown")
+    echo -e "${YELLOW}⚠️  Found existing pokerchaind binary${NC}"
+    echo "   Path: $BINARY_PATH"
+    echo "   Version: $EXISTING_VERSION"
+    echo ""
     read -p "Do you want to rebuild it? (y/n): " REBUILD_CHOICE
     if [[ "$REBUILD_CHOICE" =~ ^[Yy]$ ]]; then
-        echo "🔧 Rebuilding pokerchaind with make..."
+        echo ""
+        echo "🔧 Rebuilding pokerchaind for $ARCH..."
+        echo "   Building native binary (no cross-compilation)"
         if ! make install; then
             echo -e "${RED}❌ Build failed${NC}"
             exit 1
         fi
+        echo -e "${GREEN}✅ Build complete!${NC}"
     else
         echo -e "${GREEN}✅ Using existing binary.${NC}"
     fi
 else
-    echo "🔧 Building pokerchaind with make..."
+    echo "🔧 Building pokerchaind for $ARCH..."
+    echo "   Building native binary (no cross-compilation)"
     if ! make install; then
         echo -e "${RED}❌ Build failed${NC}"
         exit 1
     fi
+    echo -e "${GREEN}✅ Build complete!${NC}"
 fi
+
+echo ""
 
 # Verify installation and add to PATH if needed
 export PATH="$HOME/go/bin:$PATH"
@@ -61,20 +101,27 @@ if ! command -v pokerchaind &> /dev/null; then
 fi
 
 BINARY_VERSION=$(pokerchaind version 2>/dev/null || echo "unknown")
-echo -e "${GREEN}✅ Build successful!${NC}"
+BINARY_SIZE=$(ls -lh "$BINARY_PATH" | awk '{print $5}')
+echo ""
+echo "📦 Binary Information:"
 echo "   Version: $BINARY_VERSION"
+echo "   Architecture: $ARCH ($OS)"
+echo "   Size: $BINARY_SIZE"
 echo "   Location: $(which pokerchaind)"
+echo -e "${GREEN}✅ Binary ready for sync!${NC}"
 
 # Step 2: Check configuration files
 echo ""
 echo -e "${BLUE}📋 Step 2: Checking configuration files...${NC}"
 echo "------------------------------------------"
 
+# Check for genesis file
 if [ ! -f "./genesis.json" ]; then
     echo -e "${RED}❌ Genesis file not found at ./genesis.json${NC}"
     exit 1
 fi
 
+# Check for config files
 if [ ! -f "./app.toml" ]; then
     echo -e "${RED}❌ app.toml not found${NC}"
     exit 1
@@ -85,8 +132,8 @@ if [ ! -f "./config.toml" ]; then
     exit 1
 fi
 
-LOCAL_GENESIS_HASH=$(sha256sum "./genesis.json" | cut -d' ' -f1)
-echo -e "${GREEN}✅ All files present!${NC}"
+LOCAL_GENESIS_HASH=$($SHA256 "./genesis.json" | cut -d' ' -f1)
+echo -e "${GREEN}✅ All configuration files ready!${NC}"
 echo "   Genesis hash: $LOCAL_GENESIS_HASH"
 
 # Step 3: Stop any running processes
@@ -140,7 +187,13 @@ echo "-------------------------------------------"
 # Create temporary config with updated persistent_peers
 TEMP_CONFIG=$(mktemp)
 cp "./config.toml" "$TEMP_CONFIG"
-sed -i "s|^persistent_peers = .*|persistent_peers = \"${SEED_NODE_ID}@${SEED_NODE_HOST}:${SEED_NODE_PORT}\"|" "$TEMP_CONFIG"
+
+# macOS and Linux compatible sed
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s|^persistent_peers = .*|persistent_peers = \"${SEED_NODE_ID}@${SEED_NODE_HOST}:${SEED_NODE_PORT}\"|" "$TEMP_CONFIG"
+else
+    sed -i "s|^persistent_peers = .*|persistent_peers = \"${SEED_NODE_ID}@${SEED_NODE_HOST}:${SEED_NODE_PORT}\"|" "$TEMP_CONFIG"
+fi
 
 echo "📋 Installing genesis file..."
 cp "./genesis.json" "$HOME_DIR/config/genesis.json"
@@ -155,8 +208,9 @@ cp "$TEMP_CONFIG" "$HOME_DIR/config/config.toml"
 rm -f "$TEMP_CONFIG"
 
 echo "🔍 Verifying genesis hash..."
-INSTALLED_HASH=$(sha256sum "$HOME_DIR/config/genesis.json" | cut -d' ' -f1)
+INSTALLED_HASH=$($SHA256 "$HOME_DIR/config/genesis.json" | cut -d' ' -f1)
 echo "   Installed genesis hash: $INSTALLED_HASH"
+echo "   Source genesis hash:    $LOCAL_GENESIS_HASH"
 
 if [ "$LOCAL_GENESIS_HASH" = "$INSTALLED_HASH" ]; then
     echo -e "${GREEN}✅ Genesis hash matches!${NC}"
@@ -187,73 +241,27 @@ echo ""
 echo "🆔 Node ID:"
 pokerchaind tendermint show-node-id --home "$HOME_DIR"
 
-# Step 8: Start node
+# Step 8: Start node in foreground
 echo ""
-echo -e "${BLUE}🚀 Step 8: Starting node...${NC}"
-echo "-------------------------"
+echo -e "${BLUE}🚀 Step 8: Ready to start sync node!${NC}"
+echo "-----------------------------------"
 
 echo ""
-echo "You can start the node in two ways:"
+echo -e "${GREEN}✅ Setup complete! Ready to start syncing from node1.block52.xyz${NC}"
 echo ""
-echo "1️⃣  Run in foreground (for testing):"
-echo "   pokerchaind start --home $HOME_DIR"
-echo ""
-echo "2️⃣  Run in background:"
-echo "   nohup pokerchaind start --home $HOME_DIR > $HOME_DIR/pokerchaind.log 2>&1 &"
-echo ""
-echo "📊 Monitor sync status:"
-echo "   curl -s http://localhost:26657/status | jq .result.sync_info"
-echo ""
-echo "📝 View logs (if running in background):"
-echo "   tail -f $HOME_DIR/pokerchaind.log"
-echo ""
-
-read -p "Would you like to start the node now in the background? (y/n): " start_now
-
-if [[ "$start_now" =~ ^[Yy]$ ]]; then
-    echo ""
-    echo "🚀 Starting pokerchaind in background..."
-    nohup pokerchaind start --home "$HOME_DIR" > "$HOME_DIR/pokerchaind.log" 2>&1 &
-    NODE_PID=$!
-    echo "✅ Node started with PID: $NODE_PID"
-    
-    echo ""
-    echo "⏳ Waiting for node to start (5 seconds)..."
-    sleep 5
-    
-    echo ""
-    echo "🔍 Checking node status..."
-    if curl -s http://localhost:26657/status > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Node is responding on RPC port 26657${NC}"
-        echo ""
-        echo "📊 Initial sync status:"
-        curl -s http://localhost:26657/status | jq '.result.sync_info' || echo "Install jq for formatted output: sudo apt-get install jq"
-    else
-        echo -e "${YELLOW}⚠️  RPC not responding yet (may take a moment)${NC}"
-        echo "Check logs: tail -f $HOME_DIR/pokerchaind.log"
-    fi
-fi
-
-# Final summary
-echo ""
-echo -e "${GREEN}🎉 Setup Complete!${NC}"
-echo "=================="
-echo ""
-echo "🖥️  Local Sync Node Information:"
-echo "   Chain ID: $CHAIN_ID"
-echo "   Home: $HOME_DIR"
-echo "   Mode: Read-Only Sync Node"
-echo ""
-echo "🌐 Local Endpoints:"
-echo "   RPC: http://localhost:26657"
-echo "   API: http://localhost:1317"
-echo ""
-echo "🔗 Connected to:"
-echo "   $SEED_NODE_ID@$SEED_NODE_HOST:$SEED_NODE_PORT"
-echo ""
-echo "📊 Useful commands:"
-echo "   Check status:  curl -s http://localhost:26657/status | jq .result.sync_info"
-echo "   View logs:     tail -f $HOME_DIR/pokerchaind.log"
+echo "📊 Useful commands (open in another terminal):"
+echo "   Monitor sync:  curl -s http://localhost:26657/status | jq .result.sync_info"
 echo "   Stop node:     pkill pokerchaind"
-echo "   Restart node:  pokerchaind start --home $HOME_DIR"
 echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+read -p "Press Enter to start the node in this terminal (Ctrl+C to stop)..."
+
+echo ""
+echo "🚀 Starting pokerchaind sync node..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# Start node in foreground
+pokerchaind start --home "$HOME_DIR"

@@ -305,8 +305,10 @@ verify_network() {
     echo ""
     echo "Verifying Network Connectivity & Block Production"
     echo ""
-    
-    local remote_node="node1.block52.xyz"
+
+    read -p "Enter node to check (default: node1.block52.xyz): " remote_node
+    remote_node=${remote_node:-node1.block52.xyz}
+
     local rpc_port=26657
     local api_port=1317
     

@@ -1,8 +1,17 @@
 #!/bin/bash
 
 # Deploy sync node to a remote Linux server
-# Usage: ./deploy-sync-node.sh [REMOTE_HOST] [REMOTE_USER]
+#
+# Features:
+# - Always cross-compiles for Linux amd64 (for professionally hosted nodes)
+# - Compatible with macOS and Linux build machines
+# - Connects to node1.block52.xyz as persistent peer
+# - Sets up systemd service for automatic startup
+# - Configures firewall (UFW)
+#
+# Usage: ./deploy-sync-node.sh <REMOTE_HOST> [REMOTE_USER]
 # Example: ./deploy-sync-node.sh node2.example.com root
+#          ./deploy-sync-node.sh node.texashodl.net root
 
 set -e
 
@@ -10,7 +19,7 @@ set -e
 REMOTE_HOST="${1:-}"
 REMOTE_USER="${2:-root}"
 SEED_NODE_HOST="node1.block52.xyz"
-SEED_NODE_ID="a429c82669d8932602ca43139733f98c42817464"
+SEED_NODE_ID="08890a89197b2afd56b115e9b749cef7d4578c5c"
 SEED_NODE_PORT="26656"
 
 # Color codes
@@ -39,32 +48,46 @@ echo "Target: $REMOTE_USER@$REMOTE_HOST"
 echo "Seed Node: $SEED_NODE_ID@$SEED_NODE_HOST:$SEED_NODE_PORT"
 echo ""
 
-# Step 1: Build binary
+# Step 1: Build binary for Linux amd64
+echo -e "${BLUE}🔧 Step 1: Building binary for Linux amd64...${NC}"
+echo "----------------------------------------------"
 BUILD_DIR="./build"
+mkdir -p "$BUILD_DIR"
+
 # Check if binary already exists
 if [ -f "$BUILD_DIR/pokerchaind" ]; then
-    echo -e "${YELLOW}⚠️  Found existing build at $BUILD_DIR/pokerchaind.${NC}"
+    EXISTING_VERSION=$("$BUILD_DIR/pokerchaind" version 2>/dev/null || echo "unknown")
+    echo -e "${YELLOW}⚠️  Found existing build at $BUILD_DIR/pokerchaind${NC}"
+    echo "   Version: $EXISTING_VERSION"
+    echo ""
     read -p "Do you want to rebuild it? (y/n): " REBUILD_CHOICE
     if [[ "$REBUILD_CHOICE" =~ ^[Yy]$ ]]; then
-        echo -e "${BLUE}🔧 Rebuilding pokerchaind...${NC}"
+        echo ""
+        echo -e "${BLUE}🔧 Rebuilding pokerchaind for Linux amd64...${NC}"
+        echo "   Cross-compiling from $(uname -s)/$(uname -m)"
         go clean -cache
         rm -f "$BUILD_DIR/pokerchaind"
-        if ! go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
+        if ! GOOS=linux GOARCH=amd64 go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
             echo -e "${RED}❌ Build failed${NC}"
             exit 1
         fi
+        echo -e "${GREEN}✅ Build complete!${NC}"
     else
         echo -e "${GREEN}✅ Using existing build.${NC}"
     fi
 else
-    echo -e "${BLUE}🔧 Building pokerchaind...${NC}"
+    echo -e "${BLUE}🔧 Building pokerchaind for Linux amd64...${NC}"
+    echo "   Cross-compiling from $(uname -s)/$(uname -m)"
     go clean -cache
     rm -f "$BUILD_DIR/pokerchaind"
-    if ! go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
+    if ! GOOS=linux GOARCH=amd64 go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
         echo -e "${RED}❌ Build failed${NC}"
         exit 1
     fi
+    echo -e "${GREEN}✅ Build complete!${NC}"
 fi
+
+echo ""
 
 LOCAL_BINARY="$BUILD_DIR/pokerchaind"
 chmod +x "$LOCAL_BINARY"
@@ -100,7 +123,12 @@ if [ ! -f "./pokerchaind.service" ]; then
     exit 1
 fi
 
-LOCAL_GENESIS_HASH=$(sha256sum "./genesis.json" | cut -d' ' -f1)
+# Detect OS and use appropriate sha256 command
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    LOCAL_GENESIS_HASH=$(shasum -a 256 "./genesis.json" | cut -d' ' -f1)
+else
+    LOCAL_GENESIS_HASH=$(sha256sum "./genesis.json" | cut -d' ' -f1)
+fi
 echo -e "${GREEN}✅ All files present!${NC}"
 echo "   Genesis hash: $LOCAL_GENESIS_HASH"
 
@@ -188,7 +216,13 @@ TEMP_APP=$(mktemp)
 
 # Copy config.toml and update persistent_peers
 cp "./config.toml" "$TEMP_CONFIG"
-sed -i "s|^persistent_peers = .*|persistent_peers = \"${SEED_NODE_ID}@${SEED_NODE_HOST}:${SEED_NODE_PORT}\"|" "$TEMP_CONFIG"
+
+# macOS and Linux compatible sed
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s|^persistent_peers = .*|persistent_peers = \"${SEED_NODE_ID}@${SEED_NODE_HOST}:${SEED_NODE_PORT}\"|" "$TEMP_CONFIG"
+else
+    sed -i "s|^persistent_peers = .*|persistent_peers = \"${SEED_NODE_ID}@${SEED_NODE_HOST}:${SEED_NODE_PORT}\"|" "$TEMP_CONFIG"
+fi
 
 # Copy app.toml (no changes needed)
 cp "./app.toml" "$TEMP_APP"
