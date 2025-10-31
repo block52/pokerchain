@@ -2,14 +2,15 @@ BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 COMMIT := $(shell git log -1 --format='%H')
 APPNAME := pokerchain
 
-# do not override user values
-ifeq (,$(VERSION))
-  VERSION := $(shell git describe --exact-match 2>/dev/null)
-  # if VERSION is empty, then populate it with branch name and raw commit hash
-  ifeq (,$(VERSION))
-    VERSION := $(BRANCH)-$(COMMIT)
-  endif
-endif
+# # do not override user values
+# ifeq (,$(VERSION))
+#   VERSION := $(shell git describe --exact-match 2>/dev/null)
+#   # if VERSION is empty, then populate it with branch name and raw commit hash
+#   ifeq (,$(VERSION))
+#     VERSION := $(BRANCH)-$(COMMIT)
+#   endif
+# endif
+VERSION := v0.1.0
 
 # Update the ldflags with the app, client & server names
 ldflags = -X github.com/cosmos/cosmos-sdk/version.Name=$(APPNAME) \
