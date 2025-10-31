@@ -2,6 +2,34 @@ BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 COMMIT := $(shell git log -1 --format='%H')
 APPNAME := pokerchain
 
+# Detect architecture
+UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
+
+# Set OS
+ifeq ($(UNAME_S),Linux)
+	OS := linux
+endif
+ifeq ($(UNAME_S),Darwin)
+	OS := darwin
+endif
+
+# Set ARCH
+ifeq ($(UNAME_M),x86_64)
+	ARCH := amd64
+endif
+ifeq ($(UNAME_M),aarch64)
+	ARCH := arm64
+endif
+ifeq ($(UNAME_M),arm64)
+	ARCH := arm64
+endif
+
+# Default to amd64 if not detected
+ifeq ($(ARCH),)
+	ARCH := amd64
+endif
+
 # # do not override user values
 # ifeq (,$(VERSION))
 #   VERSION := $(shell git describe --exact-match 2>/dev/null)
@@ -19,6 +47,25 @@ ldflags = -X github.com/cosmos/cosmos-sdk/version.Name=$(APPNAME) \
 	-X github.com/cosmos/cosmos-sdk/version.Commit=$(COMMIT)
 
 BUILD_FLAGS := -ldflags '$(ldflags)'
+
+# Build output directory
+BUILD_DIR := ./build
+
+##############
+###  Info  ###
+##############
+
+info:
+	@echo "Detected System Information:"
+	@echo "  OS:           $(OS)"
+	@echo "  Architecture: $(ARCH)"
+	@echo "  Version:      $(VERSION)"
+	@echo "  Branch:       $(BRANCH)"
+	@echo "  Commit:       $(COMMIT)"
+	@echo ""
+	@echo "Build will create: $(APPNAME)d"
+
+.PHONY: info
 
 ##############
 ###  Test  ###
@@ -47,22 +94,58 @@ test: govet govulncheck test-unit
 .PHONY: test test-unit test-race test-cover bench
 
 #################
+###  Build    ###
+#################
+
+build:
+	@echo "--> Building $(APPNAME)d for $(OS)/$(ARCH)"
+	@mkdir -p $(BUILD_DIR)
+	@GOOS=$(OS) GOARCH=$(ARCH) go build $(BUILD_FLAGS) -mod=readonly -o $(BUILD_DIR)/$(APPNAME)d ./cmd/$(APPNAME)d
+	@echo "--> Binary created at $(BUILD_DIR)/$(APPNAME)d"
+
+build-linux-amd64:
+	@echo "--> Building $(APPNAME)d for linux/amd64"
+	@mkdir -p $(BUILD_DIR)
+	@GOOS=linux GOARCH=amd64 go build $(BUILD_FLAGS) -mod=readonly -o $(BUILD_DIR)/$(APPNAME)d-linux-amd64 ./cmd/$(APPNAME)d
+
+build-linux-arm64:
+	@echo "--> Building $(APPNAME)d for linux/arm64"
+	@mkdir -p $(BUILD_DIR)
+	@GOOS=linux GOARCH=arm64 go build $(BUILD_FLAGS) -mod=readonly -o $(BUILD_DIR)/$(APPNAME)d-linux-arm64 ./cmd/$(APPNAME)d
+
+build-darwin-amd64:
+	@echo "--> Building $(APPNAME)d for darwin/amd64"
+	@mkdir -p $(BUILD_DIR)
+	@GOOS=darwin GOARCH=amd64 go build $(BUILD_FLAGS) -mod=readonly -o $(BUILD_DIR)/$(APPNAME)d-darwin-amd64 ./cmd/$(APPNAME)d
+
+build-darwin-arm64:
+	@echo "--> Building $(APPNAME)d for darwin/arm64"
+	@mkdir -p $(BUILD_DIR)
+	@GOOS=darwin GOARCH=arm64 go build $(BUILD_FLAGS) -mod=readonly -o $(BUILD_DIR)/$(APPNAME)d-darwin-arm64 ./cmd/$(APPNAME)d
+
+build-all: build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64
+	@echo "--> All platform binaries built"
+
+.PHONY: build build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64 build-all
+
+#################
 ###  Install  ###
 #################
 
 all: install
 
 install:
-		@echo "--> ensure dependencies have not been modified"
-		@go mod verify
-		@echo "--> installing $(APPNAME)d"
-		@go install $(BUILD_FLAGS) -mod=readonly ./cmd/$(APPNAME)d
-		@echo "--> pokerchaind installed successfully"
+	@echo "--> ensure dependencies have not been modified"
+	@go mod verify
+	@echo "--> installing $(APPNAME)d for $(OS)/$(ARCH)"
+	@GOOS=$(OS) GOARCH=$(ARCH) go install $(BUILD_FLAGS) -mod=readonly ./cmd/$(APPNAME)d
+	@echo "--> pokerchaind installed successfully to $(shell go env GOPATH)/bin/$(APPNAME)d"
 
 clean:
 	@echo "--> cleaning build cache and binaries"
 	@go clean -cache
 	@go clean -modcache 2>/dev/null || true
+	@rm -rf $(BUILD_DIR)
 	@rm -f $(shell go env GOPATH)/bin/$(APPNAME)d 2>/dev/null || true
 	@echo "Build cache and binaries cleaned"
 
@@ -152,3 +235,30 @@ docker-compose-down:
 	docker compose down
 
 .PHONY: docker-build docker-run docker-compose-up docker-compose-down
+
+###################
+### Testnet     ###
+###################
+
+testnet-setup:
+	@echo "--> Setting up testnet (this will build the binary first)"
+	@./scripts/setup-testnet.sh 4 pokerchaind pokerchain-testnet-1
+
+testnet-start:
+	@echo "--> Starting testnet"
+	@./scripts/manage-testnet.sh start
+
+testnet-stop:
+	@echo "--> Stopping testnet"
+	@./scripts/manage-testnet.sh stop
+
+testnet-status:
+	@echo "--> Testnet status"
+	@./scripts/manage-testnet.sh status
+
+testnet-clean:
+	@echo "--> Cleaning testnet data"
+	@rm -rf ./testnet
+	@echo "Testnet data removed"
+
+.PHONY: testnet-setup testnet-start testnet-stop testnet-status testnet-clean

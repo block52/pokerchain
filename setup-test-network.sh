@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Cosmos SDK Multi-Node Testnet Setup Script
-# Usage: ./setup-testnet.sh [num_nodes] [chain_binary] [chain_id]
+# Usage: ./setup-testnet.sh [num_nodes] [chain_binary] [chain_id] [--build]
 
 set -e
 
@@ -13,12 +13,40 @@ OUTPUT_DIR="./testnet"
 KEYRING_BACKEND="test"
 STAKE_AMOUNT="1000000stake"
 INITIAL_BALANCE="100000000000stake"
+AUTO_BUILD=false
+
+# Check for --build flag
+for arg in "$@"; do
+    if [ "$arg" == "--build" ]; then
+        AUTO_BUILD=true
+    fi
+done
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Detect architecture
+detect_architecture() {
+    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local arch=$(uname -m)
+    
+    case "$arch" in
+        x86_64)
+            arch="amd64"
+            ;;
+        aarch64|arm64)
+            arch="arm64"
+            ;;
+    esac
+    
+    echo "${os}/${arch}"
+}
+
+DETECTED_ARCH=$(detect_architecture)
 
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Cosmos SDK Multi-Node Testnet Setup${NC}"
@@ -27,14 +55,85 @@ echo -e "Number of nodes: ${YELLOW}${NUM_NODES}${NC}"
 echo -e "Chain binary: ${YELLOW}${CHAIN_BINARY}${NC}"
 echo -e "Chain ID: ${YELLOW}${CHAIN_ID}${NC}"
 echo -e "Output directory: ${YELLOW}${OUTPUT_DIR}${NC}"
+echo -e "Architecture: ${BLUE}${DETECTED_ARCH}${NC}"
 echo ""
 
 # Check if binary exists
-if ! command -v $CHAIN_BINARY &> /dev/null; then
-    echo -e "${RED}Error: $CHAIN_BINARY not found. Please build your chain first.${NC}"
-    echo "Run: ignite chain build"
-    exit 1
-fi
+check_and_build_binary() {
+    if ! command -v $CHAIN_BINARY &> /dev/null; then
+        # Check if binary exists in ./build directory
+        if [ -f "./build/$CHAIN_BINARY" ]; then
+            echo -e "${YELLOW}Found binary in ./build directory${NC}"
+            CHAIN_BINARY="./build/$CHAIN_BINARY"
+            return 0
+        fi
+        
+        echo -e "${RED}Error: $CHAIN_BINARY not found.${NC}"
+        
+        # Check if Makefile exists
+        if [ -f "Makefile" ]; then
+            if [ "$AUTO_BUILD" = true ]; then
+                echo -e "${GREEN}Building binary using Makefile...${NC}"
+                make build
+                if [ -f "./build/$CHAIN_BINARY" ]; then
+                    CHAIN_BINARY="./build/$CHAIN_BINARY"
+                    echo -e "${GREEN}✓ Binary built successfully${NC}"
+                    return 0
+                fi
+            else
+                echo ""
+                echo -e "${YELLOW}Would you like to build it now? Options:${NC}"
+                echo "  1) make build          - Build for current platform ($DETECTED_ARCH)"
+                echo "  2) make install        - Install to \$GOPATH/bin"
+                echo "  3) Exit and build manually"
+                echo ""
+                read -p "Choose option (1-3): " choice
+                
+                case $choice in
+                    1)
+                        echo -e "${GREEN}Building binary...${NC}"
+                        make build
+                        if [ -f "./build/$CHAIN_BINARY" ]; then
+                            CHAIN_BINARY="./build/$CHAIN_BINARY"
+                            echo -e "${GREEN}✓ Binary built successfully${NC}"
+                            return 0
+                        fi
+                        ;;
+                    2)
+                        echo -e "${GREEN}Installing binary...${NC}"
+                        make install
+                        echo -e "${GREEN}✓ Binary installed${NC}"
+                        return 0
+                        ;;
+                    3)
+                        echo "Please build your chain first:"
+                        echo "  make build    # or"
+                        echo "  make install"
+                        exit 1
+                        ;;
+                    *)
+                        echo -e "${RED}Invalid option${NC}"
+                        exit 1
+                        ;;
+                esac
+            fi
+        else
+            echo ""
+            echo "Please build your chain first:"
+            echo "  ignite chain build"
+            echo "  # or"
+            echo "  make build"
+            echo "  # or"
+            echo "  make install"
+            exit 1
+        fi
+    else
+        echo -e "${GREEN}✓ Found $CHAIN_BINARY in PATH${NC}"
+    fi
+}
+
+check_and_build_binary
+echo ""
 
 # Clean up old testnet data
 if [ -d "$OUTPUT_DIR" ]; then
@@ -206,5 +305,9 @@ echo "$CHAIN_BINARY query bank balances ${NODE_ADDRS[0]} --node tcp://localhost:
 echo ""
 echo "# Stop all nodes:"
 echo "pkill -f $CHAIN_BINARY"
+echo ""
+echo -e "${BLUE}Script options:${NC}"
+echo "./setup-testnet.sh [num_nodes] [chain_binary] [chain_id] [--build]"
+echo "  --build: Automatically build the binary if not found"
 echo ""
 echo -e "${GREEN}Happy testing!${NC}"
