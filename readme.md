@@ -27,7 +27,6 @@ Get your Pokerchain node up and running in minutes!
 ./check-block-production.sh   # 🔍 Check if master node is producing blocks
 ./connect-to-network.sh       # 🔗 Connect your node to the network
 ./get-node-info.sh            # ℹ️  Fetch node status and info
-./install-binary.sh           # 🛠️  Install pokerchaind binary to system
 ./install-from-source.sh      # 🛠️  Install pokerchaind from source
 ./test-build.sh               # ✅ Run build and script checks
 ```
