@@ -31,9 +31,9 @@ if [ -f "$BUILD_DIR/pokerchaind" ]; then
         echo "🧹 Cleaning previous builds..."
         go clean -cache
         rm -f "$BUILD_DIR/pokerchaind"
-        # Build the binary
-        echo "🔧 Building pokerchaind..."
-        if ! go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
+        # Build the binary for Linux
+        echo "🔧 Building pokerchaind for Linux..."
+        if ! GOOS=linux GOARCH=amd64 go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
             echo "❌ Build failed"
             exit 1
         fi
@@ -46,9 +46,9 @@ else
     echo "🧹 Cleaning previous builds..."
     go clean -cache
     rm -f "$BUILD_DIR/pokerchaind"
-    # Build the binary
-    echo "🔧 Building pokerchaind..."
-    if ! go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
+    # Build the binary for Linux
+    echo "🔧 Building pokerchaind for Linux..."
+    if ! GOOS=linux GOARCH=amd64 go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
         echo "❌ Build failed"
         exit 1
     fi
