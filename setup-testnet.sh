@@ -22,9 +22,6 @@ for arg in "$@"; do
     fi
 done
 
-# Clean up any previous test directory
-rm -rf ./test
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -268,6 +265,13 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
     sed -i.bak "s/laddr = \"tcp:\/\/127.0.0.1:26657\"/laddr = \"tcp:\/\/127.0.0.1:$RPC_PORT\"/g" $CONFIG_FILE
     sed -i.bak "s/laddr = \"tcp:\/\/0.0.0.0:26656\"/laddr = \"tcp:\/\/0.0.0.0:$P2P_PORT\"/g" $CONFIG_FILE
     sed -i.bak "s/pprof_laddr = \"localhost:6060\"/pprof_laddr = \"localhost:$PPROF_PORT\"/g" $CONFIG_FILE
+    
+    # Enable localhost multi-node testing
+    sed -i.bak 's/allow_duplicate_ip = false/allow_duplicate_ip = true/g' $CONFIG_FILE
+    sed -i.bak 's/addr_book_strict = true/addr_book_strict = false/g' $CONFIG_FILE
+    
+    # Set external address for this node
+    sed -i.bak "s/external_address = \"\"/external_address = \"127.0.0.1:$P2P_PORT\"/g" $CONFIG_FILE
     
     # Handle app.toml - use template if available, otherwise modify generated one
     if [ "$USE_TEMPLATE" = true ]; then

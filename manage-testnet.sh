@@ -114,9 +114,13 @@ status_nodes() {
         if pgrep -f "$CHAIN_BINARY start --home $NODE_HOME" > /dev/null; then
             echo -e "${GREEN}Node$i: RUNNING${NC}"
             
-            # Try to get block height
+            # Try to get block height with better parsing
             if command -v curl &> /dev/null; then
-                HEIGHT=$(curl -s http://localhost:$RPC_PORT/status 2>/dev/null | grep -o '"latest_block_height":"[^"]*"' | cut -d'"' -f4 || echo "N/A")
+                HEIGHT=$(curl -s http://localhost:$RPC_PORT/status 2>/dev/null | grep -oE '"latest_block_height":"[0-9]+"' | grep -oE '[0-9]+' || echo "N/A")
+                if [ -z "$HEIGHT" ] || [ "$HEIGHT" = "N/A" ]; then
+                    # Try alternative JSON parsing
+                    HEIGHT=$(curl -s http://localhost:$RPC_PORT/status 2>/dev/null | grep latest_block_height | grep -oE '[0-9]+' | head -1 || echo "N/A")
+                fi
                 echo "  Block Height: $HEIGHT"
             fi
             
