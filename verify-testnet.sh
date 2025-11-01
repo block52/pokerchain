@@ -14,7 +14,7 @@ if [ ! -d "./test" ]; then
     exit 1
 fi
 
-NUM_NODES=$(ls -d ./test/node* 2>/dev/null | wc -l)
+NUM_NODES=$(find ./test -maxdepth 1 -type d -name "node[0-9]*" 2>/dev/null | wc -l | tr -d ' ')
 echo "📊 Testnet Configuration:"
 echo "   Nodes: $NUM_NODES"
 echo ""
