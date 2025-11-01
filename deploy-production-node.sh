@@ -1,0 +1,378 @@
+#!/bin/bash
+
+# Master Production Node Deployment Script
+# Deploys a pre-configured production node to a remote server
+
+set -e
+
+# Color codes
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Configuration
+PROD_DIR="./production"
+
+# Print header
+print_header() {
+    echo -e "${BLUE}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "              🎲 Production Node Deployment 🎲"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${NC}"
+}
+
+# Show usage
+usage() {
+    echo "Usage: $0 <node-number> <remote-host> [remote-user]"
+    echo ""
+    echo "Arguments:"
+    echo "  node-number   - Number of the node to deploy (from ./production/nodeX/)"
+    echo "  remote-host   - Hostname or IP of the remote server"
+    echo "  remote-user   - SSH user (default: root)"
+    echo ""
+    echo "Examples:"
+    echo "  $0 1 node2.block52.xyz"
+    echo "  $0 2 192.168.1.100 ubuntu"
+    echo "  $0 3 node3.example.com root"
+    echo ""
+    echo "Prerequisites:"
+    echo "  1. Run ./setup-production-nodes.sh to generate node configs"
+    echo "  2. Ensure SSH access to the remote server"
+    echo "  3. Remote server should be Linux (Ubuntu/Debian recommended)"
+    echo ""
+}
+
+# Check if node directory exists
+check_node_dir() {
+    local node_num=$1
+    local node_dir="$PROD_DIR/node$node_num"
+    
+    if [ ! -d "$node_dir" ]; then
+        echo -e "${RED}❌ Error: Node directory not found: $node_dir${NC}"
+        echo ""
+        echo "Please generate the node configuration first:"
+        echo "  ./setup-production-nodes.sh"
+        echo ""
+        exit 1
+    fi
+    
+    if [ ! -f "$node_dir/config/genesis.json" ]; then
+        echo -e "${RED}❌ Error: Genesis file not found in: $node_dir/config/${NC}"
+        echo ""
+        echo "Node configuration appears incomplete."
+        echo "Please regenerate with: ./setup-production-nodes.sh"
+        echo ""
+        exit 1
+    fi
+}
+
+# Test SSH connection
+test_ssh() {
+    local remote_host=$1
+    local remote_user=$2
+    
+    echo "Testing SSH connection to $remote_user@$remote_host..."
+    
+    if ! ssh -o ConnectTimeout=10 -o BatchMode=yes "$remote_user@$remote_host" "echo 'SSH connection successful'" > /dev/null 2>&1; then
+        echo -e "${RED}❌ Cannot connect to $remote_user@$remote_host${NC}"
+        echo ""
+        echo "Please ensure:"
+        echo "  1. SSH is running on the remote server"
+        echo "  2. You have SSH key access configured"
+        echo "  3. The hostname/IP is correct"
+        echo ""
+        echo "Test manually with:"
+        echo "  ssh $remote_user@$remote_host"
+        echo ""
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✅ SSH connection successful${NC}"
+}
+
+# Build binary
+build_binary() {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 1: Building Linux Binary${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    if ! command -v make &> /dev/null; then
+        echo -e "${RED}❌ make not found${NC}"
+        exit 1
+    fi
+    
+    echo "Building for Linux (amd64)..."
+    GOOS=linux GOARCH=amd64 make build
+    
+    if [ ! -f "build/pokerchaind" ]; then
+        echo -e "${RED}❌ Build failed - binary not found${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✅ Binary built successfully${NC}"
+}
+
+# Deploy binary
+deploy_binary() {
+    local remote_host=$1
+    local remote_user=$2
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 2: Deploying Binary${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    echo "Copying pokerchaind to $remote_user@$remote_host:/usr/local/bin/"
+    scp build/pokerchaind "$remote_user@$remote_host:/tmp/pokerchaind"
+    
+    echo "Installing binary..."
+    ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind /usr/local/bin/pokerchaind && \
+        sudo chmod +x /usr/local/bin/pokerchaind"
+    
+    echo "Verifying installation..."
+    local version=$(ssh "$remote_user@$remote_host" "/usr/local/bin/pokerchaind version" 2>/dev/null || echo "unknown")
+    echo "Remote pokerchaind version: $version"
+    
+    echo -e "${GREEN}✅ Binary deployed successfully${NC}"
+}
+
+# Deploy configuration
+deploy_config() {
+    local node_num=$1
+    local remote_host=$2
+    local remote_user=$3
+    local node_dir="$PROD_DIR/node$node_num"
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 3: Deploying Configuration${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    echo "Creating directories on remote server..."
+    ssh "$remote_user@$remote_host" "mkdir -p ~/.pokerchain/config ~/.pokerchain/data"
+    
+    echo "Copying configuration files..."
+    scp -r "$node_dir/config/"* "$remote_user@$remote_host:~/.pokerchain/config/"
+    
+    echo "Verifying configuration..."
+    ssh "$remote_user@$remote_host" "ls -la ~/.pokerchain/config/"
+    
+    echo -e "${GREEN}✅ Configuration deployed successfully${NC}"
+}
+
+# Setup systemd service
+setup_systemd() {
+    local remote_host=$1
+    local remote_user=$2
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 4: Setting Up Systemd Service${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    if [ ! -f "pokerchaind.service" ]; then
+        echo -e "${YELLOW}⚠️  pokerchaind.service not found in current directory${NC}"
+        echo "Creating default service file..."
+        
+        cat > /tmp/pokerchaind.service << 'EOF'
+[Unit]
+Description=Pokerchain Node
+After=network-online.target
+
+[Service]
+User=root
+ExecStart=/usr/local/bin/pokerchaind start --home /root/.pokerchain --minimum-gas-prices="0.01stake"
+Restart=always
+RestartSec=3
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        
+        scp /tmp/pokerchaind.service "$remote_user@$remote_host:/tmp/"
+        rm /tmp/pokerchaind.service
+    else
+        echo "Copying pokerchaind.service..."
+        scp pokerchaind.service "$remote_user@$remote_host:/tmp/"
+    fi
+    
+    echo "Installing and enabling service..."
+    ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind.service /etc/systemd/system/ && \
+        sudo systemctl daemon-reload && \
+        sudo systemctl enable pokerchaind"
+    
+    echo -e "${GREEN}✅ Systemd service configured${NC}"
+}
+
+# Start node
+start_node() {
+    local remote_host=$1
+    local remote_user=$2
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 5: Starting Node${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    echo "Starting pokerchaind service..."
+    ssh "$remote_user@$remote_host" "sudo systemctl start pokerchaind"
+    
+    echo "Waiting for node to start..."
+    sleep 5
+    
+    echo ""
+    echo "Service status:"
+    ssh "$remote_user@$remote_host" "sudo systemctl status pokerchaind --no-pager -l" || true
+    
+    echo ""
+    echo -e "${GREEN}✅ Node started${NC}"
+}
+
+# Verify deployment
+verify_deployment() {
+    local remote_host=$1
+    local remote_user=$2
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 6: Verifying Deployment${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    echo "Waiting for RPC to become available..."
+    local max_attempts=30
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        if ssh "$remote_user@$remote_host" "curl -s --max-time 2 http://localhost:26657/status" > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ RPC is responding${NC}"
+            break
+        fi
+        
+        echo -n "."
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+    
+    if [ $attempt -gt $max_attempts ]; then
+        echo ""
+        echo -e "${YELLOW}⚠️  RPC not responding yet (this is normal for initial sync)${NC}"
+    else
+        echo ""
+        echo "Node status:"
+        ssh "$remote_user@$remote_host" "curl -s http://localhost:26657/status | jq '.result | {moniker: .node_info.moniker, network: .node_info.network, latest_block_height: .sync_info.latest_block_height, catching_up: .sync_info.catching_up}'" 2>/dev/null || \
+            ssh "$remote_user@$remote_host" "curl -s http://localhost:26657/status" 2>/dev/null
+    fi
+}
+
+# Show next steps
+show_next_steps() {
+    local node_num=$1
+    local remote_host=$2
+    local remote_user=$3
+    local node_dir="$PROD_DIR/node$node_num"
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${GREEN}✅ Deployment Complete!${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "Node Information:"
+    echo "  Remote Host: $remote_host"
+    echo "  Remote User: $remote_user"
+    echo "  RPC:  http://$remote_host:26657"
+    echo "  API:  http://$remote_host:1317"
+    echo "  gRPC: $remote_host:9090"
+    echo ""
+    echo "Useful Commands:"
+    echo ""
+    echo "Monitor logs:"
+    echo "  ssh $remote_user@$remote_host 'journalctl -u pokerchaind -f'"
+    echo ""
+    echo "Check sync status:"
+    echo "  curl http://$remote_host:26657/status | jq .result.sync_info"
+    echo ""
+    echo "View service status:"
+    echo "  ssh $remote_user@$remote_host 'systemctl status pokerchaind'"
+    echo ""
+    echo "Restart service:"
+    echo "  ssh $remote_user@$remote_host 'systemctl restart pokerchaind'"
+    echo ""
+    
+    # Check if this is a validator node
+    if [ -f "$node_dir/become-validator.sh" ]; then
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo -e "${YELLOW}📋 Validator Node Detected${NC}"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "To make this node a validator:"
+        echo "  1. Wait for node to fully sync (catching_up: false)"
+        echo "  2. Follow instructions in:"
+        echo "     $node_dir/become-validator.sh"
+        echo ""
+    fi
+}
+
+# Main deployment function
+main() {
+    # Check arguments
+    if [ $# -lt 2 ]; then
+        print_header
+        echo ""
+        usage
+        exit 1
+    fi
+    
+    local node_num=$1
+    local remote_host=$2
+    local remote_user=${3:-root}
+    
+    print_header
+    echo ""
+    
+    # Validate node number
+    if ! [[ "$node_num" =~ ^[0-9]+$ ]]; then
+        echo -e "${RED}❌ Invalid node number: $node_num${NC}"
+        echo ""
+        usage
+        exit 1
+    fi
+    
+    # Pre-deployment checks
+    echo "Deployment Configuration:"
+    echo "  Node Number: $node_num"
+    echo "  Remote Host: $remote_host"
+    echo "  Remote User: $remote_user"
+    echo "  Node Config: $PROD_DIR/node$node_num/"
+    echo ""
+    
+    read -p "Continue with deployment? (y/n): " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo "Deployment cancelled."
+        exit 0
+    fi
+    
+    # Run deployment steps
+    check_node_dir "$node_num"
+    test_ssh "$remote_host" "$remote_user"
+    build_binary
+    deploy_binary "$remote_host" "$remote_user"
+    deploy_config "$node_num" "$remote_host" "$remote_user"
+    setup_systemd "$remote_host" "$remote_user"
+    start_node "$remote_host" "$remote_user"
+    verify_deployment "$remote_host" "$remote_user"
+    show_next_steps "$node_num" "$remote_host" "$remote_user"
+}
+
+# Run main
+main "$@"

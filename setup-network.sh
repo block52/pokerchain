@@ -65,9 +65,21 @@ show_menu() {
     echo "   - View network status"
     echo "   - Get node information"
     echo ""
-    echo -e "${GREEN}7)${NC} Exit"
+    echo -e "${GREEN}7)${NC} Local Multi-Node Testnet"
+    echo "   Run 3 nodes on your local machine"
+    echo "   - Different ports for each node"
+    echo "   - Easy terminal switching"
+    echo "   - Perfect for development"
     echo ""
-    echo -n "Enter your choice [1-7]: "
+    echo -e "${GREEN}8)${NC} Setup Production Nodes"
+    echo "   Generate production node configurations"
+    echo "   - Creates configs in ./production/nodeX/"
+    echo "   - Ready for SSH deployment"
+    echo "   - Connects to existing network"
+    echo ""
+    echo -e "${GREEN}9)${NC} Exit"
+    echo ""
+    echo -n "Enter your choice [1-9]: "
 }
 
 # Check if script exists
@@ -415,6 +427,38 @@ verify_network() {
     read -p "Press Enter to continue..."
 }
 
+# Run local multi-node testnet
+run_local_testnet() {
+    print_header
+    echo ""
+    echo "Starting Local Multi-Node Testnet"
+    echo ""
+    
+    if check_script "./run-local-testnet.sh"; then
+        chmod +x ./run-local-testnet.sh
+        ./run-local-testnet.sh
+    else
+        echo "Please ensure run-local-testnet.sh is in the current directory"
+        read -p "Press Enter to continue..."
+    fi
+}
+
+# Setup production nodes
+setup_production_nodes() {
+    print_header
+    echo ""
+    echo "Production Nodes Setup"
+    echo ""
+    
+    if check_script "./setup-production-nodes.sh"; then
+        chmod +x ./setup-production-nodes.sh
+        ./setup-production-nodes.sh
+    else
+        echo "Please ensure setup-production-nodes.sh is in the current directory"
+        read -p "Press Enter to continue..."
+    fi
+}
+
 # Main loop
 main() {
     while true; do
@@ -441,6 +485,12 @@ main() {
                 verify_network
                 ;;
             7)
+                run_local_testnet
+                ;;
+            8)
+                setup_production_nodes
+                ;;
+            9)
                 print_header
                 echo ""
                 echo "Thank you for using Pokerchain Network Setup!"
@@ -449,7 +499,7 @@ main() {
                 ;;
             *)
                 echo ""
-                echo -e "${YELLOW}Invalid option. Please choose 1-7.${NC}"
+                echo -e "${YELLOW}Invalid option. Please choose 1-9.${NC}"
                 sleep 2
                 ;;
         esac
