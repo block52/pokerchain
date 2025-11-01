@@ -9,7 +9,7 @@ set -e
 NUM_NODES=${1:-4}
 CHAIN_BINARY=${2:-"pokerchaind"}
 CHAIN_ID=${3:-"pokerchain-testnet-1"}
-OUTPUT_DIR="./testnet"
+OUTPUT_DIR="./test"
 KEYRING_BACKEND="test"
 STAKE_AMOUNT="1000000stake"
 INITIAL_BALANCE="100000000000stake"
@@ -21,6 +21,9 @@ for arg in "$@"; do
         AUTO_BUILD=true
     fi
 done
+
+# Clean up any previous test directory
+rm -rf ./test
 
 # Colors for output
 RED='\033[0;31m'
@@ -223,20 +226,34 @@ done
 
 echo ""
 echo -e "${GREEN}Step 6: Configuring persistent peers...${NC}"
-# Build persistent peers string
-PEERS=""
-for i in $(seq 0 $((NUM_NODES - 1))); do
-    PORT=$((26656 + i))
-    if [ -n "$PEERS" ]; then
-        PEERS="$PEERS,"
-    fi
-    PEERS="${PEERS}${NODE_IDS[$i]}@localhost:$PORT"
-done
+
+# Check if template-app.toml exists
+TEMPLATE_APP_TOML="./template-app.toml"
+if [ ! -f "$TEMPLATE_APP_TOML" ]; then
+    echo -e "${YELLOW}Warning: template-app.toml not found. Will use generated app.toml and modify it.${NC}"
+    USE_TEMPLATE=false
+else
+    echo -e "${GREEN}✓ Found template-app.toml${NC}"
+    USE_TEMPLATE=true
+fi
 
 for i in $(seq 0 $((NUM_NODES - 1))); do
     CONFIG_FILE="$OUTPUT_DIR/node$i/config/config.toml"
+    APP_CONFIG_FILE="$OUTPUT_DIR/node$i/config/app.toml"
     
-    # Update persistent_peers
+    # Build peer list for this specific node (excluding itself)
+    PEERS=""
+    for j in $(seq 0 $((NUM_NODES - 1))); do
+        if [ $i -ne $j ]; then
+            PORT=$((26656 + j))
+            if [ -n "$PEERS" ]; then
+                PEERS="$PEERS,"
+            fi
+            PEERS="${PEERS}${NODE_IDS[$j]}@127.0.0.1:$PORT"
+        fi
+    done
+    
+    # Update persistent_peers with this node's specific peer list
     sed -i.bak "s/persistent_peers = \"\"/persistent_peers = \"$PEERS\"/g" $CONFIG_FILE
     
     # Set different ports for each node
@@ -252,20 +269,43 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
     sed -i.bak "s/laddr = \"tcp:\/\/0.0.0.0:26656\"/laddr = \"tcp:\/\/0.0.0.0:$P2P_PORT\"/g" $CONFIG_FILE
     sed -i.bak "s/pprof_laddr = \"localhost:6060\"/pprof_laddr = \"localhost:$PPROF_PORT\"/g" $CONFIG_FILE
     
-    # Update app.toml
-    APP_CONFIG_FILE="$OUTPUT_DIR/node$i/config/app.toml"
-    sed -i.bak "s/address = \"tcp:\/\/localhost:1317\"/address = \"tcp:\/\/localhost:$API_PORT\"/g" $APP_CONFIG_FILE
-    sed -i.bak "s/address = \"localhost:9090\"/address = \"localhost:$GRPC_PORT\"/g" $APP_CONFIG_FILE
-    sed -i.bak "s/address = \"localhost:9091\"/address = \"localhost:$GRPC_WEB_PORT\"/g" $APP_CONFIG_FILE
-    
-    # Enable API
-    sed -i.bak 's/enable = false/enable = true/g' $APP_CONFIG_FILE
-    
-    # Set minimum gas prices (set to 0stake for testing, or use 0.001stake for production-like)
-    sed -i.bak 's/minimum-gas-prices = ""/minimum-gas-prices = "0stake"/g' $APP_CONFIG_FILE
+    # Handle app.toml - use template if available, otherwise modify generated one
+    if [ "$USE_TEMPLATE" = true ]; then
+        # Copy template and update ports
+        cp $TEMPLATE_APP_TOML $APP_CONFIG_FILE
+        sed -i.bak "s/address = \"tcp:\/\/localhost:1317\"/address = \"tcp:\/\/localhost:$API_PORT\"/g" $APP_CONFIG_FILE
+        sed -i.bak "s/address = \"localhost:9090\"/address = \"localhost:$GRPC_PORT\"/g" $APP_CONFIG_FILE
+        sed -i.bak "s/address = \"localhost:9091\"/address = \"localhost:$GRPC_WEB_PORT\"/g" $APP_CONFIG_FILE
+    else
+        # Fallback: modify the generated app.toml
+        sed -i.bak "s/address = \"tcp:\/\/localhost:1317\"/address = \"tcp:\/\/localhost:$API_PORT\"/g" $APP_CONFIG_FILE
+        sed -i.bak "s/address = \"localhost:9090\"/address = \"localhost:$GRPC_PORT\"/g" $APP_CONFIG_FILE
+        sed -i.bak "s/address = \"localhost:9091\"/address = \"localhost:$GRPC_WEB_PORT\"/g" $APP_CONFIG_FILE
+        
+        # Enable API
+        sed -i.bak 's/enable = false/enable = true/g' $APP_CONFIG_FILE
+        
+        # Set minimum gas prices
+        if grep -q 'minimum-gas-prices = ""' $APP_CONFIG_FILE; then
+            sed -i.bak 's/minimum-gas-prices = ""/minimum-gas-prices = "0stake"/g' $APP_CONFIG_FILE
+        elif grep -q "minimum-gas-prices = ''" $APP_CONFIG_FILE; then
+            sed -i.bak "s/minimum-gas-prices = ''/minimum-gas-prices = \"0stake\"/g" $APP_CONFIG_FILE
+        elif grep -q 'minimum-gas-prices =' $APP_CONFIG_FILE; then
+            sed -i.bak 's/minimum-gas-prices = .*/minimum-gas-prices = "0stake"/g' $APP_CONFIG_FILE
+        else
+            echo 'minimum-gas-prices = "0stake"' >> $APP_CONFIG_FILE
+        fi
+    fi
     
     echo -e "  ${GREEN}✓${NC} Configured node$i (RPC: $RPC_PORT, P2P: $P2P_PORT, API: $API_PORT)"
+    echo -e "    Peers: $PEERS"
 done
+
+echo ""
+echo -e "${GREEN}Step 7: Saving testnet configuration...${NC}"
+# Save the binary path for manage-testnet.sh to use
+echo "$CHAIN_BINARY" > $OUTPUT_DIR/.chain_binary
+echo -e "  ${GREEN}✓${NC} Saved chain binary path: $CHAIN_BINARY"
 
 echo ""
 echo -e "${GREEN}========================================${NC}"
@@ -294,6 +334,14 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
     API_PORT=$((1317 + i))
     echo "Node$i - RPC: http://localhost:$RPC_PORT | API: http://localhost:$API_PORT"
 done
+
+echo ""
+echo -e "${YELLOW}Configuration:${NC}"
+if [ "$USE_TEMPLATE" = true ]; then
+    echo "✓ Used template-app.toml with minimum-gas-prices = \"0stake\""
+else
+    echo "⚠ Modified generated app.toml (template-app.toml not found)"
+fi
 
 echo ""
 echo -e "${YELLOW}Useful commands:${NC}"
