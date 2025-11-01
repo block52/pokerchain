@@ -2,6 +2,12 @@
 
 # Testnet Verification Script
 # This script provides detailed information about your running testnet
+# Usage: ./verify-testnet.sh [--debug]
+
+DEBUG=false
+if [ "$1" = "--debug" ]; then
+    DEBUG=true
+fi
 
 echo "╔══════════════════════════════════════════════════════════════════╗"
 echo "║           POKERCHAIN TESTNET - VERIFICATION                      ║"
@@ -33,10 +39,22 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
     if pgrep -f "pokerchaind start --home ./test/node$i" > /dev/null; then
         echo "✅ Process: RUNNING"
         
-        # Get full status via RPC
-        STATUS=$(curl -s http://localhost:$RPC_PORT/status 2>/dev/null)
+        # Get full status via RPC with timeout and retry
+        STATUS=""
+        for attempt in 1 2 3; do
+            if [ "$DEBUG" = true ]; then
+                echo "  [DEBUG] Attempt $attempt: curl http://localhost:$RPC_PORT/status"
+            fi
+            STATUS=$(curl -s --max-time 2 --connect-timeout 1 http://localhost:$RPC_PORT/status 2>/dev/null)
+            if [ -n "$STATUS" ] && echo "$STATUS" | grep -q "latest_block_height"; then
+                [ "$DEBUG" = true ] && echo "  [DEBUG] Success on attempt $attempt"
+                break
+            fi
+            [ "$DEBUG" = true ] && echo "  [DEBUG] Failed, retrying..."
+            [ $attempt -lt 3 ] && sleep 1
+        done
         
-        if [ -n "$STATUS" ]; then
+        if [ -n "$STATUS" ] && echo "$STATUS" | grep -q "latest_block_height"; then
             # Parse various fields
             HEIGHT=$(echo "$STATUS" | grep -oE '"latest_block_height":"[0-9]+"' | grep -oE '[0-9]+')
             TIME=$(echo "$STATUS" | grep -oE '"latest_block_time":"[^"]*"' | cut -d'"' -f4)
@@ -48,12 +66,19 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
             echo "🔄 Catching Up: ${CATCHING_UP:-unknown}"
             
             # Get peer count
-            NET_INFO=$(curl -s http://localhost:$RPC_PORT/net_info 2>/dev/null)
+            NET_INFO=$(curl -s --max-time 2 --connect-timeout 1 http://localhost:$RPC_PORT/net_info 2>/dev/null)
             PEER_COUNT=$(echo "$NET_INFO" | grep -oE '"n_peers":"[0-9]+"' | grep -oE '[0-9]+')
             echo "🤝 Connected Peers: ${PEER_COUNT:-0}"
             
         else
-            echo "⚠️  RPC: Not responding (starting up?)"
+            echo "⚠️  RPC: Not responding"
+            # Try to get info from logs as fallback
+            if [ -f "./test/node$i.log" ]; then
+                LOG_HEIGHT=$(grep "executed block" ./test/node$i.log | tail -1 | grep -oE 'height=[0-9]+' | cut -d'=' -f2)
+                if [ -n "$LOG_HEIGHT" ]; then
+                    echo "📦 Block Height (from logs): $LOG_HEIGHT"
+                fi
+            fi
         fi
         
         # Check last log entry
@@ -91,7 +116,20 @@ fi
 HEIGHTS=()
 for i in $(seq 0 $((NUM_NODES - 1))); do
     RPC_PORT=$((26657 + i))
-    HEIGHT=$(curl -s http://localhost:$RPC_PORT/status 2>/dev/null | grep -oE '"latest_block_height":"[0-9]+"' | grep -oE '[0-9]+')
+    
+    # Try RPC first with retries
+    HEIGHT=""
+    for attempt in 1 2; do
+        HEIGHT=$(curl -s --max-time 2 --connect-timeout 1 http://localhost:$RPC_PORT/status 2>/dev/null | grep -oE '"latest_block_height":"[0-9]+"' | grep -oE '[0-9]+')
+        [ -n "$HEIGHT" ] && break
+        sleep 0.5
+    done
+    
+    # Fallback to logs if RPC failed
+    if [ -z "$HEIGHT" ] && [ -f "./test/node$i.log" ]; then
+        HEIGHT=$(grep "executed block" ./test/node$i.log | tail -1 | grep -oE 'height=[0-9]+' | cut -d'=' -f2)
+    fi
+    
     if [ -n "$HEIGHT" ] && [ "$HEIGHT" -gt 0 ]; then
         HEIGHTS+=($HEIGHT)
     fi
@@ -122,6 +160,24 @@ echo ""
 echo "  Query validators: ./build/pokerchaind query staking validators --node tcp://localhost:26657"
 echo "  Check balance:    ./build/pokerchaind query bank balances <address> --node tcp://localhost:26657"
 echo ""
+
+# Check if any RPC issues were detected
+RPC_ISSUES=false
+for i in $(seq 0 $((NUM_NODES - 1))); do
+    RPC_PORT=$((26657 + i))
+    STATUS=$(curl -s --max-time 1 --connect-timeout 1 http://localhost:$RPC_PORT/status 2>/dev/null)
+    if [ -z "$STATUS" ] || ! echo "$STATUS" | grep -q "latest_block_height"; then
+        RPC_ISSUES=true
+        break
+    fi
+done
+
+if [ "$RPC_ISSUES" = true ] && [ "$DEBUG" = false ]; then
+    echo "💡 Tip: Some RPC endpoints didn't respond. Run with --debug for more info:"
+    echo "   ./verify-testnet.sh --debug"
+    echo ""
+fi
+
 echo "╔══════════════════════════════════════════════════════════════════╗"
 echo "║  Your testnet appears to be working correctly! 🎉               ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"
