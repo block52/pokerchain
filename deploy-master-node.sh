@@ -21,16 +21,37 @@ echo "-----------------------------"
 BUILD_DIR="./build"
 mkdir -p "$BUILD_DIR"
 
-# Clean previous builds
-echo "🧹 Cleaning previous builds..."
-go clean -cache
-rm -f "$BUILD_DIR/pokerchaind"
-
-# Build the binary
-echo "🔧 Building pokerchaind..."
-if ! go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
-    echo "❌ Build failed"
-    exit 1
+# Check if binary already exists
+if [ -f "$BUILD_DIR/pokerchaind" ]; then
+    echo "⚠️  Found existing build at $BUILD_DIR/pokerchaind."
+    read -p "Do you want to rebuild it? (y/n): " REBUILD_CHOICE
+    if [[ "$REBUILD_CHOICE" =~ ^[Yy]$ ]]; then
+        echo "🔧 Rebuilding pokerchaind..."
+        # Clean previous builds
+        echo "🧹 Cleaning previous builds..."
+        go clean -cache
+        rm -f "$BUILD_DIR/pokerchaind"
+        # Build the binary for Linux
+        echo "🔧 Building pokerchaind for Linux..."
+        if ! GOOS=linux GOARCH=amd64 go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
+            echo "❌ Build failed"
+            exit 1
+        fi
+    else
+        echo "✅ Using existing build."
+    fi
+else
+    echo "🔧 Building pokerchaind..."
+    # Clean previous builds
+    echo "🧹 Cleaning previous builds..."
+    go clean -cache
+    rm -f "$BUILD_DIR/pokerchaind"
+    # Build the binary for Linux
+    echo "🔧 Building pokerchaind for Linux..."
+    if ! GOOS=linux GOARCH=amd64 go build -o "$BUILD_DIR/pokerchaind" ./cmd/pokerchaind; then
+        echo "❌ Build failed"
+        exit 1
+    fi
 fi
 
 LOCAL_BINARY="$BUILD_DIR/pokerchaind"
@@ -123,18 +144,18 @@ echo ""
 echo "📤 Step 5: Copying binary to remote node..."
 echo "-------------------------------------------"
 
-echo "Uploading pokerchaind binary ($BINARY_SIZE)..."
+# echo "Uploading pokerchaind binary ($BINARY_SIZE)..."
 scp "$LOCAL_BINARY" "$REMOTE_USER@$REMOTE_HOST:/tmp/pokerchaind"
-ssh "$REMOTE_USER@$REMOTE_HOST" "
+ssh "$REMOTE_USER@$REMOTE_HOST" <<EOF
 sudo mv /tmp/pokerchaind /usr/local/bin/pokerchaind
 sudo chmod +x /usr/local/bin/pokerchaind
 sudo chown root:root /usr/local/bin/pokerchaind
 echo '✅ Binary installed to /usr/local/bin/pokerchaind'
 
 # Verify binary
-REMOTE_VERSION=\$(pokerchaind version 2>/dev/null || echo 'unknown')
-echo \"📌 Remote binary version: \$REMOTE_VERSION\"
-"
+REMOTE_VERSION=$(pokerchaind version 2>/dev/null || echo 'unknown')
+echo "📌 Remote binary version: $REMOTE_VERSION"
+EOF
 
 # Step 6: Initialize node and copy configuration
 echo ""
@@ -148,7 +169,7 @@ scp "./config.toml" "$REMOTE_USER@$REMOTE_HOST:/tmp/config.toml"
 scp "./.testnets/validator0/config/priv_validator_key.json" "$REMOTE_USER@$REMOTE_HOST:/tmp/priv_validator_key.json"
 scp "./.testnets/validator0/data/priv_validator_state.json" "$REMOTE_USER@$REMOTE_HOST:/tmp/priv_validator_state.json"
 
-ssh "$REMOTE_USER@$REMOTE_HOST" "
+ssh "$REMOTE_USER@$REMOTE_HOST" << 'ENDSSH'
 echo '🔧 Initializing pokerchaind...'
 pokerchaind init node1 --chain-id pokerchain --home /root/.pokerchain
 
@@ -169,15 +190,28 @@ mkdir -p /root/.pokerchain/data
 cp /tmp/priv_validator_state.json /root/.pokerchain/data/priv_validator_state.json
 chmod 600 /root/.pokerchain/data/priv_validator_state.json
 
+# Restore node_key.json from backup if present so the Tendermint node ID remains consistent
+echo '🔐 Attempting to restore node_key.json (if backup exists)...'
+BACKUP_DIR=$(ls -d /root/pokerchain-backup-* 2>/dev/null | head -n1 || true)
+if [ -n "$BACKUP_DIR" ] && [ -f "$BACKUP_DIR/config/node_key.json" ]; then
+    echo "Found backup node_key.json in $BACKUP_DIR; restoring..."
+    cp "$BACKUP_DIR/config/node_key.json" /root/.pokerchain/config/node_key.json 2>/dev/null || true
+    sudo chown root:root /root/.pokerchain/config/node_key.json 2>/dev/null || true
+    sudo chmod 600 /root/.pokerchain/config/node_key.json 2>/dev/null || true
+    echo '✅ node_key.json restored from backup'
+else
+    echo 'ℹ️  No backup node_key.json found; leaving generated node_key.json in place'
+fi
+
 echo '🔍 Verifying genesis hash...'
-REMOTE_HASH=\$(sha256sum /root/.pokerchain/config/genesis.json | cut -d' ' -f1)
-echo \"Remote genesis hash: \$REMOTE_HASH\"
+REMOTE_HASH=$(sha256sum /root/.pokerchain/config/genesis.json | cut -d' ' -f1)
+echo "Remote genesis hash: $REMOTE_HASH"
 
 echo '🧹 Cleaning temporary files...'
 rm -f /tmp/genesis.json /tmp/app.toml /tmp/config.toml /tmp/priv_validator_key.json /tmp/priv_validator_state.json
 
 echo '✅ Configuration installed!'
-"
+ENDSSH
 
 # Step 7: Verify configuration
 echo ""
@@ -196,7 +230,7 @@ grep -A 3 '\[api\]' /root/.pokerchain/config/app.toml | grep 'enable\|address\|s
 
 echo ''
 echo '⚡ RPC Configuration:'
-grep 'laddr = \"tcp://' /root/.pokerchain/config/config.toml | head -1 || true
+grep 'laddr = ' /root/.pokerchain/config/config.toml | head -1 || true
 
 echo ''
 echo '🔑 Validator address:'

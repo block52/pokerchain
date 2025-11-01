@@ -20,6 +20,15 @@ scp pokerchaind.service "$REMOTE_USER@$REMOTE_HOST:/tmp/"
 # Step 2: Install and configure systemd service
 echo "⚙️ Step 2: Installing systemd service..."
 ssh "$REMOTE_USER@$REMOTE_HOST" << 'EOF'
+# Check and stop the service first
+if systemctl is-active --quiet pokerchaind; then
+    echo "Stopping pokerchaind service..."
+    systemctl stop pokerchaind
+    sleep 2
+else
+    echo "Service not running, proceeding to check processes..."
+fi
+
 # Stop any running pokerchaind process
 echo "Stopping any running pokerchaind processes..."
 pkill -f pokerchaind || true

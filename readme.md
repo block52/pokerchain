@@ -4,13 +4,14 @@ Get your Pokerchain node up and running in minutes!
 
 ## 📦 Available Scripts
 
-### Setup Scripts
+### Setup & Deployment
 
 ```bash
-./setup-network.sh            # 🎛️  Interactive menu (recommended for first time)
-./setup-sync-node.sh          # 🔄 Setup local sync node
-./setup-validator-node.sh     # 👑 Setup validator node
-./deploy-master-node.sh       # 🌐 Deploy genesis node to node1.block52.xyz
+./setup-network.sh            # 🎛️  Interactive menu for network setup (master, sync, validator)
+./deploy-master-node.sh       # 🌐 Deploy genesis/master node to remote server
+./deploy-sync-node.sh         # 🔄 Deploy sync node to remote server
+./setup-local-sync-node.sh    # �️  Setup a local sync node (dev/test)
+./setup-validator-node.sh     # 👑 Setup validator node (interactive)
 ```
 
 ### Node Control
@@ -20,11 +21,15 @@ Get your Pokerchain node up and running in minutes!
 ./stop-node.sh                # ⏹️  Stop your local node
 ```
 
-### Verification & Testing
+### Network & Utility
 
 ```bash
-./check-block-production.sh   # 🔍 Test if node1 is producing blocks
-./setup-network.sh            # 🎛️  Then select option 5 for full network check
+./check-block-production.sh   # 🔍 Check if master node is producing blocks
+./connect-to-network.sh       # 🔗 Connect your node to the network
+./get-node-info.sh            # ℹ️  Fetch node status and info
+./install-binary.sh           # 🛠️  Install pokerchaind binary to system
+./install-from-source.sh      # 🛠️  Install pokerchaind from source
+./test-build.sh               # ✅ Run build and script checks
 ```
 
 ### Documentation
