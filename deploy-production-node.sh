@@ -39,7 +39,7 @@ usage() {
     echo "  $0 3 node3.example.com root"
     echo ""
     echo "Prerequisites:"
-    echo "  1. Run ./setup-production-nodes.sh to generate node configs"
+    echo "  1. Run ./setup-production-cluster.sh to generate node configs"
     echo "  2. Ensure SSH access to the remote server"
     echo "  3. Remote server should be Linux (Ubuntu/Debian recommended)"
     echo ""
@@ -54,7 +54,7 @@ check_node_dir() {
         echo -e "${RED}❌ Error: Node directory not found: $node_dir${NC}"
         echo ""
         echo "Please generate the node configuration first:"
-        echo "  ./setup-production-nodes.sh"
+        echo "  ./setup-production-cluster.sh"
         echo ""
         exit 1
     fi
@@ -63,7 +63,7 @@ check_node_dir() {
         echo -e "${RED}❌ Error: Genesis file not found in: $node_dir/config/${NC}"
         echo ""
         echo "Node configuration appears incomplete."
-        echo "Please regenerate with: ./setup-production-nodes.sh"
+        echo "Please regenerate with: ./setup-production-cluster.sh"
         echo ""
         exit 1
     fi
@@ -93,11 +93,68 @@ test_ssh() {
     echo -e "${GREEN}✅ SSH connection successful${NC}"
 }
 
+# Clean up old installation
+cleanup_old_installation() {
+    local remote_host=$1
+    local remote_user=$2
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 1: Cleaning Up Old Installation${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    echo "Stopping pokerchaind service (if exists)..."
+    ssh "$remote_user@$remote_host" "
+        # Stop systemd service
+        sudo systemctl stop pokerchaind 2>/dev/null || echo 'Service not found (ok)'
+        sudo systemctl disable pokerchaind 2>/dev/null || true
+        
+        # Kill any running pokerchaind processes
+        pkill -9 pokerchaind 2>/dev/null || echo 'No running processes (ok)'
+        
+        # Wait for processes to die
+        sleep 2
+        
+        # Verify no processes running
+        if pgrep pokerchaind > /dev/null; then
+            echo 'Warning: pokerchaind still running, forcing kill...'
+            killall -9 pokerchaind 2>/dev/null || true
+            sleep 1
+        fi
+        
+        echo 'All pokerchaind processes stopped'
+    "
+    
+    echo ""
+    echo "Backing up existing data (if any)..."
+    ssh "$remote_user@$remote_host" "
+        if [ -d ~/.pokerchain ]; then
+            BACKUP_DIR=~/pokerchain-backup-\$(date +%Y%m%d-%H%M%S)
+            echo \"Creating backup: \$BACKUP_DIR\"
+            mkdir -p \$BACKUP_DIR
+            cp -r ~/.pokerchain/* \$BACKUP_DIR/ 2>/dev/null || true
+            echo \"Backup created: \$BACKUP_DIR\"
+        else
+            echo 'No existing data to backup'
+        fi
+    "
+    
+    echo ""
+    echo "Removing old chain data and configuration..."
+    ssh "$remote_user@$remote_host" "
+        rm -rf ~/.pokerchain
+        echo 'Old data removed'
+    "
+    
+    echo -e "${GREEN}✅ Cleanup complete${NC}"
+}
+
 # Build binary
 build_binary() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 1: Building Linux Binary${NC}"
+    echo -e "${BLUE}Step 2: Building Linux Binary${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -124,7 +181,7 @@ deploy_binary() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 2: Deploying Binary${NC}"
+    echo -e "${BLUE}Step 3: Deploying Binary${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -151,7 +208,7 @@ deploy_config() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 3: Deploying Configuration${NC}"
+    echo -e "${BLUE}Step 4: Deploying Configuration${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -160,6 +217,22 @@ deploy_config() {
     
     echo "Copying configuration files..."
     scp -r "$node_dir/config/"* "$remote_user@$remote_host:~/.pokerchain/config/"
+    
+    echo "Copying data files..."
+    if [ -d "$node_dir/data" ] && [ "$(ls -A $node_dir/data 2>/dev/null)" ]; then
+        scp -r "$node_dir/data/"* "$remote_user@$remote_host:~/.pokerchain/data/"
+    else
+        echo "No data files to copy"
+    fi
+    
+    echo "Setting permissions..."
+    ssh "$remote_user@$remote_host" "
+        chmod 700 ~/.pokerchain
+        chmod 700 ~/.pokerchain/config
+        chmod 700 ~/.pokerchain/data
+        chmod 600 ~/.pokerchain/config/priv_validator_key.json 2>/dev/null || true
+        chmod 600 ~/.pokerchain/data/priv_validator_state.json 2>/dev/null || true
+    "
     
     echo "Verifying configuration..."
     ssh "$remote_user@$remote_host" "ls -la ~/.pokerchain/config/"
@@ -174,22 +247,30 @@ setup_systemd() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 4: Setting Up Systemd Service${NC}"
+    echo -e "${BLUE}Step 5: Setting Up Systemd Service${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
+    
+    # Determine home directory based on remote user
+    local home_dir
+    if [ "$remote_user" = "root" ]; then
+        home_dir="/root"
+    else
+        home_dir="/home/$remote_user"
+    fi
     
     if [ ! -f "pokerchaind.service" ]; then
         echo -e "${YELLOW}⚠️  pokerchaind.service not found in current directory${NC}"
         echo "Creating default service file..."
         
-        cat > /tmp/pokerchaind.service << 'EOF'
+        cat > /tmp/pokerchaind.service << EOF
 [Unit]
 Description=Pokerchain Node
 After=network-online.target
 
 [Service]
-User=root
-ExecStart=/usr/local/bin/pokerchaind start --home /root/.pokerchain --minimum-gas-prices="0.01stake"
+User=$remote_user
+ExecStart=/usr/local/bin/pokerchaind start --home $home_dir/.pokerchain --minimum-gas-prices="0.01stake"
 Restart=always
 RestartSec=3
 LimitNOFILE=4096
@@ -220,7 +301,7 @@ start_node() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 5: Starting Node${NC}"
+    echo -e "${BLUE}Step 6: Starting Node${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -245,7 +326,7 @@ verify_deployment() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 6: Verifying Deployment${NC}"
+    echo -e "${BLUE}Step 7: Verifying Deployment${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -365,6 +446,7 @@ main() {
     # Run deployment steps
     check_node_dir "$node_num"
     test_ssh "$remote_host" "$remote_user"
+    cleanup_old_installation "$remote_host" "$remote_user"
     build_binary
     deploy_binary "$remote_host" "$remote_user"
     deploy_config "$node_num" "$remote_host" "$remote_user"
