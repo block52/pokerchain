@@ -240,6 +240,26 @@ deploy_config() {
     echo -e "${GREEN}✅ Configuration deployed successfully${NC}"
 }
 
+# Setup firewall
+setup_firewall() {
+    local remote_host=$1
+    local remote_user=$2
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 5: Setting Up Firewall (via setup-firewall.sh)${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    if [ ! -f "setup-firewall.sh" ]; then
+        echo -e "${RED}❌ setup-firewall.sh not found in current directory${NC}"
+        exit 1
+    fi
+    
+    chmod +x ./setup-firewall.sh
+    ./setup-firewall.sh "$remote_host" "$remote_user"
+}
+
 # Setup systemd service
 setup_systemd() {
     local remote_host=$1
@@ -247,51 +267,17 @@ setup_systemd() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 5: Setting Up Systemd Service${NC}"
+    echo -e "${BLUE}Step 6: Setting Up Systemd Service (via setup-systemd.sh)${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
-    # Determine home directory based on remote user
-    local home_dir
-    if [ "$remote_user" = "root" ]; then
-        home_dir="/root"
-    else
-        home_dir="/home/$remote_user"
+    if [ ! -f "setup-systemd.sh" ]; then
+        echo -e "${RED}❌ setup-systemd.sh not found in current directory${NC}"
+        exit 1
     fi
     
-    if [ ! -f "pokerchaind.service" ]; then
-        echo -e "${YELLOW}⚠️  pokerchaind.service not found in current directory${NC}"
-        echo "Creating default service file..."
-        
-        cat > /tmp/pokerchaind.service << EOF
-[Unit]
-Description=Pokerchain Node
-After=network-online.target
-
-[Service]
-User=$remote_user
-ExecStart=/usr/local/bin/pokerchaind start --home $home_dir/.pokerchain --minimum-gas-prices="0.01stake"
-Restart=always
-RestartSec=3
-LimitNOFILE=4096
-
-[Install]
-WantedBy=multi-user.target
-EOF
-        
-        scp /tmp/pokerchaind.service "$remote_user@$remote_host:/tmp/"
-        rm /tmp/pokerchaind.service
-    else
-        echo "Copying pokerchaind.service..."
-        scp pokerchaind.service "$remote_user@$remote_host:/tmp/"
-    fi
-    
-    echo "Installing and enabling service..."
-    ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind.service /etc/systemd/system/ && \
-        sudo systemctl daemon-reload && \
-        sudo systemctl enable pokerchaind"
-    
-    echo -e "${GREEN}✅ Systemd service configured${NC}"
+    chmod +x ./setup-systemd.sh
+    ./setup-systemd.sh "$remote_host" "$remote_user"
 }
 
 # Start node
@@ -301,7 +287,7 @@ start_node() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 6: Starting Node${NC}"
+    echo -e "${BLUE}Step 7: Starting Node${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -326,7 +312,7 @@ verify_deployment() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 7: Verifying Deployment${NC}"
+    echo -e "${BLUE}Step 8: Verifying Deployment${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -450,6 +436,7 @@ main() {
     build_binary
     deploy_binary "$remote_host" "$remote_user"
     deploy_config "$node_num" "$remote_host" "$remote_user"
+    setup_firewall "$remote_host" "$remote_user"
     setup_systemd "$remote_host" "$remote_user"
     start_node "$remote_host" "$remote_user"
     verify_deployment "$remote_host" "$remote_user"
