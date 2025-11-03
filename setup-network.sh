@@ -9,6 +9,7 @@ set -e
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m'
 
 # Print header
@@ -44,6 +45,7 @@ show_menu() {
     echo "   Deploy a read-only sync node to a remote Linux server"
     echo "   - Builds and uploads binary"
     echo "   - Configures systemd service"
+    echo "   - Sets up firewall (UFW)"
     echo "   - Connects to node1.block52.xyz as peer"
     echo "   - Syncs blockchain data from the network"
     echo ""
@@ -133,10 +135,39 @@ setup_remote_sync() {
     echo ""
     
     if check_script "./deploy-sync-node.sh"; then
-        # Get remote host from user
-        echo -e "${BLUE}Enter the remote server details:${NC}"
+        # Show deployment information
+        echo -e "${BLUE}This will deploy a read-only sync node to a remote Linux server.${NC}"
         echo ""
-        read -p "Remote host (e.g., node2.example.com or 192.168.1.100): " remote_host
+        echo "The deployment will:"
+        echo "  • Build pokerchaind binary for the target architecture"
+        echo "  • Upload and install the binary on the remote server"
+        echo "  • Initialize a new node that syncs from node1.block52.xyz"
+        echo "  • Set up systemd service for automatic startup"
+        echo "  • Configure UFW firewall (optional)"
+        echo "  • Start the node"
+        echo ""
+        echo -e "${YELLOW}Prerequisites:${NC}"
+        echo "  • SSH access to the remote server (with key authentication)"
+        echo "  • sudo privileges on the remote server"
+        echo "  • Linux server (Ubuntu/Debian recommended)"
+        echo ""
+        
+        read -p "Continue? (y/n): " continue_deploy
+        
+        if [[ ! "$continue_deploy" =~ ^[Yy]$ ]]; then
+            echo "Deployment cancelled."
+            read -p "Press Enter to continue..."
+            return
+        fi
+        
+        echo ""
+        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BLUE}Enter Remote Server Details${NC}"
+        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        
+        # Get remote host from user
+        read -p "Remote host (hostname or IP): " remote_host
         
         if [ -z "$remote_host" ]; then
             echo -e "${RED}❌ Remote host cannot be empty${NC}"
@@ -148,23 +179,39 @@ setup_remote_sync() {
         remote_user=${remote_user:-root}
         
         echo ""
-        echo "📋 Deployment Configuration:"
-        echo "   Remote Host: $remote_host"
-        echo "   Remote User: $remote_user"
-        echo "   Seed Node: node1.block52.xyz"
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${YELLOW}Deployment Configuration Summary${NC}"
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo ""
-        read -p "Continue with deployment? (y/n): " confirm
+        echo "  Remote Host:   $remote_host"
+        echo "  Remote User:   $remote_user"
+        echo "  Sync Source:   node1.block52.xyz"
+        echo "  Node Type:     Read-only sync node"
+        echo ""
+        echo "Endpoints after deployment:"
+        echo "  RPC:  http://$remote_host:26657"
+        echo "  API:  http://$remote_host:1317"
+        echo "  gRPC: $remote_host:9090"
+        echo ""
+        
+        read -p "Start deployment? (y/n): " confirm
         
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
             chmod +x ./deploy-sync-node.sh
+            echo ""
             ./deploy-sync-node.sh "$remote_host" "$remote_user"
         else
+            echo ""
             echo "Deployment cancelled."
         fi
     else
-        echo "Please ensure deploy-sync-node.sh is in the current directory"
+        echo -e "${RED}❌ deploy-sync-node.sh not found${NC}"
+        echo ""
+        echo "Please ensure deploy-sync-node.sh is in the current directory."
+        echo "You can create it or download it from the project repository."
     fi
     
+    echo ""
     read -p "Press Enter to continue..."
 }
 
