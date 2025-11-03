@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # Firewall setup script for pokerchaind nodes
 # Usage: ./setup-firewall.sh [remote-host] [remote-user]
 
@@ -11,6 +10,7 @@ if [ -z "$1" ]; then
     echo "=========================================="
     echo ""
     read -p "Enter remote host (hostname or IP): " REMOTE_HOST
+    
     if [ -z "$REMOTE_HOST" ]; then
         echo "❌ Remote host cannot be empty"
         exit 1
@@ -28,7 +28,8 @@ echo "Target: $REMOTE_USER@$REMOTE_HOST"
 echo ""
 
 # Setup firewall rules
-echo "⚙️ Configuring firewall rules..."
+echo "⚙️  Configuring firewall rules..."
+
 ssh "$REMOTE_USER@$REMOTE_HOST" << 'EOF'
 # Install UFW if not present
 if ! command -v ufw &> /dev/null; then
@@ -70,6 +71,15 @@ ufw allow 9090/tcp comment 'gRPC'
 echo "🔓 Allowing gRPC-web (port 9091)..."
 ufw allow 9091/tcp comment 'gRPC-web'
 
+
+# Allow HTTPS for NGINX (optional)
+echo "🔓 Allowing HTTPS (port 443)..."
+ufw allow 443/tcp comment 'HTTPS (NGINX)'
+
+# Allow gRPC over HTTPS (optional)
+echo "🔓 Allowing gRPC HTTPS (port 9443)..."
+ufw allow 9443/tcp comment 'gRPC HTTPS (NGINX)'
+
 # Enable UFW
 echo "✅ Enabling UFW..."
 ufw --force enable
@@ -86,11 +96,13 @@ echo "=========================="
 echo ""
 echo "📋 Allowed Ports:"
 echo "  • 22    - SSH (management)"
-echo "  • 26656 - Tendermint P2P (peer connections)"
-echo "  • 26657 - Tendermint RPC (queries)"
+echo "  • 443   - HTTPS (NGINX)"
 echo "  • 1317  - Cosmos REST API (client access)"
 echo "  • 9090  - gRPC (client access)"
 echo "  • 9091  - gRPC-web (client access)"
+echo "  • 9443  - gRPC HTTPS (NGINX)"
+echo "  • 26656 - Tendermint P2P (peer connections)"
+echo "  • 26657 - Tendermint RPC (queries)"
 echo ""
 echo "🔒 All other incoming connections are blocked"
 echo ""

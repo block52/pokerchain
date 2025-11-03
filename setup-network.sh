@@ -9,7 +9,6 @@ set -e
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
-RED='\033[0;31m'
 NC='\033[0m'
 
 # Print header
@@ -34,9 +33,9 @@ show_menu() {
     echo "   - Acts as the primary validator"
     echo "   - Provides public RPC/API endpoints"
     echo ""
-    echo -e "${GREEN}2)${NC} Sync Node (local read-only node)"
-    echo "   Sets up a local node that syncs from the network"
-    echo "   - Downloads blockchain data from peers"
+    echo -e "${GREEN}2)${NC} Run Local Developer Node (local readonly sync)"
+    echo "   Runs a local developer node that syncs from the network (read-only)"
+    echo "   - Uses run-dev-node.sh for robust, repeatable setup"
     echo "   - Provides local RPC/API access"
     echo "   - Does NOT participate in consensus"
     echo "   - Perfect for development and testing"
@@ -45,7 +44,6 @@ show_menu() {
     echo "   Deploy a read-only sync node to a remote Linux server"
     echo "   - Builds and uploads binary"
     echo "   - Configures systemd service"
-    echo "   - Sets up firewall (UFW)"
     echo "   - Connects to node1.block52.xyz as peer"
     echo "   - Syncs blockchain data from the network"
     echo ""
@@ -55,33 +53,40 @@ show_menu() {
     echo "   - Creates and signs blocks"
     echo "   - Requires validator keys"
     echo ""
-    echo -e "${GREEN}5)${NC} Start Local Node"
-    echo "   Start your local pokerchaind node"
-    echo "   - Start via systemd (if configured)"
-    echo "   - Start manually if no service"
-    echo "   - View sync status and logs"
-    echo ""
-    echo -e "${GREEN}6)${NC} Verify Network Connectivity"
+    echo -e "${GREEN}5)${NC} Verify Network Connectivity"
     echo "   Test connectivity to node1.block52.xyz"
     echo "   - Check RPC/API endpoints"
     echo "   - View network status"
     echo "   - Get node information"
     echo ""
-    echo -e "${GREEN}7)${NC} Local Multi-Node Testnet"
+    echo -e "${GREEN}6)${NC} Setup Firewall"
+    echo "   Configure UFW firewall on remote server"
+    echo "   - Allow SSH, P2P, RPC, API, gRPC ports"
+    echo "   - Block all other incoming connections"
+    echo "   - Secure your validator node"
+    echo ""
+    echo -e "${GREEN}7)${NC} Setup NGINX & SSL"
+    echo "   Configure NGINX reverse proxy with SSL certificates"
+    echo "   - Install NGINX and Certbot"
+    echo "   - Configure HTTPS for REST API and gRPC"
+    echo "   - Automatic SSL certificate from Let's Encrypt"
+    echo "   - Auto-renewal configured"
+    echo ""
+    echo -e "${GREEN}8)${NC} Local Multi-Node Testnet"
     echo "   Run 3 nodes on your local machine"
     echo "   - Different ports for each node"
     echo "   - Easy terminal switching"
     echo "   - Perfect for development"
     echo ""
-    echo -e "${GREEN}8)${NC} Setup Production Nodes"
+    echo -e "${GREEN}9)${NC} Setup Production Nodes"
     echo "   Generate production node configurations"
     echo "   - Creates configs in ./production/nodeX/"
     echo "   - Ready for SSH deployment"
     echo "   - Connects to existing network"
     echo ""
-    echo -e "${GREEN}9)${NC} Exit"
+    echo -e "${GREEN}10)${NC} Exit"
     echo ""
-    echo -n "Enter your choice [1-9]: "
+    echo -n "Enter your choice [1-10]: "
 }
 
 # Check if script exists
@@ -111,18 +116,18 @@ setup_genesis() {
     fi
 }
 
-# Setup sync node
-setup_sync() {
+
+# Run local developer node (option 2)
+run_local_dev_node() {
     print_header
     echo ""
-    echo "Setting up Sync Node (local read-only)"
+    echo "Running Local Developer Node (local readonly sync)"
     echo ""
-    
-    if check_script "./setup-local-sync-node.sh"; then
-        chmod +x ./setup-local-sync-node.sh
-        ./setup-local-sync-node.sh
+    if check_script "./run-dev-node.sh"; then
+        chmod +x ./run-dev-node.sh
+        ./run-dev-node.sh
     else
-        echo "Please ensure setup-local-sync-node.sh is in the current directory"
+        echo "Please ensure run-dev-node.sh is in the current directory"
         read -p "Press Enter to continue..."
     fi
 }
@@ -135,42 +140,13 @@ setup_remote_sync() {
     echo ""
     
     if check_script "./deploy-sync-node.sh"; then
-        # Show deployment information
-        echo -e "${BLUE}This will deploy a read-only sync node to a remote Linux server.${NC}"
-        echo ""
-        echo "The deployment will:"
-        echo "  • Build pokerchaind binary for the target architecture"
-        echo "  • Upload and install the binary on the remote server"
-        echo "  • Initialize a new node that syncs from node1.block52.xyz"
-        echo "  • Set up systemd service for automatic startup"
-        echo "  • Configure UFW firewall (optional)"
-        echo "  • Start the node"
-        echo ""
-        echo -e "${YELLOW}Prerequisites:${NC}"
-        echo "  • SSH access to the remote server (with key authentication)"
-        echo "  • sudo privileges on the remote server"
-        echo "  • Linux server (Ubuntu/Debian recommended)"
-        echo ""
-        
-        read -p "Continue? (y/n): " continue_deploy
-        
-        if [[ ! "$continue_deploy" =~ ^[Yy]$ ]]; then
-            echo "Deployment cancelled."
-            read -p "Press Enter to continue..."
-            return
-        fi
-        
-        echo ""
-        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${BLUE}Enter Remote Server Details${NC}"
-        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-        
         # Get remote host from user
-        read -p "Remote host (hostname or IP): " remote_host
+        echo -e "${BLUE}Enter the remote server details:${NC}"
+        echo ""
+        read -p "Remote host (e.g., node2.example.com or 192.168.1.100): " remote_host
         
         if [ -z "$remote_host" ]; then
-            echo -e "${RED}❌ Remote host cannot be empty${NC}"
+            echo -e "${YELLOW}❌ Remote host cannot be empty${NC}"
             read -p "Press Enter to continue..."
             return
         fi
@@ -179,166 +155,23 @@ setup_remote_sync() {
         remote_user=${remote_user:-root}
         
         echo ""
-        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${YELLOW}Deployment Configuration Summary${NC}"
-        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo "📋 Deployment Configuration:"
+        echo "   Remote Host: $remote_host"
+        echo "   Remote User: $remote_user"
+        echo "   Seed Node: node1.block52.xyz"
         echo ""
-        echo "  Remote Host:   $remote_host"
-        echo "  Remote User:   $remote_user"
-        echo "  Sync Source:   node1.block52.xyz"
-        echo "  Node Type:     Read-only sync node"
-        echo ""
-        echo "Endpoints after deployment:"
-        echo "  RPC:  http://$remote_host:26657"
-        echo "  API:  http://$remote_host:1317"
-        echo "  gRPC: $remote_host:9090"
-        echo ""
-        
-        read -p "Start deployment? (y/n): " confirm
+        read -p "Continue with deployment? (y/n): " confirm
         
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
             chmod +x ./deploy-sync-node.sh
-            echo ""
             ./deploy-sync-node.sh "$remote_host" "$remote_user"
         else
-            echo ""
             echo "Deployment cancelled."
         fi
     else
-        echo -e "${RED}❌ deploy-sync-node.sh not found${NC}"
-        echo ""
-        echo "Please ensure deploy-sync-node.sh is in the current directory."
-        echo "You can create it or download it from the project repository."
+        echo "Please ensure deploy-sync-node.sh is in the current directory"
     fi
     
-    echo ""
-    read -p "Press Enter to continue..."
-}
-
-# Start local node
-start_local_node() {
-    print_header
-    echo ""
-    echo "Starting Local Pokerchaind Node"
-    echo ""
-    
-    local home_dir="$HOME/.pokerchain"
-    local rpc_port=26657
-    
-    # Check if node is initialized
-    if [ ! -d "$home_dir" ]; then
-        echo -e "${YELLOW}⚠️  Node not initialized${NC}"
-        echo ""
-        echo "Please set up a node first:"
-        echo "  ./setup-network.sh → Option 2 (Sync Node)"
-        echo "  OR"
-        echo "  ./setup-sync-node.sh"
-        echo ""
-        read -p "Press Enter to continue..."
-        return
-    fi
-    
-    # Check if pokerchaind is installed
-    if ! command -v pokerchaind &> /dev/null; then
-        echo -e "${YELLOW}⚠️  pokerchaind not found in PATH${NC}"
-        echo ""
-        echo "Please ensure pokerchaind is installed:"
-        echo "  make install"
-        echo "  OR add to PATH: export PATH=\"\$HOME/go/bin:\$PATH\""
-        echo ""
-        read -p "Press Enter to continue..."
-        return
-    fi
-    
-    # Check if already running
-    if pgrep -x pokerchaind > /dev/null; then
-        echo -e "${GREEN}✅ pokerchaind is already running${NC}"
-        echo ""
-        
-        # Show status
-        if systemctl is-active --quiet pokerchaind 2>/dev/null; then
-            echo "Service status:"
-            sudo systemctl status pokerchaind --no-pager -l
-        fi
-        
-        echo ""
-        echo "Node information:"
-        if curl -s --max-time 5 http://localhost:$rpc_port/status > /dev/null 2>&1; then
-            curl -s http://localhost:$rpc_port/status | jq -r '
-                "  Node ID: " + .result.node_info.id,
-                "  Chain ID: " + .result.node_info.network,
-                "  Latest Block: " + .result.sync_info.latest_block_height,
-                "  Catching Up: " + (.result.sync_info.catching_up | tostring)
-            ' 2>/dev/null || echo "  RPC responding (jq not installed)"
-        else
-            echo "  (Node starting up, RPC not ready yet)"
-        fi
-        
-        echo ""
-        echo "Monitor with:"
-        if systemctl list-units --full -all 2>/dev/null | grep -q "pokerchaind.service"; then
-            echo "  journalctl -u pokerchaind -f"
-        fi
-        echo "  curl http://localhost:$rpc_port/status"
-        echo ""
-        read -p "Press Enter to continue..."
-        return
-    fi
-    
-    # Try to start via systemd first
-    if systemctl list-units --full -all 2>/dev/null | grep -q "pokerchaind.service"; then
-        echo "Starting pokerchaind via systemd..."
-        echo ""
-        
-        sudo systemctl start pokerchaind
-        sleep 3
-        
-        if systemctl is-active --quiet pokerchaind; then
-            echo -e "${GREEN}✅ Service started successfully!${NC}"
-            echo ""
-            sudo systemctl status pokerchaind --no-pager -l
-            echo ""
-            echo "Monitor logs:"
-            echo "  journalctl -u pokerchaind -f"
-            echo ""
-            
-            # Wait a bit and check sync status
-            echo "Checking sync status (waiting 5 seconds)..."
-            sleep 5
-            
-            if curl -s --max-time 5 http://localhost:$rpc_port/status > /dev/null 2>&1; then
-                echo ""
-                curl -s http://localhost:$rpc_port/status | jq -r '
-                    "Node Status:",
-                    "  Latest Block: " + .result.sync_info.latest_block_height,
-                    "  Catching Up: " + (.result.sync_info.catching_up | tostring),
-                    "  Network: " + .result.node_info.network
-                ' 2>/dev/null || echo "RPC is responding"
-            fi
-        else
-            echo -e "${YELLOW}⚠️  Service failed to start${NC}"
-            echo ""
-            echo "Check logs for errors:"
-            echo "  journalctl -u pokerchaind -n 50"
-        fi
-    else
-        # No systemd service, start manually
-        echo "No systemd service found. Start manually?"
-        echo ""
-        echo "This will start pokerchaind in the foreground."
-        echo "Press Ctrl+C to stop when done."
-        echo ""
-        read -p "Start now? (y/n): " start_manual
-        
-        if [[ $start_manual =~ ^[Yy]$ ]]; then
-            echo ""
-            echo "Starting pokerchaind..."
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            pokerchaind start --minimum-gas-prices="0.01stake"
-        fi
-    fi
-    
-    echo ""
     read -p "Press Enter to continue..."
 }
 
@@ -474,6 +307,117 @@ verify_network() {
     read -p "Press Enter to continue..."
 }
 
+# Setup firewall
+setup_firewall() {
+    print_header
+    echo ""
+    echo "🔥 Setting up Firewall on Remote Server"
+    echo ""
+    
+    if check_script "./setup-firewall.sh"; then
+        # Get remote host from user
+        echo -e "${BLUE}Enter the remote server details:${NC}"
+        echo ""
+        read -p "Remote host (e.g., node1.block52.xyz or 192.168.1.100): " remote_host
+        
+        if [ -z "$remote_host" ]; then
+            echo -e "${YELLOW}❌ Remote host cannot be empty${NC}"
+            read -p "Press Enter to continue..."
+            return
+        fi
+        
+        read -p "Remote user (default: root): " remote_user
+        remote_user=${remote_user:-root}
+        
+        echo ""
+        echo "📋 Firewall Configuration:"
+        echo "   Remote Host: $remote_host"
+        echo "   Remote User: $remote_user"
+        echo ""
+        echo "The following ports will be allowed:"
+        echo "   • 22    - SSH (management)"
+        echo "   • 26656 - Tendermint P2P (peer connections)"
+        echo "   • 26657 - Tendermint RPC (queries)"
+        echo "   • 1317  - Cosmos REST API (client access)"
+        echo "   • 9090  - gRPC (client access)"
+        echo "   • 9091  - gRPC-web (client access)"
+        echo ""
+        echo "⚠️  All other incoming connections will be blocked!"
+        echo ""
+        read -p "Continue with firewall setup? (y/n): " confirm
+        
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+            chmod +x ./setup-firewall.sh
+            ./setup-firewall.sh "$remote_host" "$remote_user"
+        else
+            echo "Firewall setup cancelled."
+        fi
+    else
+        echo "Please ensure setup-firewall.sh is in the current directory"
+    fi
+    
+    read -p "Press Enter to continue..."
+}
+
+# Setup NGINX & SSL
+setup_nginx() {
+    print_header
+    echo ""
+    echo "🌐 Setting up NGINX & SSL on Remote Server"
+    echo ""
+    
+    if check_script "./setup-nginx.sh"; then
+        # Get domain and remote host from user
+        echo -e "${BLUE}Enter the server details:${NC}"
+        echo ""
+        read -p "Domain name (e.g., block52.xyz): " domain
+        
+        if [ -z "$domain" ]; then
+            echo -e "${YELLOW}❌ Domain cannot be empty${NC}"
+            read -p "Press Enter to continue..."
+            return
+        fi
+        
+        read -p "Remote host (default: $domain): " remote_host
+        remote_host=${remote_host:-$domain}
+        
+        read -p "Remote user (default: root): " remote_user
+        remote_user=${remote_user:-root}
+        
+        echo ""
+        echo "📋 NGINX & SSL Configuration:"
+        echo "   Domain:      $domain"
+        echo "   Remote Host: $remote_host"
+        echo "   Remote User: $remote_user"
+        echo "   Admin Email: admin@$domain"
+        echo ""
+        echo "Services to be configured:"
+        echo "   • NGINX reverse proxy"
+        echo "   • HTTPS for REST API (port 1317 → 443)"
+        echo "   • HTTPS for gRPC (port 9090 → 9443)"
+        echo "   • SSL certificate via Let's Encrypt"
+        echo "   • Automatic certificate renewal"
+        echo ""
+        echo "⚠️  Requirements:"
+        echo "   • Domain must point to the server's IP"
+        echo "   • Ports 80 and 443 must be accessible"
+        echo "   • pokerchaind must be running on the server"
+        echo ""
+        read -p "Continue with NGINX setup? (y/n): " confirm
+        
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+            chmod +x ./setup-nginx.sh
+            ./setup-nginx.sh "$domain" "$remote_host" "$remote_user"
+        else
+            echo "NGINX setup cancelled."
+        fi
+    else
+        echo "Please ensure setup-nginx.sh is in the current directory"
+    fi
+    
+    read -p "Press Enter to continue..."
+}
+
 # Run local multi-node testnet
 run_local_testnet() {
     print_header
@@ -517,7 +461,7 @@ main() {
                 setup_genesis
                 ;;
             2)
-                setup_sync
+                run_local_dev_node
                 ;;
             3)
                 setup_remote_sync
@@ -526,18 +470,21 @@ main() {
                 setup_validator
                 ;;
             5)
-                start_local_node
-                ;;
-            6)
                 verify_network
                 ;;
+            6)
+                setup_firewall
+                ;;
             7)
-                run_local_testnet
+                setup_nginx
                 ;;
             8)
-                setup_production_nodes
+                run_local_testnet
                 ;;
             9)
+                setup_production_nodes
+                ;;
+            10)
                 print_header
                 echo ""
                 echo "Thank you for using Pokerchain Network Setup!"
@@ -546,7 +493,7 @@ main() {
                 ;;
             *)
                 echo ""
-                echo -e "${YELLOW}Invalid option. Please choose 1-9.${NC}"
+                echo -e "${YELLOW}Invalid option. Please choose 1-10.${NC}"
                 sleep 2
                 ;;
         esac
