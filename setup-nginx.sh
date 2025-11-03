@@ -50,7 +50,7 @@ echo "  Admin Email:  $ADMIN_EMAIL"
 echo ""
 echo -e "${YELLOW}Services to be configured:${NC}"
 echo "  • REST API (HTTPS) - Port 1317 → 443"
-echo "  • gRPC (HTTPS) - Port 9090"
+echo "  • gRPC (HTTPS) - Port 9090 → 9443"
 echo "  • SSL Certificates via Certbot"
 echo ""
 read -p "Continue with this configuration? (y/n): " CONFIRM
@@ -114,7 +114,7 @@ echo "✅ NGINX stopped"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 4: Creating NGINX Configuration"
+echo "Step 4: Creating Initial HTTP Configuration"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -122,56 +122,20 @@ echo ""
 rm -f /etc/nginx/sites-enabled/${DOMAIN}
 rm -f /etc/nginx/sites-available/${DOMAIN}
 
-# Create NGINX config
+# Create initial HTTP-only NGINX config (Certbot will add SSL later)
 cat > /etc/nginx/sites-available/${DOMAIN} << 'ENDNGINX'
-# Pokerchaind REST API and gRPC Proxy Configuration
+# Pokerchaind REST API Configuration (Initial HTTP-only)
 # Domain: ${DOMAIN}
+# This will be modified by Certbot to add SSL
 
-# HTTP to HTTPS redirect
 server {
     listen 80;
     listen [::]:80;
     server_name ${DOMAIN};
 
+    # Allow Certbot to verify domain ownership
     location /.well-known/acme-challenge/ {
         root /var/www/html;
-    }
-
-    location / {
-        return 301 https://\$server_name\$request_uri;
-    }
-}
-
-# HTTPS - REST API
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name ${DOMAIN};
-
-    # SSL certificates (will be configured by certbot)
-    # ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    # ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
-
-    # SSL configuration
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
-
-    # Security headers
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    add_header X-Frame-Options SAMEORIGIN;
-    add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
-
-    # CORS headers for API
-    add_header Access-Control-Allow-Origin * always;
-    add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
-    add_header Access-Control-Allow-Headers "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization" always;
-    add_header Access-Control-Expose-Headers "Content-Length,Content-Range" always;
-
-    # Handle preflight requests
-    if (\$request_method = 'OPTIONS') {
-        return 204;
     }
 
     # Logging
@@ -183,80 +147,51 @@ server {
     proxy_send_timeout 300s;
     proxy_read_timeout 300s;
 
+    # CORS headers for API
+    add_header Access-Control-Allow-Origin * always;
+    add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+    add_header Access-Control-Allow-Headers "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization" always;
+    add_header Access-Control-Expose-Headers "Content-Length,Content-Range" always;
+
+    # Handle preflight requests
+    if ($request_method = 'OPTIONS') {
+        return 204;
+    }
+
     # REST API - Cosmos SDK
     location / {
         proxy_pass http://127.0.0.1:1317;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
         
         # WebSocket support
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
     }
 
-    # Tendermint RPC (optional - you may want to keep this on port 26657)
+    # Tendermint RPC
     location /rpc/ {
         proxy_pass http://127.0.0.1:26657/;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
         
         # WebSocket support for subscriptions
         proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-    }
-}
-
-# HTTPS - gRPC
-server {
-    listen 9443 ssl http2;
-    listen [::]:9443 ssl http2;
-    server_name ${DOMAIN};
-
-    # SSL certificates (will be configured by certbot)
-    # ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    # ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
-
-    # SSL configuration
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
-
-    # Logging
-    access_log /var/log/nginx/${DOMAIN}_grpc_access.log;
-    error_log /var/log/nginx/${DOMAIN}_grpc_error.log;
-
-    # gRPC proxy
-    location / {
-        grpc_pass grpc://127.0.0.1:9090;
-        grpc_set_header Host \$host;
-        grpc_set_header X-Real-IP \$remote_addr;
-        grpc_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        grpc_set_header X-Forwarded-Proto \$scheme;
-
-        # Error handling
-        error_page 502 = /error502grpc;
-    }
-
-    location = /error502grpc {
-        internal;
-        default_type application/grpc;
-        add_header grpc-status 14;
-        add_header content-length 0;
-        return 204;
     }
 }
 ENDNGINX
 
 # Replace ${DOMAIN} placeholder with actual domain
-sed -i "s/\\\${DOMAIN}/$DOMAIN/g" /etc/nginx/sites-available/$DOMAIN
+sed -i "s/\${DOMAIN}/$DOMAIN/g" /etc/nginx/sites-available/$DOMAIN
 
-echo "✅ Created NGINX configuration: /etc/nginx/sites-available/$DOMAIN"
+echo "✅ Created initial HTTP configuration: /etc/nginx/sites-available/$DOMAIN"
 
 # Enable the site
 ln -s /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/$DOMAIN
@@ -274,23 +209,24 @@ fi
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 5: Configuring Firewall for SSL"
+echo "Step 5: Configuring Firewall"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
 # Check if UFW is installed and active
 if command -v ufw &> /dev/null; then
-    UFW_STATUS=\$(ufw status | grep -c "Status: active" || echo "0")
+    UFW_STATUS=$(ufw status | grep -c "Status: active" || echo "0")
     
-    if [ "\$UFW_STATUS" -gt 0 ]; then
+    if [ "$UFW_STATUS" -gt 0 ]; then
         echo "📋 UFW firewall detected - ensuring required ports are open"
         
         # Check current status of ports
-        PORT_80_STATUS=\$(ufw status | grep -c "80/tcp.*ALLOW" || echo "0")
-        PORT_443_STATUS=\$(ufw status | grep -c "443/tcp.*ALLOW" || echo "0")
+        PORT_80_STATUS=$(ufw status | grep -c "80/tcp.*ALLOW" || echo "0")
+        PORT_443_STATUS=$(ufw status | grep -c "443/tcp.*ALLOW" || echo "0")
+        PORT_9443_STATUS=$(ufw status | grep -c "9443/tcp.*ALLOW" || echo "0")
         
         # Open port 80 if not already open (needed for certbot)
-        if [ "\$PORT_80_STATUS" -eq 0 ]; then
+        if [ "$PORT_80_STATUS" -eq 0 ]; then
             echo "🔓 Opening port 80 (required for SSL certificate verification)..."
             ufw allow 80/tcp comment 'HTTP (Certbot)'
             PORT_80_WAS_CLOSED=1
@@ -300,11 +236,19 @@ if command -v ufw &> /dev/null; then
         fi
         
         # Open port 443 if not already open
-        if [ "\$PORT_443_STATUS" -eq 0 ]; then
+        if [ "$PORT_443_STATUS" -eq 0 ]; then
             echo "🔓 Opening port 443 (HTTPS)..."
             ufw allow 443/tcp comment 'HTTPS'
         else
             echo "✅ Port 443 already open"
+        fi
+        
+        # Open port 9443 for gRPC HTTPS
+        if [ "$PORT_9443_STATUS" -eq 0 ]; then
+            echo "🔓 Opening port 9443 (gRPC HTTPS)..."
+            ufw allow 9443/tcp comment 'gRPC HTTPS'
+        else
+            echo "✅ Port 9443 already open"
         fi
         
         echo "✅ Firewall configured"
@@ -336,6 +280,11 @@ echo ""
 echo "Requesting SSL certificate for $DOMAIN..."
 echo "Email: $ADMIN_EMAIL"
 echo ""
+echo "Certbot will automatically:"
+echo "  • Obtain SSL certificate from Let's Encrypt"
+echo "  • Configure NGINX for HTTPS"
+echo "  • Set up HTTP to HTTPS redirect"
+echo ""
 
 # Run certbot to get certificate and auto-configure nginx
 certbot --nginx \
@@ -348,71 +297,93 @@ certbot --nginx \
     --staple-ocsp
 
 echo ""
-echo "✅ SSL certificate obtained and configured"
+echo "✅ SSL certificate obtained and NGINX configured for HTTPS"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 8: Securing Firewall"
+echo "Step 8: Adding gRPC HTTPS Configuration"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Close port 80 if we opened it and user wants it closed
-if command -v ufw &> /dev/null && [ "\$PORT_80_WAS_CLOSED" -eq 1 ]; then
-    UFW_STATUS=\$(ufw status | grep -c "Status: active" || echo "0")
-    if [ "\$UFW_STATUS" -gt 0 ]; then
-        echo "🔒 Closing port 80 (initial certificate obtained)..."
-        echo ""
-        echo "⚠️  Important: Port 80 is needed for certificate renewals!"
-        echo ""
-        echo "Options:"
-        echo "  1) Keep port 80 open (recommended - allows automatic renewals)"
-        echo "  2) Close port 80 now (you'll need to open it manually for renewals)"
-        echo ""
-        
-        # Default to keeping it open for automatic operation
-        # If you want interactive choice, uncomment the read below
-        CLOSE_PORT_80="n"
-        # read -p "Close port 80? (y/n) [default: n]: " CLOSE_PORT_80
-        
-        if [[ "\$CLOSE_PORT_80" =~ ^[Yy]\$ ]]; then
-            ufw delete allow 80/tcp
-            echo "🔒 Port 80 closed"
-            echo ""
-            echo "⚠️  Remember: You'll need to temporarily open port 80 for renewals:"
-            echo "   ufw allow 80/tcp"
-            echo "   certbot renew"
-            echo "   ufw delete allow 80/tcp"
-        else
-            echo "✅ Port 80 remains open for automatic certificate renewals"
-            echo "   This is the recommended configuration."
-        fi
-    fi
+# Now add gRPC server block to the existing config
+# Append to the end of the file before the last closing brace
+cat >> /etc/nginx/sites-available/$DOMAIN << 'ENDGRPC'
+
+# HTTPS - gRPC
+server {
+    listen 9443 ssl http2;
+    listen [::]:9443 ssl http2;
+    server_name ${DOMAIN};
+
+    # SSL certificates (configured by certbot)
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # Logging
+    access_log /var/log/nginx/${DOMAIN}_grpc_access.log;
+    error_log /var/log/nginx/${DOMAIN}_grpc_error.log;
+
+    # gRPC proxy
+    location / {
+        grpc_pass grpc://127.0.0.1:9090;
+        grpc_set_header Host $host;
+        grpc_set_header X-Real-IP $remote_addr;
+        grpc_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        grpc_set_header X-Forwarded-Proto $scheme;
+
+        # Error handling
+        error_page 502 = /error502grpc;
+    }
+
+    location = /error502grpc {
+        internal;
+        default_type application/grpc;
+        add_header grpc-status 14;
+        add_header content-length 0;
+        return 204;
+    }
+}
+ENDGRPC
+
+# Replace ${DOMAIN} placeholder in the gRPC section
+sed -i "s/\${DOMAIN}/$DOMAIN/g" /etc/nginx/sites-available/$DOMAIN
+
+echo "✅ Added gRPC HTTPS configuration"
+
+# Test the updated configuration
+echo ""
+echo "Testing updated NGINX configuration..."
+if nginx -t; then
+    echo "✅ NGINX configuration is valid"
 else
-    echo "ℹ️  Port 80 configuration unchanged"
+    echo "❌ NGINX configuration has errors"
+    exit 1
 fi
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 9: Setting up Auto-renewal"
+echo "Step 9: Finalizing Configuration"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# Restart NGINX to apply all changes
+systemctl restart nginx
+echo "✅ NGINX restarted with full SSL configuration"
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Step 10: Setting up Auto-renewal"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
 # Test certbot renewal
 certbot renew --dry-run
 
-echo "✅ Auto-renewal configured (certbot timer runs daily)"
+echo "✅ Auto-renewal configured and tested"
 
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 10: Final Configuration"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-
-# Restart NGINX to apply all changes
-systemctl restart nginx
-echo "✅ NGINX restarted with SSL configuration"
-
-# Show status
+# Show final status
 echo ""
 echo "NGINX Status:"
 systemctl status nginx --no-pager -l | head -n 15
@@ -429,6 +400,8 @@ echo -e "${YELLOW}📋 Configuration Summary:${NC}"
 echo ""
 echo "✅ NGINX installed and configured"
 echo "✅ SSL certificate obtained from Let's Encrypt"
+echo "✅ HTTP to HTTPS redirect enabled"
+echo "✅ gRPC HTTPS configured on port 9443"
 echo "✅ Auto-renewal configured"
 echo ""
 echo -e "${YELLOW}🌐 Your endpoints:${NC}"
@@ -442,19 +415,13 @@ echo ""
 echo "  gRPC (HTTPS):"
 echo "    grpcs://${DOMAIN}:9443"
 echo ""
-echo "  Direct RPC (HTTP - still available):"
-echo "    http://${DOMAIN}:26657/status"
-echo ""
 echo -e "${YELLOW}🧪 Test your endpoints:${NC}"
 echo ""
 echo "  # REST API"
 echo "  curl https://${DOMAIN}/cosmos/base/tendermint/v1beta1/node_info"
 echo ""
-echo "  # RPC via NGINX"
+echo "  # RPC via HTTPS"
 echo "  curl https://${DOMAIN}/rpc/status"
-echo ""
-echo "  # Direct RPC (if port 26657 is open)"
-echo "  curl http://${DOMAIN}:26657/status"
 echo ""
 echo -e "${YELLOW}📊 Monitor NGINX:${NC}"
 echo ""
