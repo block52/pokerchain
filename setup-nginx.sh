@@ -118,6 +118,10 @@ echo "Step 4: Creating Initial HTTP Configuration"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
+# Remove any existing default site
+rm -f /etc/nginx/sites-enabled/default
+rm -f /etc/nginx/sites-available/default
+
 # Remove existing config if it exists
 rm -f /etc/nginx/sites-enabled/${DOMAIN}
 rm -f /etc/nginx/sites-available/${DOMAIN}
@@ -195,6 +199,8 @@ echo "✅ Created initial HTTP configuration: /etc/nginx/sites-available/$DOMAIN
 
 # Enable the site
 ln -s /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/$DOMAIN
+# Make this the default site
+ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/default
 echo "✅ Enabled site configuration"
 
 # Test NGINX configuration
@@ -234,6 +240,14 @@ if command -v ufw &> /dev/null; then
             echo "✅ Port 80 already open"
             PORT_80_WAS_CLOSED=0
         fi
+
+        # REMOVE: Open port 1317 for REST API (no longer needed)
+        # if [ "$PORT_1317_STATUS" -eq 0 ]; then
+        #     echo "🔓 Opening port 1317 (REST API)..."
+        #     ufw allow 1317/tcp comment 'REST API'
+        # else
+        #     echo "✅ Port 1317 already open"
+        # fi
         
         # Open port 443 if not already open
         if [ "$PORT_443_STATUS" -eq 0 ]; then
@@ -307,6 +321,8 @@ echo ""
 
 # Now add gRPC server block to the existing config
 # Append to the end of the file before the last closing brace
+# Only add gRPC server block if not already present
+if ! grep -q 'listen 9443 ssl http2;' /etc/nginx/sites-available/$DOMAIN; then
 cat >> /etc/nginx/sites-available/$DOMAIN << 'ENDGRPC'
 
 # HTTPS - gRPC
@@ -351,6 +367,9 @@ ENDGRPC
 sed -i "s/\${DOMAIN}/$DOMAIN/g" /etc/nginx/sites-available/$DOMAIN
 
 echo "✅ Added gRPC HTTPS configuration"
+else
+    echo "gRPC HTTPS configuration already present, skipping duplicate."
+fi
 
 # Test the updated configuration
 echo ""
@@ -440,3 +459,10 @@ echo "  Test renewal: ssh $REMOTE_USER@$REMOTE_HOST 'certbot renew --dry-run'"
 echo ""
 echo -e "${GREEN}🎉 Your node is now secured with HTTPS!${NC}"
 echo ""
+
+echo ""
+echo "Disabling port 80 on UFW (HTTP no longer needed after SSL)..."
+if command -v ufw &> /dev/null; then
+    ufw deny 80/tcp || true
+    echo "✅ Port 80 closed on UFW"
+fi
