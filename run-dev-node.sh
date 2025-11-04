@@ -33,22 +33,83 @@ print_header() {
     echo -e "${NC}"
 }
 
-# Check if binary exists
+# Check if binary exists and matches system architecture
 check_binary() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}Checking Binary${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    
+
+    # Detect system architecture
+    # macOS: uname -s returns "Darwin", uname -m returns "arm64" or "x86_64"
+    # Linux: uname -s returns "Linux", uname -m returns "aarch64", "x86_64", etc.
+    local OS=$(uname -s)
+    local ARCH=$(uname -m)
+    echo "Detected system: $OS $ARCH"
+    echo ""
+
     # Check for binary in build directory
     if [ -f "build/pokerchaind" ]; then
         CHAIN_BINARY="./build/pokerchaind"
         echo -e "${GREEN}✓${NC} Found binary: $CHAIN_BINARY"
-        $CHAIN_BINARY version 2>/dev/null || echo "Version: unknown"
-        return 0
+
+        # Try to get version - if this fails, binary is wrong architecture
+        if $CHAIN_BINARY version &>/dev/null; then
+            local VERSION=$($CHAIN_BINARY version 2>/dev/null || echo "unknown")
+            echo "Version: $VERSION"
+
+            # Verify architecture matches (use 'file' command if available)
+            if command -v file &> /dev/null; then
+                local BINARY_INFO=$(file "$CHAIN_BINARY")
+                echo "Binary info: $BINARY_INFO"
+
+                # Check if binary architecture matches system
+                if [[ "$OS" == "Darwin" && "$ARCH" == "arm64" ]]; then
+                    # macOS ARM64 - binary should be "Mach-O 64-bit executable arm64"
+                    if [[ ! "$BINARY_INFO" =~ "Mach-O".*"arm64" ]]; then
+                        echo -e "${YELLOW}⚠ Binary architecture mismatch!${NC}"
+                        echo "Expected: Mach-O arm64, Found: $BINARY_INFO"
+                        echo "Rebuilding for correct architecture..."
+                        rm -f build/pokerchaind
+                        build_binary
+                        return 0
+                    fi
+                elif [[ "$OS" == "Darwin" && "$ARCH" == "x86_64" ]]; then
+                    # macOS Intel - binary should be "Mach-O 64-bit executable x86_64"
+                    if [[ ! "$BINARY_INFO" =~ "Mach-O".*"x86_64" ]]; then
+                        echo -e "${YELLOW}⚠ Binary architecture mismatch!${NC}"
+                        echo "Expected: Mach-O x86_64, Found: $BINARY_INFO"
+                        echo "Rebuilding for correct architecture..."
+                        rm -f build/pokerchaind
+                        build_binary
+                        return 0
+                    fi
+                elif [[ "$OS" == "Linux" ]]; then
+                    # Linux - binary should be "ELF 64-bit LSB executable"
+                    if [[ ! "$BINARY_INFO" =~ "ELF" ]]; then
+                        echo -e "${YELLOW}⚠ Binary architecture mismatch!${NC}"
+                        echo "Expected: ELF (Linux), Found: $BINARY_INFO"
+                        echo "Rebuilding for correct architecture..."
+                        rm -f build/pokerchaind
+                        build_binary
+                        return 0
+                    fi
+                fi
+            fi
+            return 0
+        else
+            # Binary exists but cannot execute (wrong architecture)
+            echo -e "${YELLOW}⚠ Binary cannot execute (wrong architecture)${NC}"
+            local BINARY_INFO=$(file "$CHAIN_BINARY" 2>/dev/null || echo "unknown")
+            echo "Binary info: $BINARY_INFO"
+            echo "Rebuilding for $OS $ARCH..."
+            rm -f build/pokerchaind
+            build_binary
+            return 0
+        fi
     fi
-    
+
     # Check if in PATH
     if command -v pokerchaind &> /dev/null; then
         CHAIN_BINARY="pokerchaind"
@@ -56,14 +117,14 @@ check_binary() {
         $CHAIN_BINARY version 2>/dev/null || echo "Version: unknown"
         return 0
     fi
-    
+
     # Binary not found - offer to build
     echo -e "${YELLOW}⚠ Binary not found${NC}"
     echo ""
     echo "The pokerchaind binary was not found."
     echo ""
     read -p "Build now? (y/n): " BUILD_NOW
-    
+
     if [[ $BUILD_NOW =~ ^[Yy]$ ]]; then
         build_binary
     else
@@ -75,23 +136,37 @@ check_binary() {
     fi
 }
 
-# Build binary
+# Build binary for the current system architecture
+# The Makefile automatically detects the OS (darwin/linux/windows) and architecture (arm64/amd64)
+# and builds the correct binary via: GOOS=$(uname -s | tr '[:upper:]' '[:lower:]') GOARCH=$(...)
 build_binary() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}Building Binary${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    
+
     if ! command -v make &> /dev/null; then
         echo -e "${RED}❌ make not found${NC}"
         exit 1
     fi
-    
-    echo "Building pokerchaind..."
+
+    local OS=$(uname -s)
+    local ARCH=$(uname -m)
+    echo "Building pokerchaind for $OS $ARCH..."
+    echo ""
+
+    # The 'make build' command automatically builds for the current system
+    # It detects: macOS (darwin) vs Linux, and ARM64 vs x86_64
     if make build; then
         CHAIN_BINARY="./build/pokerchaind"
+        echo ""
         echo -e "${GREEN}✓${NC} Build successful: $CHAIN_BINARY"
+
+        # Show binary info
+        if command -v file &> /dev/null; then
+            echo -e "${GREEN}✓${NC} Binary info: $(file $CHAIN_BINARY)"
+        fi
     else
         echo -e "${RED}❌ Build failed${NC}"
         exit 1
