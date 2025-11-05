@@ -46,6 +46,21 @@ check_binary() {
         CHAIN_BINARY="./build/pokerchaind"
         echo -e "${GREEN}✓${NC} Found binary: $CHAIN_BINARY"
         $CHAIN_BINARY version 2>/dev/null || echo "Version: unknown"
+        # Compare hash to remote binary
+        LOCAL_HASH=$(sha256sum build/pokerchaind | awk '{print $1}')
+        REMOTE_HASH=$(ssh root@node1.block52.xyz 'sha256sum /usr/local/bin/pokerchaind' | awk '{print $1}')
+        echo "Local binary hash:  $LOCAL_HASH"
+        echo "Remote binary hash: $REMOTE_HASH"
+        if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
+            echo -e "${YELLOW}⚠ Binary hash does not match remote node1.block52.xyz!${NC}"
+            read -p "Download remote binary and overwrite local build/pokerchaind? (y/n): " DOWNLOAD_REMOTE
+            if [[ $DOWNLOAD_REMOTE =~ ^[Yy]$ ]]; then
+                scp root@node1.block52.xyz:/usr/local/bin/pokerchaind ./build/pokerchaind
+                echo -e "${GREEN}✓${NC} Downloaded remote binary to ./build/pokerchaind"
+            else
+                echo "Keeping local binary."
+            fi
+        fi
         return 0
     fi
     

@@ -84,7 +84,10 @@ show_menu() {
     echo "   - Ready for SSH deployment"
     echo "   - Connects to existing network"
     echo ""
-    echo -e "${GREEN}10)${NC} Exit"
+    echo -e "${GREEN}10)${NC} Push New Binary Version"
+    echo "   Check remote version/hash, push new binary from /build via SSH"
+    echo ""
+    echo -e "${GREEN}11)${NC} Exit"
     echo ""
     echo -n "Enter your choice [1-10]: "
 }
@@ -485,6 +488,9 @@ main() {
                 setup_production_nodes
                 ;;
             10)
+                push_new_binary_version
+                ;;
+            11)
                 print_header
                 echo ""
                 echo "Thank you for using Pokerchain Network Setup!"
@@ -493,10 +499,60 @@ main() {
                 ;;
             *)
                 echo ""
-                echo -e "${YELLOW}Invalid option. Please choose 1-10.${NC}"
+                echo -e "${YELLOW}Invalid option. Please choose 1-11.${NC}"
                 sleep 2
                 ;;
         esac
+# Push new binary version to remote
+push_new_binary_version() {
+    print_header
+    echo ""
+    echo "Push New Binary Version to Remote Node"
+    echo ""
+    read -p "Remote host (e.g., node1.block52.xyz or 192.168.1.100): " remote_host
+    if [ -z "$remote_host" ]; then
+        echo -e "${YELLOW}❌ Remote host cannot be empty${NC}"
+        read -p "Press Enter to continue..."
+        return
+    fi
+    read -p "Remote user (default: root): " remote_user
+    remote_user=${remote_user:-root}
+    echo ""
+    echo "Checking remote binary version and hash..."
+    remote_bin_path="/usr/local/bin/pokerchaind"
+    remote_version=$(ssh "$remote_user@$remote_host" "$remote_bin_path version 2>/dev/null" || echo "(not found)")
+    remote_hash=$(ssh "$remote_user@$remote_host" "sha256sum $remote_bin_path 2>/dev/null | awk '{print \$1}'" || echo "(not found)")
+    echo "Remote binary version: $remote_version"
+    echo "Remote binary sha256:  $remote_hash"
+    echo ""
+    local_bin_path="./build/pokerchaind"
+    if [ ! -f "$local_bin_path" ]; then
+        echo -e "${YELLOW}❌ Local binary not found in ./build${NC}"
+        read -p "Press Enter to continue..."
+        return
+    fi
+    local_version=$("$local_bin_path" version 2>/dev/null)
+    local_hash=$(sha256sum "$local_bin_path" | awk '{print $1}')
+    echo "Local binary version: $local_version"
+    echo "Local binary sha256:  $local_hash"
+    echo ""
+    if [ "$local_hash" = "$remote_hash" ]; then
+        echo -e "${GREEN}✅ Remote binary is up to date${NC}"
+        read -p "Press Enter to continue..."
+        return
+    fi
+    echo -e "${YELLOW}⚠️  Remote binary differs from local version${NC}"
+    read -p "Push local binary to remote and replace? (y/n): " confirm
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        echo "Pushing binary to remote..."
+        scp "$local_bin_path" "$remote_user@$remote_host:/tmp/pokerchaind.new"
+        ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind.new $remote_bin_path && sudo chmod +x $remote_bin_path"
+        echo -e "${GREEN}✅ Binary updated on remote${NC}"
+    else
+        echo "Push cancelled."
+    fi
+    read -p "Press Enter to continue..."
+}
     done
 }
 
