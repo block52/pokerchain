@@ -89,7 +89,7 @@ show_menu() {
     echo ""
     echo -e "${GREEN}11)${NC} Exit"
     echo ""
-    echo -n "Enter your choice [1-10]: "
+    echo -n "Enter your choice [1-11]: "
 }
 
 # Check if script exists
