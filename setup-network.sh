@@ -479,6 +479,139 @@ push_new_binary_version() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Detecting Remote System Architecture...${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    remote_os=$(ssh "$remote_user@$remote_host" "uname -s | tr '[:upper:]' '[:lower:]'" 2>/dev/null || echo "linux")
+    remote_arch=$(ssh "$remote_user@$remote_host" "uname -m" 2>/dev/null || echo "x86_64")
+    
+    # Convert architecture names to Go format
+    case "$remote_arch" in
+        x86_64)
+            go_arch="amd64"
+            ;;
+        aarch64|arm64)
+            go_arch="arm64"
+            ;;
+        armv7l|armv6l)
+            go_arch="arm"
+            ;;
+        *)
+            go_arch="$remote_arch"
+            ;;
+    esac
+    
+    echo "Detected OS:   $remote_os"
+    echo "Detected Arch: $remote_arch (Go: $go_arch)"
+    echo ""
+    
+    # Detect local architecture
+    local_os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local_arch_raw=$(uname -m)
+    case "$local_arch_raw" in
+        x86_64)
+            local_arch="amd64"
+            ;;
+        aarch64|arm64)
+            local_arch="arm64"
+            ;;
+        armv7l|armv6l)
+            local_arch="arm"
+            ;;
+        *)
+            local_arch="$local_arch_raw"
+            ;;
+    esac
+    
+    echo "Target Architecture:"
+    echo "  1) Use detected remote ($remote_os/$go_arch)"
+    echo "  2) linux/amd64 (x86_64)"
+    echo "  3) linux/arm64 (aarch64)"
+    echo "  4) darwin/amd64 (Intel Mac)"
+    echo "  5) darwin/arm64 (Apple Silicon)"
+    echo "  6) Custom"
+    echo ""
+    read -p "Select target [1-6] (default: 1): " arch_choice
+    arch_choice=${arch_choice:-1}
+    
+    case $arch_choice in
+        1)
+            target_os="$remote_os"
+            target_arch="$go_arch"
+            
+            # Check for architecture mismatch
+            if [ "$target_os" != "$local_os" ] || [ "$target_arch" != "$local_arch" ]; then
+                echo ""
+                echo -e "${YELLOW}⚠️  Architecture Mismatch Detected${NC}"
+                echo "  Local:  $local_os/$local_arch"
+                echo "  Remote: $target_os/$target_arch"
+                echo ""
+                echo "Cross-compilation will be required."
+                echo ""
+                echo "What would you like to do?"
+                echo "  1) Build for remote ($target_os/$target_arch) - recommended"
+                echo "  2) Build for local ($local_os/$local_arch)"
+                echo "  3) Cancel"
+                echo ""
+                read -p "Select option [1-3] (default: 1): " mismatch_choice
+                mismatch_choice=${mismatch_choice:-1}
+                
+                case $mismatch_choice in
+                    1)
+                        echo "Building for remote: $target_os/$target_arch"
+                        ;;
+                    2)
+                        echo "Building for local: $local_os/$local_arch"
+                        target_os="$local_os"
+                        target_arch="$local_arch"
+                        echo ""
+                        echo -e "${YELLOW}⚠️  Warning: You are building for your local architecture${NC}"
+                        echo "This binary may not work on the remote server!"
+                        echo ""
+                        ;;
+                    3)
+                        echo "Operation cancelled."
+                        read -p "Press Enter to continue..."
+                        return
+                        ;;
+                    *)
+                        echo "Invalid choice, building for remote."
+                        ;;
+                esac
+            fi
+            ;;
+        2)
+            target_os="linux"
+            target_arch="amd64"
+            ;;
+        3)
+            target_os="linux"
+            target_arch="arm64"
+            ;;
+        4)
+            target_os="darwin"
+            target_arch="amd64"
+            ;;
+        5)
+            target_os="darwin"
+            target_arch="arm64"
+            ;;
+        6)
+            read -p "Enter target OS (linux/darwin/windows): " target_os
+            read -p "Enter target arch (amd64/arm64/arm): " target_arch
+            ;;
+        *)
+            echo -e "${YELLOW}Invalid choice, using detected architecture${NC}"
+            target_os="$remote_os"
+            target_arch="$go_arch"
+            ;;
+    esac
+    
+    echo ""
+    echo "Building for: $target_os/$target_arch"
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "${BLUE}Checking Remote Binary...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
@@ -491,22 +624,33 @@ push_new_binary_version() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Checking Local Binary...${NC}"
+    echo -e "${BLUE}Building Binary for $target_os/$target_arch...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    echo "Building binary with OS=$target_os ARCH=$target_arch..."
+    make build OS="$target_os" ARCH="$target_arch" || {
+        echo -e "${YELLOW}❌ Build failed${NC}"
+        read -p "Press Enter to continue..."
+        return
+    }
     
     local_bin_path="./build/pokerchaind"
     if [ ! -f "$local_bin_path" ]; then
-        echo -e "${YELLOW}❌ Local binary not found in ./build${NC}"
-        echo ""
-        echo "Please build the binary first:"
-        echo "  make build"
+        echo -e "${YELLOW}❌ Binary not found after build${NC}"
         read -p "Press Enter to continue..."
         return
     fi
     
-    local_version=$("$local_bin_path" version 2>/dev/null)
-    local_hash=$(sha256sum "$local_bin_path" | awk '{print $1}')
+    # Note: Can't run version if cross-compiling for different OS/arch
+    if [ "$target_os" = "$(uname -s | tr '[:upper:]' '[:lower:]')" ] && [ "$target_arch" = "$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')" ]; then
+        local_version=$("$local_bin_path" version 2>/dev/null || echo "(cross-compiled)")
+    else
+        local_version="(cross-compiled for $target_os/$target_arch)"
+    fi
     
+    local_hash=$(shasum -a 256 "$local_bin_path" 2>/dev/null | awk '{print $1}' || sha256sum "$local_bin_path" 2>/dev/null | awk '{print $1}' || echo "(hash unavailable)")
+    
+    echo -e "${GREEN}✅ Build complete${NC}"
     echo "Local binary version: $local_version"
     echo "Local binary sha256:  $local_hash"
     
