@@ -88,9 +88,16 @@ show_menu() {
     echo "   - Safely replace binary on remote server"
     echo "   - Option to restart service if needed"
     echo ""
-    echo -e "${GREEN}10)${NC} Exit"
+    echo -e "${GREEN}10)${NC} Reset Chain (DANGER!)"
+    echo "   Reset blockchain to genesis state"
+    echo "   - Preserves validator keys and genesis.json"
+    echo "   - Deletes all blocks and application state"
+    echo "   - Restarts chain from block 0"
+    echo "   - ⚠️  Use when bug requires full chain restart"
     echo ""
-    echo -n "Enter your choice [1-10]: "
+    echo -e "${GREEN}11)${NC} Exit"
+    echo ""
+    echo -n "Enter your choice [1-11]: "
 }
 
 # Check if script exists
@@ -581,6 +588,151 @@ push_new_binary_version() {
     read -p "Press Enter to continue..."
 }
 
+# Reset chain to genesis (option 10)
+reset_chain() {
+    print_header
+    echo ""
+    echo -e "${YELLOW}⚠️  CHAIN RESET - DESTRUCTIVE OPERATION ⚠️${NC}"
+    echo ""
+    echo "This will:"
+    echo "  ✓ Preserve validator keys (priv_validator_key.json)"
+    echo "  ✓ Preserve node keys (node_key.json)"
+    echo "  ✓ Preserve genesis.json"
+    echo "  ✓ Preserve config files"
+    echo ""
+    echo "  ✗ DELETE all blocks"
+    echo "  ✗ DELETE all application state"
+    echo "  ✗ DELETE all transaction history"
+    echo ""
+    echo "The chain will restart from block 0 with the same genesis state."
+    echo ""
+    
+    read -p "Remote host (e.g., node1.block52.xyz): " remote_host
+    if [ -z "$remote_host" ]; then
+        echo -e "${YELLOW}❌ Remote host cannot be empty${NC}"
+        read -p "Press Enter to continue..."
+        return
+    fi
+    
+    read -p "Remote user (default: root): " remote_user
+    remote_user=${remote_user:-root}
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${YELLOW}FINAL WARNING${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "You are about to reset the chain on: $remote_host"
+    echo ""
+    echo "This will DELETE:"
+    echo "  - All blocks in ~/.pokerchain/data/"
+    echo "  - Application state database"
+    echo "  - WAL (Write-Ahead Log)"
+    echo "  - Address book (will rebuild from seeds)"
+    echo ""
+    echo "Type 'RESET' (in capitals) to confirm:"
+    read confirmation
+    
+    if [ "$confirmation" != "RESET" ]; then
+        echo ""
+        echo "Reset cancelled."
+        read -p "Press Enter to continue..."
+        return
+    fi
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 1: Stopping pokerchaind service...${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    ssh "$remote_user@$remote_host" "sudo systemctl stop pokerchaind" || {
+        echo -e "${YELLOW}⚠️  Failed to stop service (may not be running)${NC}"
+    }
+    
+    echo "Waiting for service to stop completely..."
+    sleep 3
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 2: Resetting blockchain state...${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    # Run tendermint unsafe-reset-all
+    ssh "$remote_user@$remote_host" "pokerchaind tendermint unsafe-reset-all" || {
+        echo -e "${YELLOW}❌ Failed to reset chain${NC}"
+        read -p "Press Enter to continue..."
+        return
+    }
+    
+    echo -e "${GREEN}✅ Chain state reset successfully${NC}"
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 3: Verifying preserved files...${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    # Check that keys and genesis still exist
+    echo ""
+    echo "Checking preserved files:"
+    ssh "$remote_user@$remote_host" "ls -lh ~/.pokerchain/config/{priv_validator_key.json,node_key.json,genesis.json} 2>/dev/null" && {
+        echo -e "${GREEN}✅ All critical files preserved${NC}"
+    } || {
+        echo -e "${YELLOW}⚠️  Could not verify all files${NC}"
+    }
+    
+    echo ""
+    echo "Would you like to restart the chain now?"
+    echo "  1) Yes - restart pokerchaind service"
+    echo "  2) No - I'll restart manually later"
+    echo ""
+    read -p "Enter choice [1-2]: " restart_choice
+    
+    case $restart_choice in
+        1)
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo -e "${BLUE}Step 4: Starting pokerchaind service...${NC}"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            ssh "$remote_user@$remote_host" "sudo systemctl start pokerchaind" || {
+                echo -e "${YELLOW}❌ Failed to start service${NC}"
+                echo "Try manually: ssh $remote_user@$remote_host 'sudo systemctl start pokerchaind'"
+                read -p "Press Enter to continue..."
+                return
+            }
+            
+            echo -e "${GREEN}✅ Service started${NC}"
+            echo ""
+            echo "Waiting for initialization..."
+            sleep 5
+            
+            echo ""
+            echo "Service status:"
+            ssh "$remote_user@$remote_host" "sudo systemctl status pokerchaind --no-pager | head -20"
+            
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo -e "${GREEN}✅ Chain reset complete! Starting from block 0.${NC}"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            echo "Monitor logs with:"
+            echo "  ssh $remote_user@$remote_host 'journalctl -u pokerchaind -f'"
+            ;;
+        *)
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo -e "${GREEN}✅ Chain reset complete!${NC}"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            echo "Start the chain manually when ready:"
+            echo "  ssh $remote_user@$remote_host 'sudo systemctl start pokerchaind'"
+            ;;
+    esac
+    
+    echo ""
+    read -p "Press Enter to continue..."
+}
+
 # Check dependencies
 check_dependencies() {
     local missing_deps=()
@@ -636,6 +788,9 @@ main() {
                 push_new_binary_version
                 ;;
             10)
+                reset_chain
+                ;;
+            11)
                 print_header
                 echo ""
                 echo "Thank you for using Pokerchain Network Setup!"
@@ -644,7 +799,7 @@ main() {
                 ;;
             *)
                 echo ""
-                echo -e "${YELLOW}Invalid option. Please choose 1-10.${NC}"
+                echo -e "${YELLOW}Invalid option. Please choose 1-11.${NC}"
                 sleep 2
                 ;;
         esac
