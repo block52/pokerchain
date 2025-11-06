@@ -15,6 +15,7 @@ func (k msgServer) Mint(ctx context.Context, msg *types.MsgMint) (*types.MsgMint
 	}
 
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	logger := sdkCtx.Logger().With("module", "poker/mint")
 
 	// Validate the message
 	if err := msg.ValidateBasic(); err != nil {
@@ -33,6 +34,47 @@ func (k msgServer) Mint(ctx context.Context, msg *types.MsgMint) (*types.MsgMint
 	if err != nil {
 		return nil, errorsmod.Wrap(err, "invalid recipient address")
 	}
+
+	// VERIFY THE DEPOSIT ON ETHEREUM
+	// This ensures the deposit actually happened and matches the claimed parameters
+	logger.Info("🔍 Verifying Ethereum deposit",
+		"eth_tx_hash", msg.EthTxHash,
+		"recipient", msg.Recipient,
+		"amount", msg.Amount,
+		"nonce", msg.Nonce,
+	)
+
+	// Create bridge verifier
+	verifier, err := NewBridgeVerifier(k.ethRPCURL, k.depositContractAddr)
+	if err != nil {
+		logger.Error("❌ Failed to create bridge verifier", "error", err)
+		return nil, errorsmod.Wrap(err, "failed to create bridge verifier")
+	}
+	defer verifier.Close()
+
+	// Verify the deposit on Ethereum
+	verification, err := verifier.VerifyDeposit(
+		ctx,
+		msg.EthTxHash,
+		msg.Recipient,
+		msg.Amount,
+		msg.Nonce,
+	)
+	if err != nil {
+		logger.Error("❌ Ethereum deposit verification failed", "error", err)
+		return nil, errorsmod.Wrap(err, "ethereum deposit verification failed")
+	}
+
+	if !verification.Verified {
+		logger.Error("❌ Deposit not verified")
+		return nil, errorsmod.Wrap(fmt.Errorf("deposit not verified"), "invalid deposit")
+	}
+
+	logger.Info("✅ Ethereum deposit verified successfully",
+		"recipient", verification.Recipient,
+		"amount", verification.Amount,
+		"nonce", verification.Nonce,
+	)
 
 	// Create coins to mint (assuming USDC with 6 decimals, so amount is in micro-USDC)
 	coins := sdk.NewCoins(sdk.NewInt64Coin("uusdc", int64(msg.Amount)))

@@ -229,6 +229,13 @@ func New(
 		"deposit_contract", bridgeConfig.DepositContractAddress,
 	)
 
+	// Set bridge config on poker keeper for MsgMint verification
+	app.PokerKeeper.SetBridgeConfig(
+		bridgeConfig.EthereumRPCURL,
+		bridgeConfig.DepositContractAddress,
+	)
+	logger.Info("✅ Bridge config set on poker keeper for deposit verification")
+
 	if bridgeConfig.Enabled {
 		logger.Info("🌉 Initializing Ethereum Bridge Service",
 			"rpc_url", bridgeConfig.EthereumRPCURL,

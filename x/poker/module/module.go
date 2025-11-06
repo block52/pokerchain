@@ -139,133 +139,18 @@ func (am AppModule) BeginBlock(_ context.Context) error {
 // EndBlock contains the logic that is automatically triggered at the end of each block.
 // The end block implementation is optional.
 func (am AppModule) EndBlock(ctx context.Context) error {
-	sdkCtx := sdk.UnwrapSDKContext(ctx)
-	logger := sdkCtx.Logger().With("module", "poker/endblocker")
-
-	logger.Info("🔍 trackMint: EndBlocker called")
-
-	// Process pending bridge deposits
-	bridgeService := am.keeper.GetBridgeService()
-	if bridgeService == nil {
-		logger.Info("⚠️ trackMint: Bridge service is nil, skipping")
-		return nil // Bridge service not initialized
-	}
-
-	logger.Info("✅ trackMint: Bridge service found")
-
-	// Get pending deposits from the bridge service
-	pendingDeposits := bridgeService.GetPendingDeposits()
-	logger.Info("📊 trackMint: Retrieved pending deposits", "count", len(pendingDeposits))
-
-	if len(pendingDeposits) == 0 {
-		logger.Info("⚠️ trackMint: No pending deposits to process")
-		return nil // No deposits to process
-	}
-
-	logger.Info("🔄 trackMint: EndBlocker processing pending deposits", "count", len(pendingDeposits))
-
-	// Process each pending deposit
-	for i, deposit := range pendingDeposits {
-		logger.Info("🔷 trackMint: Processing queued deposit",
-			"index", i+1,
-			"total", len(pendingDeposits),
-			"txHash", deposit.TxHash,
-			"recipient", deposit.Recipient,
-			"amount", deposit.Amount.String(),
-		)
-		// Check if already processed
-		if exists, err := am.keeper.ProcessedEthTxs.Has(sdkCtx, deposit.TxHash); err != nil {
-			logger.Error("❌ trackMint: Failed to check processed transaction",
-				"error", err,
-				"txHash", deposit.TxHash,
-			)
-			continue
-		} else if exists {
-			logger.Warn("⚠️ trackMint: Transaction already processed, skipping",
-				"txHash", deposit.TxHash,
-			)
-			continue
-		}
-
-		logger.Info("✅ trackMint: Transaction not yet processed")
-
-		// Validate recipient address
-		recipientAddr, err := sdk.AccAddressFromBech32(deposit.Recipient)
-		if err != nil {
-			logger.Error("❌ trackMint: Invalid recipient address",
-				"error", err,
-				"recipient", deposit.Recipient,
-				"txHash", deposit.TxHash,
-			)
-			continue
-		}
-
-		logger.Info("✅ trackMint: Recipient address validated", "recipientAddr", recipientAddr.String())
-
-		// Create coins to mint
-		amount := deposit.Amount.Uint64()
-		coins := sdk.NewCoins(sdk.NewInt64Coin("uusdc", int64(amount)))
-
-		logger.Info("🪙 trackMint: Minting coins", "amount", amount, "coins", coins.String())
-
-		// Mint coins to module account
-		if err := am.bankKeeper.MintCoins(ctx, types.ModuleName, coins); err != nil {
-			logger.Error("❌ trackMint: Failed to mint coins",
-				"error", err,
-				"amount", amount,
-				"txHash", deposit.TxHash,
-			)
-			continue
-		}
-
-		logger.Info("✅ trackMint: Coins minted to module account")
-
-		logger.Info("💸 trackMint: Sending coins to recipient", "recipient", deposit.Recipient)
-
-		// Send coins to recipient
-		if err := am.bankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, recipientAddr, coins); err != nil {
-			logger.Error("❌ trackMint: Failed to send coins to recipient",
-				"error", err,
-				"recipient", deposit.Recipient,
-				"amount", amount,
-				"txHash", deposit.TxHash,
-			)
-			continue
-		}
-
-		logger.Info("✅ trackMint: Coins sent to recipient")
-
-		logger.Info("📝 trackMint: Marking transaction as processed", "txHash", deposit.TxHash)
-
-		// Mark transaction as processed
-		if err := am.keeper.ProcessedEthTxs.Set(sdkCtx, deposit.TxHash); err != nil {
-			logger.Error("❌ trackMint: Failed to mark transaction as processed",
-				"error", err,
-				"txHash", deposit.TxHash,
-			)
-			continue
-		}
-
-		logger.Info("✅ trackMint: Transaction marked as processed")
-
-		// Emit event
-		sdkCtx.EventManager().EmitEvent(
-			sdk.NewEvent(
-				"bridge_mint",
-				sdk.NewAttribute("recipient", deposit.Recipient),
-				sdk.NewAttribute("amount", coins.String()),
-				sdk.NewAttribute("eth_tx_hash", deposit.TxHash),
-				sdk.NewAttribute("nonce", fmt.Sprintf("%d", deposit.Nonce)),
-			),
-		)
-
-		logger.Info("🎉 trackMint: Deposit processed successfully!",
-			"recipient", deposit.Recipient,
-			"amount", coins.String(),
-			"txHash", deposit.TxHash,
-			"nonce", deposit.Nonce,
-		)
-	}
-
+	// NOTE: Bridge deposits are now handled via MsgMint transactions submitted by users/relayers
+	// This ensures deterministic consensus - all nodes process the same transactions in the same order
+	// The external bridge monitoring service should be run by relayers outside of consensus
+	//
+	// Previous non-deterministic approach (now removed):
+	// - BridgeService would poll Ethereum RPC in background
+	// - Deposits were queued and processed in EndBlocker
+	// - This caused AppHash mismatches between nodes with different timing
+	//
+	// New deterministic approach:
+	// - Users/relayers submit MsgMint transactions on-chain
+	// - All nodes process same transactions in same order
+	// - Relayers run bridge monitoring service outside consensus layer
 	return nil
 }

@@ -51,6 +51,12 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 	if in.Config.Authority != "" {
 		authority = authtypes.NewModuleAddressOrBech32Address(in.Config.Authority)
 	}
+	
+	// Bridge configuration - these will be set from app.toml via app.go
+	// Default values provided here, actual values set in app.go after depinject
+	ethRPCURL := "https://base.llamarpc.com"
+	depositContractAddr := "0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"
+	
 	k := keeper.NewKeeper(
 		in.StoreService,
 		in.Cdc,
@@ -58,6 +64,8 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 		authority,
 		in.BankKeeper,
 		in.StakingKeeper,
+		ethRPCURL,
+		depositContractAddr,
 	)
 	m := NewAppModule(in.Cdc, k, in.AuthKeeper, in.BankKeeper)
 

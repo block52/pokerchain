@@ -31,6 +31,10 @@ type Keeper struct {
 	bankKeeper    types.BankKeeper
 	stakingKeeper types.StakingKeeper
 	bridgeService *BridgeService
+	
+	// Bridge configuration for Ethereum verification
+	ethRPCURL            string
+	depositContractAddr  string
 }
 
 func NewKeeper(
@@ -41,6 +45,9 @@ func NewKeeper(
 
 	bankKeeper types.BankKeeper,
 	stakingKeeper types.StakingKeeper,
+	
+	ethRPCURL string,
+	depositContractAddr string,
 ) *Keeper {
 	if _, err := addressCodec.BytesToString(authority); err != nil {
 		panic(fmt.Sprintf("invalid authority address %s: %s", authority, err))
@@ -54,12 +61,14 @@ func NewKeeper(
 		addressCodec: addressCodec,
 		authority:    authority,
 
-		bankKeeper:      bankKeeper,
-		stakingKeeper:   stakingKeeper,
-		Params:          collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
-		ProcessedEthTxs: collections.NewKeySet(sb, types.ProcessedEthTxsKey, "processed_eth_txs", collections.StringKey),
-		Games:           collections.NewMap(sb, types.GamesKey, "games", collections.StringKey, codec.CollValue[types.Game](cdc)),
-		GameStates:      collections.NewMap(sb, types.GameStatesKey, "game_states", collections.StringKey, codec.CollValue[types.TexasHoldemStateDTO](cdc)),
+		bankKeeper:           bankKeeper,
+		stakingKeeper:        stakingKeeper,
+		ethRPCURL:            ethRPCURL,
+		depositContractAddr:  depositContractAddr,
+		Params:               collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
+		ProcessedEthTxs:      collections.NewKeySet(sb, types.ProcessedEthTxsKey, "processed_eth_txs", collections.StringKey),
+		Games:                collections.NewMap(sb, types.GamesKey, "games", collections.StringKey, codec.CollValue[types.Game](cdc)),
+		GameStates:           collections.NewMap(sb, types.GameStatesKey, "game_states", collections.StringKey, codec.CollValue[types.TexasHoldemStateDTO](cdc)),
 	}
 
 	schema, err := sb.Build()
@@ -84,4 +93,10 @@ func (k *Keeper) SetBridgeService(bs *BridgeService) {
 // GetBridgeService returns the bridge service for this keeper instance
 func (k *Keeper) GetBridgeService() *BridgeService {
 	return k.bridgeService
+}
+
+// SetBridgeConfig updates the bridge configuration for Ethereum verification
+func (k *Keeper) SetBridgeConfig(ethRPCURL string, depositContractAddr string) {
+	k.ethRPCURL = ethRPCURL
+	k.depositContractAddr = depositContractAddr
 }

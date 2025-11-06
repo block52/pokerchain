@@ -27,69 +27,70 @@ show_menu() {
     echo ""
     echo "Select the type of node you want to set up:"
     echo ""
-    echo -e "${GREEN}1)${NC} Genesis Node (node1.block52.xyz)"
-    echo "   Sets up the primary network node with genesis configuration"
-    echo "   - Creates the initial blockchain state"
-    echo "   - Acts as the primary validator"
-    echo "   - Provides public RPC/API endpoints"
+    # COMMENTED OUT - Genesis node already created
+    # echo -e "${GREEN}X)${NC} Genesis Node (node1.block52.xyz)"
+    # echo "   Sets up the primary network node with genesis configuration"
     echo ""
-    echo -e "${GREEN}2)${NC} Run Local Developer Node (local readonly sync)"
+    echo -e "${GREEN}1)${NC} Run Local Developer Node (local readonly sync)"
     echo "   Runs a local developer node that syncs from the network (read-only)"
     echo "   - Uses run-dev-node.sh for robust, repeatable setup"
     echo "   - Provides local RPC/API access"
     echo "   - Does NOT participate in consensus"
     echo "   - Perfect for development and testing"
     echo ""
-    echo -e "${GREEN}3)${NC} Remote Sync Node (deploy to remote server)"
+    echo -e "${GREEN}2)${NC} Remote Sync Node (deploy to remote server)"
     echo "   Deploy a read-only sync node to a remote Linux server"
     echo "   - Builds and uploads binary"
     echo "   - Configures systemd service"
     echo "   - Connects to node1.block52.xyz as peer"
     echo "   - Syncs blockchain data from the network"
     echo ""
-    echo -e "${GREEN}4)${NC} Validator Node (additional validator)"
+    echo -e "${GREEN}3)${NC} Validator Node (additional validator)"
     echo "   Sets up a new validator node to join the network"
     echo "   - Participates in consensus"
     echo "   - Creates and signs blocks"
     echo "   - Requires validator keys"
     echo ""
-    echo -e "${GREEN}5)${NC} Verify Network Connectivity"
+    echo -e "${GREEN}4)${NC} Verify Network Connectivity"
     echo "   Test connectivity to node1.block52.xyz"
     echo "   - Check RPC/API endpoints"
     echo "   - View network status"
     echo "   - Get node information"
     echo ""
-    echo -e "${GREEN}6)${NC} Setup Firewall"
+    echo -e "${GREEN}5)${NC} Setup Firewall"
     echo "   Configure UFW firewall on remote server"
     echo "   - Allow SSH, P2P, RPC, API, gRPC ports"
     echo "   - Block all other incoming connections"
     echo "   - Secure your validator node"
     echo ""
-    echo -e "${GREEN}7)${NC} Setup NGINX & SSL"
+    echo -e "${GREEN}6)${NC} Setup NGINX & SSL"
     echo "   Configure NGINX reverse proxy with SSL certificates"
     echo "   - Install NGINX and Certbot"
     echo "   - Configure HTTPS for REST API and gRPC"
     echo "   - Automatic SSL certificate from Let's Encrypt"
     echo "   - Auto-renewal configured"
     echo ""
-    echo -e "${GREEN}8)${NC} Local Multi-Node Testnet"
+    echo -e "${GREEN}7)${NC} Local Multi-Node Testnet"
     echo "   Run 3 nodes on your local machine"
     echo "   - Different ports for each node"
     echo "   - Easy terminal switching"
     echo "   - Perfect for development"
     echo ""
-    echo -e "${GREEN}9)${NC} Setup Production Nodes"
+    echo -e "${GREEN}8)${NC} Setup Production Nodes"
     echo "   Generate production node configurations"
     echo "   - Creates configs in ./production/nodeX/"
     echo "   - Ready for SSH deployment"
     echo "   - Connects to existing network"
     echo ""
-    echo -e "${GREEN}10)${NC} Push New Binary Version"
-    echo "   Check remote version/hash, push new binary from /build via SSH"
+    echo -e "${GREEN}9)${NC} Push New Binary Version"
+    echo "   Check remote version/hash, push new binary from ./build via SSH"
+    echo "   - Compare local and remote binary versions"
+    echo "   - Safely replace binary on remote server"
+    echo "   - Option to restart service if needed"
     echo ""
-    echo -e "${GREEN}11)${NC} Exit"
+    echo -e "${GREEN}10)${NC} Exit"
     echo ""
-    echo -n "Enter your choice [1-11]: "
+    echo -n "Enter your choice [1-10]: "
 }
 
 # Check if script exists
@@ -103,24 +104,23 @@ check_script() {
     return 0
 }
 
-# Setup genesis node
-setup_genesis() {
-    print_header
-    echo ""
-    echo "Setting up Genesis Node (node1.block52.xyz)"
-    echo ""
-    
-    if check_script "./deploy-master-node.sh"; then
-        chmod +x ./deploy-master-node.sh
-        ./deploy-master-node.sh
-    else
-        echo "Please ensure deploy-master-node.sh is in the current directory"
-        read -p "Press Enter to continue..."
-    fi
-}
+# Setup genesis node (COMMENTED OUT - already deployed)
+# setup_genesis() {
+#     print_header
+#     echo ""
+#     echo "Setting up Genesis Node (node1.block52.xyz)"
+#     echo ""
+#     
+#     if check_script "./deploy-master-node.sh"; then
+#         chmod +x ./deploy-master-node.sh
+#         ./deploy-master-node.sh
+#     else
+#         echo "Please ensure deploy-master-node.sh is in the current directory"
+#         read -p "Press Enter to continue..."
+#     fi
+# }
 
-
-# Run local developer node (option 2)
+# Run local developer node (option 1)
 run_local_dev_node() {
     print_header
     echo ""
@@ -135,7 +135,7 @@ run_local_dev_node() {
     fi
 }
 
-# Setup remote sync node
+# Setup remote sync node (option 2)
 setup_remote_sync() {
     print_header
     echo ""
@@ -178,7 +178,7 @@ setup_remote_sync() {
     read -p "Press Enter to continue..."
 }
 
-# Setup validator node
+# Setup validator node (option 3)
 setup_validator() {
     print_header
     echo ""
@@ -194,7 +194,7 @@ setup_validator() {
     fi
 }
 
-# Verify network connectivity
+# Verify network connectivity (option 4)
 verify_network() {
     print_header
     echo ""
@@ -310,7 +310,7 @@ verify_network() {
     read -p "Press Enter to continue..."
 }
 
-# Setup firewall
+# Setup firewall (option 5)
 setup_firewall() {
     print_header
     echo ""
@@ -362,7 +362,7 @@ setup_firewall() {
     read -p "Press Enter to continue..."
 }
 
-# Setup NGINX & SSL
+# Setup NGINX & SSL (option 6)
 setup_nginx() {
     print_header
     echo ""
@@ -421,7 +421,7 @@ setup_nginx() {
     read -p "Press Enter to continue..."
 }
 
-# Run local multi-node testnet
+# Run local multi-node testnet (option 7)
 run_local_testnet() {
     print_header
     echo ""
@@ -437,7 +437,7 @@ run_local_testnet() {
     fi
 }
 
-# Setup production nodes
+# Setup production nodes (option 8)
 setup_production_nodes() {
     print_header
     echo ""
@@ -453,107 +453,132 @@ setup_production_nodes() {
     fi
 }
 
-# Main loop
-main() {
-    while true; do
-        show_menu
-        read choice
-        
-        case $choice in
-            1)
-                setup_genesis
-                ;;
-            2)
-                run_local_dev_node
-                ;;
-            3)
-                setup_remote_sync
-                ;;
-            4)
-                setup_validator
-                ;;
-            5)
-                verify_network
-                ;;
-            6)
-                setup_firewall
-                ;;
-            7)
-                setup_nginx
-                ;;
-            8)
-                run_local_testnet
-                ;;
-            9)
-                setup_production_nodes
-                ;;
-            10)
-                push_new_binary_version
-                ;;
-            11)
-                print_header
-                echo ""
-                echo "Thank you for using Pokerchain Network Setup!"
-                echo ""
-                exit 0
-                ;;
-            *)
-                echo ""
-                echo -e "${YELLOW}Invalid option. Please choose 1-11.${NC}"
-                sleep 2
-                ;;
-        esac
-# Push new binary version to remote
+# Push new binary version to remote (option 9)
 push_new_binary_version() {
     print_header
     echo ""
-    echo "Push New Binary Version to Remote Node"
+    echo "📦 Push New Binary Version to Remote Node"
     echo ""
+    
     read -p "Remote host (e.g., node1.block52.xyz or 192.168.1.100): " remote_host
     if [ -z "$remote_host" ]; then
         echo -e "${YELLOW}❌ Remote host cannot be empty${NC}"
         read -p "Press Enter to continue..."
         return
     fi
+    
     read -p "Remote user (default: root): " remote_user
     remote_user=${remote_user:-root}
+    
     echo ""
-    echo "Checking remote binary version and hash..."
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Checking Remote Binary...${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
     remote_bin_path="/usr/local/bin/pokerchaind"
     remote_version=$(ssh "$remote_user@$remote_host" "$remote_bin_path version 2>/dev/null" || echo "(not found)")
     remote_hash=$(ssh "$remote_user@$remote_host" "sha256sum $remote_bin_path 2>/dev/null | awk '{print \$1}'" || echo "(not found)")
+    
     echo "Remote binary version: $remote_version"
     echo "Remote binary sha256:  $remote_hash"
+    
     echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Checking Local Binary...${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
     local_bin_path="./build/pokerchaind"
     if [ ! -f "$local_bin_path" ]; then
         echo -e "${YELLOW}❌ Local binary not found in ./build${NC}"
+        echo ""
+        echo "Please build the binary first:"
+        echo "  make build"
         read -p "Press Enter to continue..."
         return
     fi
+    
     local_version=$("$local_bin_path" version 2>/dev/null)
     local_hash=$(sha256sum "$local_bin_path" | awk '{print $1}')
+    
     echo "Local binary version: $local_version"
     echo "Local binary sha256:  $local_hash"
+    
     echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
     if [ "$local_hash" = "$remote_hash" ]; then
-        echo -e "${GREEN}✅ Remote binary is up to date${NC}"
+        echo -e "${GREEN}✅ Remote binary is up to date (hashes match)${NC}"
         read -p "Press Enter to continue..."
         return
     fi
+    
     echo -e "${YELLOW}⚠️  Remote binary differs from local version${NC}"
-    read -p "Push local binary to remote and replace? (y/n): " confirm
-    if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        echo "Pushing binary to remote..."
-        scp "$local_bin_path" "$remote_user@$remote_host:/tmp/pokerchaind.new"
-        ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind.new $remote_bin_path && sudo chmod +x $remote_bin_path"
-        echo -e "${GREEN}✅ Binary updated on remote${NC}"
-    else
-        echo "Push cancelled."
-    fi
+    echo ""
+    echo "Would you like to:"
+    echo "  1) Push local binary to remote and replace"
+    echo "  2) Push and restart pokerchaind service"
+    echo "  3) Cancel"
+    echo ""
+    read -p "Enter choice [1-3]: " push_choice
+    
+    case $push_choice in
+        1)
+            echo ""
+            echo "Pushing binary to remote..."
+            scp "$local_bin_path" "$remote_user@$remote_host:/tmp/pokerchaind.new" || {
+                echo -e "${YELLOW}❌ Failed to copy binary${NC}"
+                read -p "Press Enter to continue..."
+                return
+            }
+            
+            ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind.new $remote_bin_path && sudo chmod +x $remote_bin_path" || {
+                echo -e "${YELLOW}❌ Failed to replace binary${NC}"
+                read -p "Press Enter to continue..."
+                return
+            }
+            
+            echo -e "${GREEN}✅ Binary updated on remote${NC}"
+            echo ""
+            echo "⚠️  Remember to restart pokerchaind service manually:"
+            echo "  ssh $remote_user@$remote_host 'sudo systemctl restart pokerchaind'"
+            ;;
+        2)
+            echo ""
+            echo "Pushing binary to remote..."
+            scp "$local_bin_path" "$remote_user@$remote_host:/tmp/pokerchaind.new" || {
+                echo -e "${YELLOW}❌ Failed to copy binary${NC}"
+                read -p "Press Enter to continue..."
+                return
+            }
+            
+            ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind.new $remote_bin_path && sudo chmod +x $remote_bin_path" || {
+                echo -e "${YELLOW}❌ Failed to replace binary${NC}"
+                read -p "Press Enter to continue..."
+                return
+            }
+            
+            echo -e "${GREEN}✅ Binary updated on remote${NC}"
+            echo ""
+            echo "Restarting pokerchaind service..."
+            
+            ssh "$remote_user@$remote_host" "sudo systemctl restart pokerchaind" || {
+                echo -e "${YELLOW}❌ Failed to restart service${NC}"
+                read -p "Press Enter to continue..."
+                return
+            }
+            
+            echo -e "${GREEN}✅ Service restarted${NC}"
+            echo ""
+            echo "Checking service status..."
+            sleep 2
+            ssh "$remote_user@$remote_host" "sudo systemctl status pokerchaind --no-pager | head -20"
+            ;;
+        *)
+            echo "Push cancelled."
+            ;;
+    esac
+    
     read -p "Press Enter to continue..."
-}
-    done
 }
 
 # Check dependencies
@@ -574,6 +599,56 @@ check_dependencies() {
         echo ""
         sleep 2
     fi
+}
+
+# Main loop
+main() {
+    while true; do
+        show_menu
+        read choice
+        
+        case $choice in
+            1)
+                run_local_dev_node
+                ;;
+            2)
+                setup_remote_sync
+                ;;
+            3)
+                setup_validator
+                ;;
+            4)
+                verify_network
+                ;;
+            5)
+                setup_firewall
+                ;;
+            6)
+                setup_nginx
+                ;;
+            7)
+                run_local_testnet
+                ;;
+            8)
+                setup_production_nodes
+                ;;
+            9)
+                push_new_binary_version
+                ;;
+            10)
+                print_header
+                echo ""
+                echo "Thank you for using Pokerchain Network Setup!"
+                echo ""
+                exit 0
+                ;;
+            *)
+                echo ""
+                echo -e "${YELLOW}Invalid option. Please choose 1-10.${NC}"
+                sleep 2
+                ;;
+        esac
+    done
 }
 
 # Run pre-checks and start main loop
