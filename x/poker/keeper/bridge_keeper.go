@@ -51,7 +51,7 @@ func (k Keeper) ProcessBridgeDeposit(ctx context.Context, ethTxHash string, reci
 	logger.Info("✅ trackMint: Amount validated", "amount", amount)
 
 	// Create coins to mint
-	coins := sdk.NewCoins(sdk.NewInt64Coin("uusdc", int64(amount)))
+	coins := sdk.NewCoins(sdk.NewInt64Coin("usdc", int64(amount)))
 
 	logger.Info("🪙 trackMint: Minting coins to module account",
 		"module", types.ModuleName,
