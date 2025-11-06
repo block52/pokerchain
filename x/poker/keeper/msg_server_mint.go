@@ -99,7 +99,7 @@ func (k msgServer) Mint(ctx context.Context, msg *types.MsgMint) (*types.MsgMint
 		sdk.NewEvent(
 			"bridge_mint",
 			sdk.NewAttribute("recipient", msg.Recipient),
-			sdk.NewAttribute("amount", sdk.NewInt64Coin("uusdc", int64(msg.Amount)).String()),
+			sdk.NewAttribute("amount", sdk.NewInt64Coin("usdc", int64(msg.Amount)).String()),
 			sdk.NewAttribute("eth_tx_hash", msg.EthTxHash),
 			sdk.NewAttribute("nonce", fmt.Sprintf("%d", msg.Nonce)),
 		),
