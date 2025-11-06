@@ -77,7 +77,7 @@ func (k msgServer) Mint(ctx context.Context, msg *types.MsgMint) (*types.MsgMint
 	)
 
 	// Create coins to mint (assuming USDC with 6 decimals, so amount is in micro-USDC)
-	coins := sdk.NewCoins(sdk.NewInt64Coin("uusdc", int64(msg.Amount)))
+	coins := sdk.NewCoins(sdk.NewInt64Coin("usdc", int64(msg.Amount)))
 
 	// Mint coins to the module account first
 	if err := k.bankKeeper.MintCoins(ctx, types.ModuleName, coins); err != nil {
