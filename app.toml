@@ -244,7 +244,7 @@ max-txs = -1
 enabled = true
 
 # Ethereum RPC URL (Base Chain)
-ethereum_rpc_url = "https://base.llamarpc.com"
+ethereum_rpc_url = "https://base-mainnet.g.alchemy.com/v2/uwae8IxsUFGbRFh8fagTMrGz1w5iuvpc"
 
 # CosmosBridge contract address on Base Chain
 deposit_contract_address = "0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"

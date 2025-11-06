@@ -36,7 +36,10 @@ print_header() {
 
 # Show usage
 show_usage() {
-    echo "Usage: $0 <nonce> [options]"
+    echo "Usage: $0 <block_number> [options]"
+    echo ""
+    echo "Arguments:"
+    echo "  <block_number>         Block number to check for deposit events (decimal integer)"
     echo ""
     echo "Options:"
     echo "  --validator <host>     Validator host (default: node1.block52.xyz)"
@@ -46,11 +49,11 @@ show_usage() {
     echo "  --debug                Show detailed debug information"
     echo ""
     echo "Examples:"
-    echo "  $0 1                                      # Auto-detect validator address"
-    echo "  $0 5 --from cosmos1abc...                 # Specify address"
-    echo "  $0 5 --validator node1.block52.xyz        # Custom validator"
-    echo "  $0 10 --dry-run                           # Test without executing"
-    echo "  $0 1 --debug                              # Show debug output"
+    echo "  $0 36265934                               # Check block for deposits"
+    echo "  $0 36265934 --from cosmos1abc...          # Specify address"
+    echo "  $0 36265934 --validator node1.block52.xyz # Custom validator"
+    echo "  $0 36265934 --dry-run                     # Test without executing"
+    echo "  $0 36265934 --debug                       # Show debug output"
     echo ""
 }
 
@@ -68,12 +71,20 @@ decode_hex_string() {
     echo "$hex" | xxd -r -p
 }
 
-# Query Ethereum logs for specific deposit
-query_deposit() {
-    local nonce="$1"
+# Convert decimal to hex with 0x prefix
+dec_to_hex() {
+    printf "0x%x" "$1"
+}
+
+# Query Ethereum logs for specific block
+query_deposits_in_block() {
+    local block_number="$1"
     local debug="${2:-false}"
     
-    echo -e "${BLUE}Querying Base blockchain for deposit #${nonce}...${NC}"
+    # Convert block number to hex
+    local block_hex=$(dec_to_hex "$block_number")
+    
+    echo -e "${BLUE}Querying Base blockchain for deposits in block ${block_number} (${block_hex})...${NC}"
     
     if [ "$debug" = "true" ]; then
         echo ""
@@ -81,11 +92,12 @@ query_deposit() {
         echo "  RPC URL: $ALCHEMY_URL"
         echo "  Contract: $CONTRACT_ADDRESS"
         echo "  Event Topic: $DEPOSITED_EVENT_TOPIC"
-        echo "  Nonce: $nonce"
+        echo "  Block Number (decimal): $block_number"
+        echo "  Block Number (hex): $block_hex"
         echo ""
     fi
     
-    # Query logs
+    # Query logs for the specific block
     local payload=$(cat <<EOF
 {
   "jsonrpc": "2.0",
@@ -93,8 +105,8 @@ query_deposit() {
   "params": [{
     "address": "$CONTRACT_ADDRESS",
     "topics": ["$DEPOSITED_EVENT_TOPIC"],
-    "fromBlock": "0x22CABCE",
-    "toBlock": "0x22CABCE"
+    "fromBlock": "$block_hex",
+    "toBlock": "$block_hex"
   }],
   "id": 1
 }
@@ -138,64 +150,46 @@ EOF
     # Check if result is null or empty
     local result_check=$(echo "$response" | jq -r '.result' 2>/dev/null)
     if [ "$result_check" = "null" ] || [ -z "$result_check" ]; then
-        echo -e "${RED}❌ No deposit events found on contract${NC}"
-        echo "Contract: $CONTRACT_ADDRESS"
-        echo ""
-        echo "This could mean:"
-        echo "  - No deposits have been made yet"
-        echo "  - Wrong contract address"
-        echo "  - Wrong network (check Alchemy URL)"
-        echo ""
-        echo "Verify contract has deposits:"
-        echo "  https://basescan.org/address/$CONTRACT_ADDRESS#events"
+        echo -e "${YELLOW}ℹ️  No deposit events found in block $block_number${NC}"
         return 1
     fi
     
-    # Count total deposits
+    # Count total deposits in this block
     local total=$(echo "$response" | jq -r '.result | length' 2>/dev/null)
-    echo "Found $total total deposit(s) on contract"
+    echo -e "${GREEN}✓ Found $total deposit event(s) in block $block_number${NC}"
+    echo ""
     
     # Save all results
-    echo "$response" | jq -r '.result' > /tmp/all_deposit_events.json
+    echo "$response" | jq -r '.result' > /tmp/block_deposit_events.json
     
-    # Find the event with matching nonce
-    echo "Searching for deposit with nonce $nonce..."
-    
-    # Parse each event and find matching nonce
-    local found=false
-    echo "$response" | jq -r '.result[] | @json' | while read -r event; do
-        local data=$(echo "$event" | jq -r '.data' 2>/dev/null)
+    # Display all deposits found
+    local event_num=0
+    echo "$response" | jq -c '.result[]' | while read -r event; do
+        event_num=$((event_num + 1))
+        
+        local tx_hash=$(echo "$event" | jq -r '.transactionHash')
+        local data=$(echo "$event" | jq -r '.data')
         data="${data#0x}"
         
-        # Extract nonce from data (second 32 bytes)
-        local event_nonce_hex="0x${data:64:64}"
-        local event_nonce=$(printf "%d" "$event_nonce_hex" 2>/dev/null || echo "0")
+        # Extract amount (first 32 bytes)
+        local amount_hex="0x${data:0:64}"
+        local amount=$(printf "%d" "$amount_hex" 2>/dev/null || echo "0")
         
-        if [ "$debug" = "true" ]; then
-            echo "  Event nonce: $event_nonce"
-        fi
+        # Extract index/nonce from data (second 32 bytes)
+        local index_hex="0x${data:64:64}"
+        local index=$(printf "%d" "$index_hex" 2>/dev/null || echo "0")
         
-        if [ "$event_nonce" = "$nonce" ]; then
-            echo "$event" > /tmp/deposit_event.json
-            found=true
-            break
-        fi
+        echo "Deposit #$event_num:"
+        echo "  Transaction Hash: $tx_hash"
+        echo "  Amount: $amount"
+        echo "  Nonce/Index: $index"
+        echo ""
+        
+        # Save each event to separate file for processing
+        echo "$event" > "/tmp/deposit_event_${index}.json"
     done
     
-    if [ ! -s /tmp/deposit_event.json ]; then
-        echo -e "${RED}❌ No deposit found for nonce $nonce${NC}"
-        echo ""
-        echo "Available nonces:"
-        echo "$response" | jq -r '.result[] | .data' | while read -r data; do
-            data="${data#0x}"
-            local n_hex="0x${data:64:64}"
-            local n=$(printf "%d" "$n_hex" 2>/dev/null || echo "0")
-            echo "  - Nonce: $n"
-        done
-        return 1
-    fi
-    
-    cat /tmp/deposit_event.json
+    echo "$response"
 }
 
 # Parse deposit event
@@ -388,6 +382,76 @@ ENDSSH
     fi
 }
 
+# Process deposits from a block
+process_deposits_from_block() {
+    local block_number="$1"
+    local from_address="$2"
+    local dry_run="$3"
+    local debug="$4"
+    
+    # Query deposits in the block
+    local response=$(query_deposits_in_block "$block_number" "$debug")
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+    
+    # Get all deposit indices from the block
+    local indices=()
+    while read -r event; do
+        local data=$(echo "$event" | jq -r '.data')
+        data="${data#0x}"
+        
+        # Extract index/nonce from data (second 32 bytes)
+        local index_hex="0x${data:64:64}"
+        local index=$(printf "%d" "$index_hex" 2>/dev/null || echo "0")
+        
+        indices+=("$index")
+    done < <(echo "$response" | jq -c '.result[]')
+    
+    if [ ${#indices[@]} -eq 0 ]; then
+        echo -e "${YELLOW}ℹ️  No deposits to process${NC}"
+        return 0
+    fi
+    
+    # Process each deposit
+    for index in "${indices[@]}"; do
+        local event_file="/tmp/deposit_event_${index}.json"
+        
+        if [ ! -f "$event_file" ]; then
+            echo -e "${YELLOW}⚠️  Skipping index $index - event file not found${NC}"
+            continue
+        fi
+        
+        echo ""
+        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BLUE}Processing Deposit with Nonce: $index${NC}"
+        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        
+        # Parse deposit details
+        if ! parse_deposit "$event_file"; then
+            echo -e "${RED}❌ Failed to parse deposit $index${NC}"
+            continue
+        fi
+        
+        # Check if already processed
+        if [ "$dry_run" != "true" ]; then
+            check_if_processed "$DEPOSIT_TX_HASH"
+        fi
+        
+        # Submit transaction
+        submit_mint_tx \
+            "$from_address" \
+            "$DEPOSIT_TX_HASH" \
+            "$DEPOSIT_RECIPIENT" \
+            "$DEPOSIT_AMOUNT" \
+            "$DEPOSIT_NONCE" \
+            "$dry_run"
+        
+        # Cleanup
+        rm -f "$event_file"
+    done
+}
+
 # Main function
 main() {
     # Parse arguments
@@ -396,7 +460,7 @@ main() {
         exit 1
     fi
     
-    local nonce="$1"
+    local block_number="$1"
     shift
     
     local dry_run="false"
@@ -437,28 +501,13 @@ main() {
         esac
     done
     
-    # Validate nonce
-    if ! [[ "$nonce" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED}❌ Invalid nonce. Must be a number.${NC}"
+    # Validate block number
+    if ! [[ "$block_number" =~ ^[0-9]+$ ]]; then
+        echo -e "${RED}❌ Invalid block number. Must be a positive integer.${NC}"
         exit 1
     fi
     
     print_header
-    
-    # Query deposit from Ethereum
-    if ! query_deposit "$nonce" "$debug" > /tmp/deposit_event.json; then
-        exit 1
-    fi
-    
-    # Parse deposit details
-    if ! parse_deposit "/tmp/deposit_event.json"; then
-        exit 1
-    fi
-    
-    # Check if already processed
-    if [ "$dry_run" != "true" ]; then
-        check_if_processed "$DEPOSIT_TX_HASH"
-    fi
     
     # Get from address if not provided
     if [ -z "$from_address" ]; then
@@ -482,17 +531,13 @@ main() {
         fi
     fi
     
-    # Submit transaction
-    submit_mint_tx \
-        "$from_address" \
-        "$DEPOSIT_TX_HASH" \
-        "$DEPOSIT_RECIPIENT" \
-        "$DEPOSIT_AMOUNT" \
-        "$DEPOSIT_NONCE" \
-        "$dry_run"
+    echo ""
+    
+    # Process all deposits from the block
+    process_deposits_from_block "$block_number" "$from_address" "$dry_run" "$debug"
     
     # Cleanup
-    rm -f /tmp/deposit_event.json
+    rm -f /tmp/block_deposit_events.json /tmp/deposit_event_*.json
     
     echo ""
     echo -e "${GREEN}✅ Done!${NC}"
