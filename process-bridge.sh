@@ -43,12 +43,14 @@ show_usage() {
     echo "  --user <user>          SSH user (default: root)"
     echo "  --from <address>       Cosmos address to submit from (optional, auto-detects)"
     echo "  --dry-run              Show what would be done without executing"
+    echo "  --debug                Show detailed debug information"
     echo ""
     echo "Examples:"
     echo "  $0 1                                      # Auto-detect validator address"
     echo "  $0 5 --from cosmos1abc...                 # Specify address"
     echo "  $0 5 --validator node1.block52.xyz        # Custom validator"
     echo "  $0 10 --dry-run                           # Test without executing"
+    echo "  $0 1 --debug                              # Show debug output"
     echo ""
 }
 
@@ -69,17 +71,21 @@ decode_hex_string() {
 # Query Ethereum logs for specific deposit
 query_deposit() {
     local nonce="$1"
+    local debug="${2:-false}"
     
     echo -e "${BLUE}Querying Base blockchain for deposit #${nonce}...${NC}"
     
-    # Convert nonce to hex (padded to 32 bytes)
-    local nonce_hex=$(printf "0x%064x" "$nonce")
+    if [ "$debug" = "true" ]; then
+        echo ""
+        echo "Debug Info:"
+        echo "  RPC URL: $ALCHEMY_URL"
+        echo "  Contract: $CONTRACT_ADDRESS"
+        echo "  Event Topic: $DEPOSITED_EVENT_TOPIC"
+        echo "  Nonce: $nonce"
+        echo ""
+    fi
     
-    # Query logs with nonce as indexed parameter
-    # The Deposited event has: event Deposited(string indexed account, uint256 amount, uint256 index)
-    # Topics: [0] = event signature, [1] = keccak256(account), [2] = none, [3] = none
-    # Data: amount (32 bytes) + index (32 bytes)
-    
+    # Query logs
     local payload=$(cat <<EOF
 {
   "jsonrpc": "2.0",
@@ -87,24 +93,105 @@ query_deposit() {
   "params": [{
     "address": "$CONTRACT_ADDRESS",
     "topics": ["$DEPOSITED_EVENT_TOPIC"],
-    "fromBlock": "0x0",
-    "toBlock": "latest"
+    "fromBlock": "0x22CABCE",
+    "toBlock": "0x22CABCE"
   }],
   "id": 1
 }
 EOF
 )
     
+    if [ "$debug" = "true" ]; then
+        echo "Request payload:"
+        echo "$payload" | jq '.'
+        echo ""
+    fi
+    
+    echo "Fetching deposit events from Base..."
     local response=$(curl -s -X POST "$ALCHEMY_URL" \
         -H "Content-Type: application/json" \
         -d "$payload")
     
-    # Parse response and find the event with matching nonce
-    echo "$response" | jq -r ".result[] | select(.data as \$data | 
-        (\$data | .[130:194]) == \"$(printf "%064x" $nonce)\")" > /tmp/deposit_event.json
+    if [ "$debug" = "true" ]; then
+        echo ""
+        echo "Raw response:"
+        echo "$response" | jq '.' 2>/dev/null || echo "$response"
+        echo ""
+    fi
+    
+    # Check if response is valid
+    if [ -z "$response" ]; then
+        echo -e "${RED}❌ No response from Alchemy RPC${NC}"
+        return 1
+    fi
+    
+    # Check for JSON-RPC error
+    local error=$(echo "$response" | jq -r '.error.message // empty' 2>/dev/null)
+    if [ -n "$error" ]; then
+        echo -e "${RED}❌ RPC Error: $error${NC}"
+        if [ "$debug" = "true" ]; then
+            echo "$response" | jq '.error'
+        fi
+        return 1
+    fi
+    
+    # Check if result is null or empty
+    local result_check=$(echo "$response" | jq -r '.result' 2>/dev/null)
+    if [ "$result_check" = "null" ] || [ -z "$result_check" ]; then
+        echo -e "${RED}❌ No deposit events found on contract${NC}"
+        echo "Contract: $CONTRACT_ADDRESS"
+        echo ""
+        echo "This could mean:"
+        echo "  - No deposits have been made yet"
+        echo "  - Wrong contract address"
+        echo "  - Wrong network (check Alchemy URL)"
+        echo ""
+        echo "Verify contract has deposits:"
+        echo "  https://basescan.org/address/$CONTRACT_ADDRESS#events"
+        return 1
+    fi
+    
+    # Count total deposits
+    local total=$(echo "$response" | jq -r '.result | length' 2>/dev/null)
+    echo "Found $total total deposit(s) on contract"
+    
+    # Save all results
+    echo "$response" | jq -r '.result' > /tmp/all_deposit_events.json
+    
+    # Find the event with matching nonce
+    echo "Searching for deposit with nonce $nonce..."
+    
+    # Parse each event and find matching nonce
+    local found=false
+    echo "$response" | jq -r '.result[] | @json' | while read -r event; do
+        local data=$(echo "$event" | jq -r '.data' 2>/dev/null)
+        data="${data#0x}"
+        
+        # Extract nonce from data (second 32 bytes)
+        local event_nonce_hex="0x${data:64:64}"
+        local event_nonce=$(printf "%d" "$event_nonce_hex" 2>/dev/null || echo "0")
+        
+        if [ "$debug" = "true" ]; then
+            echo "  Event nonce: $event_nonce"
+        fi
+        
+        if [ "$event_nonce" = "$nonce" ]; then
+            echo "$event" > /tmp/deposit_event.json
+            found=true
+            break
+        fi
+    done
     
     if [ ! -s /tmp/deposit_event.json ]; then
         echo -e "${RED}❌ No deposit found for nonce $nonce${NC}"
+        echo ""
+        echo "Available nonces:"
+        echo "$response" | jq -r '.result[] | .data' | while read -r data; do
+            data="${data#0x}"
+            local n_hex="0x${data:64:64}"
+            local n=$(printf "%d" "$n_hex" 2>/dev/null || echo "0")
+            echo "  - Nonce: $n"
+        done
         return 1
     fi
     
@@ -314,6 +401,7 @@ main() {
     
     local dry_run="false"
     local from_address=""
+    local debug="false"
     
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -331,6 +419,10 @@ main() {
                 ;;
             --dry-run)
                 dry_run="true"
+                shift
+                ;;
+            --debug)
+                debug="true"
                 shift
                 ;;
             --help|-h)
@@ -354,7 +446,7 @@ main() {
     print_header
     
     # Query deposit from Ethereum
-    if ! query_deposit "$nonce" > /tmp/deposit_event.json; then
+    if ! query_deposit "$nonce" "$debug" > /tmp/deposit_event.json; then
         exit 1
     fi
     
