@@ -43,16 +43,72 @@
                     "accounts": [
                         {
                             "@type": "/cosmos.auth.v1beta1.BaseAccount",
-                            "address": "b5212txy5le90veh4uhgde006hffarz6449pshnyp6",
+                            "address": "b521dfe7r39q88zeqtde44efdqeky9thdtwngkzy2y",
                             "pub_key": null,
                             "account_number": "0",
                             "sequence": "0"
                         },
                         {
                             "@type": "/cosmos.auth.v1beta1.BaseAccount",
-                            "address": "b521hhkp8de2ghf2jnufpxs6v24hwczy5smckp44qn",
+                            "address": "b521hg93rsm2f5v3zlepf20ru88uweajt3nf492s2p",
                             "pub_key": null,
                             "account_number": "1",
+                            "sequence": "0"
+                        },
+                        {
+                            "@type": "/cosmos.auth.v1beta1.BaseAccount",
+                            "address": "b521xkh7eznh50km2lxh783sqqyml8fjwl0tqjsc0c",
+                            "pub_key": null,
+                            "account_number": "2",
+                            "sequence": "0"
+                        },
+                        {
+                            "@type": "/cosmos.auth.v1beta1.BaseAccount",
+                            "address": "b521n25h4eg6uhtdvs26988k9ye497sylum8lz5vns",
+                            "pub_key": null,
+                            "account_number": "3",
+                            "sequence": "0"
+                        },
+                        {
+                            "@type": "/cosmos.auth.v1beta1.BaseAccount",
+                            "address": "b521pscx3n8gygnm7pf3vxcyvxlwvcxa3ug2vzaxah",
+                            "pub_key": null,
+                            "account_number": "4",
+                            "sequence": "0"
+                        },
+                        {
+                            "@type": "/cosmos.auth.v1beta1.BaseAccount",
+                            "address": "b521pejd682h20grq0em8jwhmnclggf2hqaq7xh8tk",
+                            "pub_key": null,
+                            "account_number": "5",
+                            "sequence": "0"
+                        },
+                        {
+                            "@type": "/cosmos.auth.v1beta1.BaseAccount",
+                            "address": "b521r4ysrlg7cqgfx4nh48t234g6hl3lxap9dddede",
+                            "pub_key": null,
+                            "account_number": "6",
+                            "sequence": "0"
+                        },
+                        {
+                            "@type": "/cosmos.auth.v1beta1.BaseAccount",
+                            "address": "b521xe9xv26qtdern5k84csy2c6jxxfa33vxn6s0aw",
+                            "pub_key": null,
+                            "account_number": "7",
+                            "sequence": "0"
+                        },
+                        {
+                            "@type": "/cosmos.auth.v1beta1.BaseAccount",
+                            "address": "b52102v4aqqm8pxtl5k2kv5229xx7vfwlu66ev0p3h",
+                            "pub_key": null,
+                            "account_number": "8",
+                            "sequence": "0"
+                        },
+                        {
+                            "@type": "/cosmos.auth.v1beta1.BaseAccount",
+                            "address": "b521dyqcaeuhwp6ryzc58gpyqaz8rxrt95sdcltdsq",
+                            "pub_key": null,
+                            "account_number": "9",
                             "sequence": "0"
                         }
                     ]
@@ -67,7 +123,7 @@
                     },
                     "balances": [
                         {
-                            "address": "b5212txy5le90veh4uhgde006hffarz6449pshnyp6",
+                            "address": "b521dfe7r39q88zeqtde44efdqeky9thdtwngkzy2y",
                             "coins": [
                                 {
                                     "denom": "stake",
@@ -76,7 +132,79 @@
                             ]
                         },
                         {
-                            "address": "b521hhkp8de2ghf2jnufpxs6v24hwczy5smckp44qn",
+                            "address": "b521hg93rsm2f5v3zlepf20ru88uweajt3nf492s2p",
+                            "coins": [
+                                {
+                                    "denom": "stake",
+                                    "amount": "1000000000000"
+                                }
+                            ]
+                        },
+                        {
+                            "address": "b521xkh7eznh50km2lxh783sqqyml8fjwl0tqjsc0c",
+                            "coins": [
+                                {
+                                    "denom": "stake",
+                                    "amount": "1000000000000"
+                                }
+                            ]
+                        },
+                        {
+                            "address": "b521n25h4eg6uhtdvs26988k9ye497sylum8lz5vns",
+                            "coins": [
+                                {
+                                    "denom": "stake",
+                                    "amount": "1000000000000"
+                                }
+                            ]
+                        },
+                        {
+                            "address": "b521pscx3n8gygnm7pf3vxcyvxlwvcxa3ug2vzaxah",
+                            "coins": [
+                                {
+                                    "denom": "stake",
+                                    "amount": "1000000000000"
+                                }
+                            ]
+                        },
+                        {
+                            "address": "b521pejd682h20grq0em8jwhmnclggf2hqaq7xh8tk",
+                            "coins": [
+                                {
+                                    "denom": "stake",
+                                    "amount": "1000000000000"
+                                }
+                            ]
+                        },
+                        {
+                            "address": "b521r4ysrlg7cqgfx4nh48t234g6hl3lxap9dddede",
+                            "coins": [
+                                {
+                                    "denom": "stake",
+                                    "amount": "1000000000000"
+                                }
+                            ]
+                        },
+                        {
+                            "address": "b521xe9xv26qtdern5k84csy2c6jxxfa33vxn6s0aw",
+                            "coins": [
+                                {
+                                    "denom": "stake",
+                                    "amount": "1000000000000"
+                                }
+                            ]
+                        },
+                        {
+                            "address": "b52102v4aqqm8pxtl5k2kv5229xx7vfwlu66ev0p3h",
+                            "coins": [
+                                {
+                                    "denom": "stake",
+                                    "amount": "1000000000000"
+                                }
+                            ]
+                        },
+                        {
+                            "address": "b521dyqcaeuhwp6ryzc58gpyqaz8rxrt95sdcltdsq",
                             "coins": [
                                 {
                                     "denom": "stake",
@@ -88,7 +216,7 @@
                     "supply": [
                         {
                             "denom": "stake",
-                            "amount": "2000000000000"
+                            "amount": "10000000000000"
                         }
                     ],
                     "denom_metadata": [],

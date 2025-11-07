@@ -2,61 +2,61 @@
 
 **⚠️ Warning: These are test accounts only. Never use these seed phrases on mainnet or with real funds.**
 
-## Test Actor 1 - "Alice"
+## Test Actor 0 - "Alice"
 
 **Address:** `b521dfe7r39q88zeqtde44efdqeky9thdtwngkzy2y`  
 **Seed Phrase:** `cement shadow leave crash crisp aisle model hip lend february library ten cereal soul bind boil bargain barely rookie odor panda artwork damage reason`  
 **Usage:** Conservative player, good for testing basic gameplay
 
-## Test Actor 2 - "Bob"
+## Test Actor 1 - "Bob"
 
 **Address:** `b521hg93rsm2f5v3zlepf20ru88uweajt3nf492s2p`  
 **Seed Phrase:** `vanish legend pelican blush control spike useful usage into any remove wear flee short october naive swear wall spy cup sort avoid agent credit`  
 **Usage:** Aggressive player, good for testing betting strategies
 
-## Test Actor 3 - "Charlie"
+## Test Actor 2 - "Charlie"
 
 **Address:** `b521xkh7eznh50km2lxh783sqqyml8fjwl0tqjsc0c`  
 **Seed Phrase:** `video short denial minimum vague arm dose parrot poverty saddle kingdom life buyer globe fashion topic vicious theme voice keep try jacket fresh potato`  
 **Usage:** Strategic player, good for testing complex scenarios
 
-## Test Actor 4 - "Diana"
+## Test Actor 3 - "Diana"
 
 **Address:** `b521n25h4eg6uhtdvs26988k9ye497sylum8lz5vns`  
 **Seed Phrase:** `twice bacon whale space improve galaxy liberty trumpet outside sunny action reflect doll hill ugly torch ride gossip snack fork talk market proud nothing`  
 **Usage:** Unpredictable player, good for testing edge cases
 
-## Test Actor 5 - "Eve"
+## Test Actor 4 - "Eve"
 
 **Address:** `b521pscx3n8gygnm7pf3vxcyvxlwvcxa3ug2vzaxah`  
 **Seed Phrase:** `raven mix autumn dismiss degree husband street slender maple muscle inch radar winner agent claw permit autumn expose power minute master scrub asthma retreat`  
 **Usage:** Balanced player, good for testing standard gameplay
 
-## Test Actor 6 - "Frank"
+## Test Actor 5 - "Frank"
 
 **Address:** `b521pejd682h20grq0em8jwhmnclggf2hqaq7xh8tk`  
 **Seed Phrase:** `alpha satoshi civil spider expand bread pitch keen define helmet tourist rib habit cereal impulse earn milk need obscure ski purchase question vocal author`  
 **Usage:** High-stakes player, good for testing large bets
 
-## Test Actor 7 - "Grace"
+## Test Actor 6 - "Grace"
 
 **Address:** `b521r4ysrlg7cqgfx4nh48t234g6hl3lxap9dddede`  
 **Seed Phrase:** `letter stumble apology garlic liquid loyal bid board silver web ghost jewel lift direct green silk urge guitar nest erase remind jaguar decrease skin`  
 **Usage:** Careful player, good for testing fold scenarios
 
-## Test Actor 8 - "Henry"
+## Test Actor 7 - "Henry"
 
 **Address:** `b521xe9xv26qtdern5k84csy2c6jxxfa33vxn6s0aw`  
 **Seed Phrase:** `access execute loyal tag grid demise cloth desk dolphin pelican trumpet frown note level sibling dumb upon unfold wedding party success hint need fruit`  
 **Usage:** Lucky player, good for testing winning scenarios
 
-## Test Actor 9 - "Iris"
+## Test Actor 8 - "Iris"
 
 **Address:** `b52102v4aqqm8pxtl5k2kv5229xx7vfwlu66ev0p3h`  
 **Seed Phrase:** `any antenna globe forget neglect race advice admit market guilt clay tunnel anxiety aim morning scrap visit sibling royal during proud flee maid fiscal`  
 **Usage:** Passive player, good for testing check/call patterns
 
-## Test Actor 10 - "Jack"
+## Test Actor 9 - "Jack"
 
 **Address:** `b521dyqcaeuhwp6ryzc58gpyqaz8rxrt95sdcltdsq`  
 **Seed Phrase:** `digital option before hawk alcohol uncover expire faint enact shield bike uncle kangaroo museum domain heart purchase under answer topple timber hole height glance`  
@@ -69,7 +69,7 @@
 To import any of these accounts into your local keyring:
 
 ```bash
-# Import an account (example with Test Actor 1)
+# Import an account (example with Test Actor 0)
 pokerchaind keys add alice --recover --keyring-backend test
 # Then paste the seed phrase when prompted
 
