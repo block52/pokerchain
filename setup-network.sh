@@ -90,7 +90,7 @@ show_menu() {
     echo ""
     echo -e "${GREEN}10)${NC} Reset Chain (DANGER!)"
     echo "   Reset blockchain to genesis state"
-    echo "   - Preserves validator keys and genesis.json"
+    echo "   - Preserves validator keys and genesis.json (or optionally replace genesis)"
     echo "   - Deletes all blocks and application state"
     echo "   - Restarts chain from block 0"
     echo "   - ⚠️  Use when bug requires full chain restart"
@@ -479,139 +479,6 @@ push_new_binary_version() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Detecting Remote System Architecture...${NC}"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
-    remote_os=$(ssh "$remote_user@$remote_host" "uname -s | tr '[:upper:]' '[:lower:]'" 2>/dev/null || echo "linux")
-    remote_arch=$(ssh "$remote_user@$remote_host" "uname -m" 2>/dev/null || echo "x86_64")
-    
-    # Convert architecture names to Go format
-    case "$remote_arch" in
-        x86_64)
-            go_arch="amd64"
-            ;;
-        aarch64|arm64)
-            go_arch="arm64"
-            ;;
-        armv7l|armv6l)
-            go_arch="arm"
-            ;;
-        *)
-            go_arch="$remote_arch"
-            ;;
-    esac
-    
-    echo "Detected OS:   $remote_os"
-    echo "Detected Arch: $remote_arch (Go: $go_arch)"
-    echo ""
-    
-    # Detect local architecture
-    local_os=$(uname -s | tr '[:upper:]' '[:lower:]')
-    local_arch_raw=$(uname -m)
-    case "$local_arch_raw" in
-        x86_64)
-            local_arch="amd64"
-            ;;
-        aarch64|arm64)
-            local_arch="arm64"
-            ;;
-        armv7l|armv6l)
-            local_arch="arm"
-            ;;
-        *)
-            local_arch="$local_arch_raw"
-            ;;
-    esac
-    
-    echo "Target Architecture:"
-    echo "  1) Use detected remote ($remote_os/$go_arch)"
-    echo "  2) linux/amd64 (x86_64)"
-    echo "  3) linux/arm64 (aarch64)"
-    echo "  4) darwin/amd64 (Intel Mac)"
-    echo "  5) darwin/arm64 (Apple Silicon)"
-    echo "  6) Custom"
-    echo ""
-    read -p "Select target [1-6] (default: 1): " arch_choice
-    arch_choice=${arch_choice:-1}
-    
-    case $arch_choice in
-        1)
-            target_os="$remote_os"
-            target_arch="$go_arch"
-            
-            # Check for architecture mismatch
-            if [ "$target_os" != "$local_os" ] || [ "$target_arch" != "$local_arch" ]; then
-                echo ""
-                echo -e "${YELLOW}⚠️  Architecture Mismatch Detected${NC}"
-                echo "  Local:  $local_os/$local_arch"
-                echo "  Remote: $target_os/$target_arch"
-                echo ""
-                echo "Cross-compilation will be required."
-                echo ""
-                echo "What would you like to do?"
-                echo "  1) Build for remote ($target_os/$target_arch) - recommended"
-                echo "  2) Build for local ($local_os/$local_arch)"
-                echo "  3) Cancel"
-                echo ""
-                read -p "Select option [1-3] (default: 1): " mismatch_choice
-                mismatch_choice=${mismatch_choice:-1}
-                
-                case $mismatch_choice in
-                    1)
-                        echo "Building for remote: $target_os/$target_arch"
-                        ;;
-                    2)
-                        echo "Building for local: $local_os/$local_arch"
-                        target_os="$local_os"
-                        target_arch="$local_arch"
-                        echo ""
-                        echo -e "${YELLOW}⚠️  Warning: You are building for your local architecture${NC}"
-                        echo "This binary may not work on the remote server!"
-                        echo ""
-                        ;;
-                    3)
-                        echo "Operation cancelled."
-                        read -p "Press Enter to continue..."
-                        return
-                        ;;
-                    *)
-                        echo "Invalid choice, building for remote."
-                        ;;
-                esac
-            fi
-            ;;
-        2)
-            target_os="linux"
-            target_arch="amd64"
-            ;;
-        3)
-            target_os="linux"
-            target_arch="arm64"
-            ;;
-        4)
-            target_os="darwin"
-            target_arch="amd64"
-            ;;
-        5)
-            target_os="darwin"
-            target_arch="arm64"
-            ;;
-        6)
-            read -p "Enter target OS (linux/darwin/windows): " target_os
-            read -p "Enter target arch (amd64/arm64/arm): " target_arch
-            ;;
-        *)
-            echo -e "${YELLOW}Invalid choice, using detected architecture${NC}"
-            target_os="$remote_os"
-            target_arch="$go_arch"
-            ;;
-    esac
-    
-    echo ""
-    echo "Building for: $target_os/$target_arch"
-    
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "${BLUE}Checking Remote Binary...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
@@ -624,33 +491,22 @@ push_new_binary_version() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Building Binary for $target_os/$target_arch...${NC}"
+    echo -e "${BLUE}Checking Local Binary...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
-    echo "Building binary with OS=$target_os ARCH=$target_arch..."
-    make build OS="$target_os" ARCH="$target_arch" || {
-        echo -e "${YELLOW}❌ Build failed${NC}"
-        read -p "Press Enter to continue..."
-        return
-    }
     
     local_bin_path="./build/pokerchaind"
     if [ ! -f "$local_bin_path" ]; then
-        echo -e "${YELLOW}❌ Binary not found after build${NC}"
+        echo -e "${YELLOW}❌ Local binary not found in ./build${NC}"
+        echo ""
+        echo "Please build the binary first:"
+        echo "  make build"
         read -p "Press Enter to continue..."
         return
     fi
     
-    # Note: Can't run version if cross-compiling for different OS/arch
-    if [ "$target_os" = "$(uname -s | tr '[:upper:]' '[:lower:]')" ] && [ "$target_arch" = "$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')" ]; then
-        local_version=$("$local_bin_path" version 2>/dev/null || echo "(cross-compiled)")
-    else
-        local_version="(cross-compiled for $target_os/$target_arch)"
-    fi
+    local_version=$("$local_bin_path" version 2>/dev/null)
+    local_hash=$(sha256sum "$local_bin_path" | awk '{print $1}')
     
-    local_hash=$(shasum -a 256 "$local_bin_path" 2>/dev/null | awk '{print $1}' || sha256sum "$local_bin_path" 2>/dev/null | awk '{print $1}' || echo "(hash unavailable)")
-    
-    echo -e "${GREEN}✅ Build complete${NC}"
     echo "Local binary version: $local_version"
     echo "Local binary sha256:  $local_hash"
     
@@ -798,7 +654,174 @@ reset_chain() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 2: Resetting blockchain state...${NC}"
+    echo -e "${BLUE}Step 2: Reset Genesis File?${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "Would you like to replace the genesis file?"
+    echo "  1) No - Keep existing genesis.json"
+    echo "  2) Yes - Copy from local repo"
+    echo ""
+    read -p "Enter choice [1-2] (default: 1): " genesis_choice
+    genesis_choice=${genesis_choice:-1}
+    
+    local genesis_updated=false
+    
+    if [ "$genesis_choice" = "2" ]; then
+        echo ""
+        echo "Where is your genesis file?"
+        echo "  1) ./genesis.json (local file)"
+        echo "  2) ./config/genesis.json"
+        echo "  3) Custom path"
+        echo ""
+        read -p "Enter choice [1-3] (default: 1): " genesis_location
+        genesis_location=${genesis_location:-1}
+        
+        local local_genesis_path=""
+        
+        case $genesis_location in
+            1)
+                local_genesis_path="./genesis.json"
+                ;;
+            2)
+                local_genesis_path="./config/genesis.json"
+                ;;
+            3)
+                read -p "Enter path to genesis.json: " local_genesis_path
+                ;;
+        esac
+        
+        if [ ! -f "$local_genesis_path" ]; then
+            echo -e "${YELLOW}❌ Genesis file not found: $local_genesis_path${NC}"
+            echo "Continuing without replacing genesis..."
+        else
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo -e "${BLUE}Validating New Genesis File...${NC}"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            
+            # Check if jq is available
+            if ! command -v jq &> /dev/null; then
+                echo -e "${YELLOW}⚠️  Warning: jq not installed - skipping validation${NC}"
+                echo "Install jq for genesis validation: sudo apt-get install jq"
+                echo ""
+                read -p "Continue without validation? (y/n): " continue_without_validation
+                if [[ ! "$continue_without_validation" =~ ^[Yy]$ ]]; then
+                    echo "Genesis replacement cancelled."
+                    return
+                fi
+            else
+                # Validate local genesis file
+                local new_chain_id=$(cat "$local_genesis_path" | jq -r '.chain_id' 2>/dev/null)
+                local new_app_hash=$(cat "$local_genesis_path" | jq -r '.app_hash' 2>/dev/null)
+                
+                if [ -z "$new_chain_id" ] || [ "$new_chain_id" = "null" ]; then
+                    echo -e "${YELLOW}❌ CRITICAL ERROR: New genesis file is missing chain_id!${NC}"
+                    echo "The genesis file at $local_genesis_path is invalid."
+                    echo "Genesis file must have a 'chain_id' field."
+                    echo ""
+                    read -p "Press Enter to continue..."
+                    return
+                fi
+                
+                echo "New genesis file:"
+                echo "  Chain ID:  $new_chain_id"
+                echo "  App Hash:  ${new_app_hash:-"(empty)"}"
+                echo ""
+                
+                # Get existing genesis info
+                local old_chain_id=$(ssh "$remote_user@$remote_host" "cat ~/.pokerchain/config/genesis.json | jq -r '.chain_id' 2>/dev/null" || echo "unknown")
+                local old_app_hash=$(ssh "$remote_user@$remote_host" "cat ~/.pokerchain/config/genesis.json | jq -r '.app_hash' 2>/dev/null" || echo "unknown")
+                
+                echo "Current genesis file:"
+                echo "  Chain ID:  $old_chain_id"
+                echo "  App Hash:  ${old_app_hash:-"(empty)"}"
+                echo ""
+                
+                # Compare chain IDs
+                if [ "$new_chain_id" != "$old_chain_id" ]; then
+                    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                    echo -e "${YELLOW}⚠️  WARNING: CHAIN ID MISMATCH!${NC}"
+                    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                    echo ""
+                    echo "You are changing the chain ID from '$old_chain_id' to '$new_chain_id'"
+                    echo ""
+                    echo "This means you are starting a COMPLETELY NEW CHAIN."
+                    echo "This is NOT compatible with the existing network!"
+                    echo ""
+                    echo "Consequences:"
+                    echo "  • This node will NOT sync with other nodes on '$old_chain_id'"
+                    echo "  • All previous blocks and state will be lost"
+                    echo "  • You are essentially creating a new blockchain"
+                    echo ""
+                    read -p "Are you ABSOLUTELY SURE you want to change the chain ID? (type 'YES' to confirm): " chain_id_confirm
+                    
+                    if [ "$chain_id_confirm" != "YES" ]; then
+                        echo ""
+                        echo "Genesis replacement cancelled."
+                        return
+                    fi
+                fi
+                
+                # Compare app hashes
+                if [ "$new_app_hash" != "$old_app_hash" ] && [ "$new_app_hash" != "null" ] && [ "$old_app_hash" != "null" ]; then
+                    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                    echo -e "${YELLOW}⚠️  WARNING: APP HASH MISMATCH!${NC}"
+                    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                    echo ""
+                    echo "The app_hash differs from the current genesis."
+                    echo ""
+                    echo "This means the initial state of the blockchain has changed."
+                    echo "Different app_hash = different genesis accounts, balances, or parameters"
+                    echo ""
+                    if [ "$new_chain_id" = "$old_chain_id" ]; then
+                        echo "⚠️  You have the SAME chain ID but DIFFERENT initial state!"
+                        echo "This will cause consensus failures if other validators have different genesis."
+                        echo ""
+                    fi
+                    read -p "Continue with different app_hash? (y/n): " app_hash_confirm
+                    
+                    if [[ ! "$app_hash_confirm" =~ ^[Yy]$ ]]; then
+                        echo ""
+                        echo "Genesis replacement cancelled."
+                        return
+                    fi
+                fi
+            fi
+            
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo -e "${BLUE}Copying Genesis File...${NC}"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            
+            # Backup existing genesis
+            ssh "$remote_user@$remote_host" "cp ~/.pokerchain/config/genesis.json ~/.pokerchain/config/genesis.json.backup" || {
+                echo -e "${YELLOW}⚠️  Could not backup existing genesis${NC}"
+            }
+            
+            echo "Backup created: ~/.pokerchain/config/genesis.json.backup"
+            echo ""
+            
+            # Copy new genesis
+            scp "$local_genesis_path" "$remote_user@$remote_host:~/.pokerchain/config/genesis.json" || {
+                echo -e "${YELLOW}❌ Failed to copy genesis file${NC}"
+                echo "Restoring backup..."
+                ssh "$remote_user@$remote_host" "mv ~/.pokerchain/config/genesis.json.backup ~/.pokerchain/config/genesis.json"
+                read -p "Press Enter to continue..."
+                return
+            }
+            
+            echo -e "${GREEN}✅ Genesis file updated${NC}"
+            echo "   Chain ID: $new_chain_id"
+            echo "   App Hash: ${new_app_hash:-"(empty)"}"
+            genesis_updated=true
+        fi
+    fi
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 3: Resetting blockchain state...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
     # Run tendermint unsafe-reset-all
@@ -810,9 +833,13 @@ reset_chain() {
     
     echo -e "${GREEN}✅ Chain state reset successfully${NC}"
     
+    if [ "$genesis_updated" = true ]; then
+        echo -e "${GREEN}✅ Genesis file was replaced - chain will start with new genesis${NC}"
+    fi
+    
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 3: Verifying preserved files...${NC}"
+    echo -e "${BLUE}Step 4: Verifying preserved files...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
     # Check that keys and genesis still exist
@@ -835,7 +862,7 @@ reset_chain() {
         1)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo -e "${BLUE}Step 4: Starting pokerchaind service...${NC}"
+            echo -e "${BLUE}Step 5: Starting pokerchaind service...${NC}"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             
             ssh "$remote_user@$remote_host" "sudo systemctl start pokerchaind" || {
@@ -853,6 +880,208 @@ reset_chain() {
             echo ""
             echo "Service status:"
             ssh "$remote_user@$remote_host" "sudo systemctl status pokerchaind --no-pager | head -20"
+            
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo -e "${BLUE}Step 6: Create Validator? (Optional)${NC}"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            echo "Would you like to create a validator now?"
+            echo "  1) Yes - Import key and create validator"
+            echo "  2) No - I'll do it manually later"
+            echo ""
+            read -p "Enter choice [1-2]: " validator_choice
+            
+            if [ "$validator_choice" = "1" ]; then
+                echo ""
+                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                echo -e "${BLUE}Validator Setup${NC}"
+                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                echo ""
+                
+                # Wait for chain to produce a few blocks
+                echo "Waiting for chain to produce blocks..."
+                sleep 10
+                
+                # Get validator pubkey
+                local validator_pubkey=$(ssh "$remote_user@$remote_host" "pokerchaind comet show-validator" 2>/dev/null)
+                if [ -z "$validator_pubkey" ]; then
+                    echo -e "${YELLOW}❌ Could not get validator pubkey${NC}"
+                    echo "Chain may not be running yet. Try manually later."
+                    read -p "Press Enter to continue..."
+                    return
+                fi
+                
+                echo "Validator Public Key: $validator_pubkey"
+                echo ""
+                
+                # Ask which key to import
+                echo "Which account key would you like to import?"
+                echo "  1) alice (default genesis account)"
+                echo "  2) Other account (provide mnemonic)"
+                echo ""
+                read -p "Enter choice [1-2] (default: 1): " key_choice
+                key_choice=${key_choice:-1}
+                
+                local account_name=""
+                
+                if [ "$key_choice" = "1" ]; then
+                    account_name="alice"
+                    echo ""
+                    echo "Enter the mnemonic for alice:"
+                    read -p "> " alice_mnemonic
+                    
+                    if [ -z "$alice_mnemonic" ]; then
+                        echo -e "${YELLOW}❌ Mnemonic cannot be empty${NC}"
+                        read -p "Press Enter to continue..."
+                        return
+                    fi
+                    
+                    # Import alice key
+                    echo ""
+                    echo "Importing alice key..."
+                    echo "$alice_mnemonic" | ssh "$remote_user@$remote_host" "pokerchaind keys add alice --recover" || {
+                        echo -e "${YELLOW}❌ Failed to import key${NC}"
+                        read -p "Press Enter to continue..."
+                        return
+                    }
+                else
+                    echo ""
+                    read -p "Enter account name: " account_name
+                    if [ -z "$account_name" ]; then
+                        echo -e "${YELLOW}❌ Account name cannot be empty${NC}"
+                        read -p "Press Enter to continue..."
+                        return
+                    fi
+                    
+                    echo "Enter the mnemonic for $account_name:"
+                    read -p "> " account_mnemonic
+                    
+                    if [ -z "$account_mnemonic" ]; then
+                        echo -e "${YELLOW}❌ Mnemonic cannot be empty${NC}"
+                        read -p "Press Enter to continue..."
+                        return
+                    fi
+                    
+                    # Import key
+                    echo ""
+                    echo "Importing $account_name key..."
+                    echo "$account_mnemonic" | ssh "$remote_user@$remote_host" "pokerchaind keys add $account_name --recover" || {
+                        echo -e "${YELLOW}❌ Failed to import key${NC}"
+                        read -p "Press Enter to continue..."
+                        return
+                    }
+                fi
+                
+                echo -e "${GREEN}✅ Key imported${NC}"
+                echo ""
+                
+                # Get account address
+                local account_address=$(ssh "$remote_user@$remote_host" "pokerchaind keys show $account_name -a" 2>/dev/null)
+                echo "Account address: $account_address"
+                
+                # Check balance
+                echo ""
+                echo "Checking account balance..."
+                sleep 2
+                local balance=$(ssh "$remote_user@$remote_host" "pokerchaind query bank balances $account_address --output json" 2>/dev/null | jq -r '.balances[0].amount' 2>/dev/null)
+                
+                if [ -z "$balance" ] || [ "$balance" = "null" ]; then
+                    echo -e "${YELLOW}⚠️  Could not verify balance. Account may have no tokens.${NC}"
+                    echo "Make sure this account has tokens in genesis.json"
+                    echo ""
+                    read -p "Continue anyway? (y/n): " continue_anyway
+                    if [[ ! "$continue_anyway" =~ ^[Yy]$ ]]; then
+                        echo "Validator creation cancelled."
+                        read -p "Press Enter to continue..."
+                        return
+                    fi
+                else
+                    echo "Balance: $balance stake"
+                fi
+                
+                echo ""
+                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                echo -e "${BLUE}Validator Configuration${NC}"
+                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                echo ""
+                
+                read -p "Validator moniker (default: validator): " moniker
+                moniker=${moniker:-validator}
+                
+                read -p "Amount to stake (default: 100000000000stake): " stake_amount
+                stake_amount=${stake_amount:-100000000000stake}
+                
+                read -p "Commission rate (default: 0.10): " commission_rate
+                commission_rate=${commission_rate:-0.10}
+                
+                read -p "Commission max rate (default: 0.20): " commission_max_rate
+                commission_max_rate=${commission_max_rate:-0.20}
+                
+                read -p "Commission max change rate (default: 0.01): " commission_max_change
+                commission_max_change=${commission_max_change:-0.01}
+                
+                read -p "Min self delegation (default: 1): " min_self_delegation
+                min_self_delegation=${min_self_delegation:-1}
+                
+                echo ""
+                echo "Creating validator with:"
+                echo "  Moniker: $moniker"
+                echo "  Account: $account_name ($account_address)"
+                echo "  Stake: $stake_amount"
+                echo "  Commission: $commission_rate (max: $commission_max_rate, max change: $commission_max_change)"
+                echo "  Min self delegation: $min_self_delegation"
+                echo ""
+                read -p "Proceed? (y/n): " confirm_create
+                
+                if [[ ! "$confirm_create" =~ ^[Yy]$ ]]; then
+                    echo "Validator creation cancelled."
+                    read -p "Press Enter to continue..."
+                    return
+                fi
+                
+                echo ""
+                echo "Creating validator..."
+                
+                # Create validator transaction
+                ssh "$remote_user@$remote_host" "pokerchaind tx staking create-validator \
+                    --amount=$stake_amount \
+                    --pubkey='$validator_pubkey' \
+                    --moniker=\"$moniker\" \
+                    --commission-rate=\"$commission_rate\" \
+                    --commission-max-rate=\"$commission_max_rate\" \
+                    --commission-max-change-rate=\"$commission_max_change\" \
+                    --min-self-delegation=\"$min_self_delegation\" \
+                    --from=$account_name \
+                    --chain-id=pokerchain \
+                    --gas=auto \
+                    --gas-adjustment=1.5 \
+                    --yes" || {
+                    echo -e "${YELLOW}❌ Failed to create validator${NC}"
+                    echo ""
+                    echo "Common issues:"
+                    echo "  • Account has insufficient balance"
+                    echo "  • Chain ID doesn't match"
+                    echo "  • Node not fully synced"
+                    echo ""
+                    read -p "Press Enter to continue..."
+                    return
+                }
+                
+                echo ""
+                echo -e "${GREEN}✅ Validator creation transaction submitted!${NC}"
+                echo ""
+                echo "Waiting for transaction to be included in a block..."
+                sleep 6
+                
+                # Query validator
+                local validator_address=$(ssh "$remote_user@$remote_host" "pokerchaind keys show $account_name --bech val -a" 2>/dev/null)
+                echo ""
+                echo "Checking validator status..."
+                ssh "$remote_user@$remote_host" "pokerchaind query staking validator $validator_address --output json" 2>/dev/null | jq '{moniker: .description.moniker, status: .status, tokens: .tokens}' || {
+                    echo "Could not query validator yet. It may take a moment to appear."
+                }
+            fi
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
