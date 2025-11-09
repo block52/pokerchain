@@ -15,6 +15,9 @@
 
 set -e
 
+# Trap errors to show which line failed
+trap 'echo "Error on line $LINENO. Command: $BASH_COMMAND"' ERR
+
 # Configuration
 OUTPUT_DIR="./production"
 KEYRING_BACKEND="test"  # For initial setup, change to "file" in production
