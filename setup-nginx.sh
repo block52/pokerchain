@@ -294,7 +294,88 @@ echo ""
 # Check if certificate already exists
 if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
     echo "✅ SSL certificate already exists for $DOMAIN"
-    echo "Skipping certificate request"
+    echo "Manually configuring NGINX for HTTPS..."
+
+    # Remove the HTTP-only config and create HTTPS config manually
+    cat > /etc/nginx/sites-available/$DOMAIN << 'ENDHTTPS'
+# Pokerchaind REST API - HTTPS Configuration
+# Domain: ${DOMAIN}
+
+# HTTP - Redirect to HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN};
+
+    return 301 https://$server_name$request_uri;
+}
+
+# HTTPS - REST API
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${DOMAIN};
+
+    # SSL certificates
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # Logging
+    access_log /var/log/nginx/${DOMAIN}_access.log;
+    error_log /var/log/nginx/${DOMAIN}_error.log;
+
+    # Increase timeouts for blockchain operations
+    proxy_connect_timeout 300s;
+    proxy_send_timeout 300s;
+    proxy_read_timeout 300s;
+
+    # CORS headers for API
+    add_header Access-Control-Allow-Origin * always;
+    add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+    add_header Access-Control-Allow-Headers "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization" always;
+    add_header Access-Control-Expose-Headers "Content-Length,Content-Range" always;
+
+    # Handle preflight requests
+    if ($request_method = 'OPTIONS') {
+        return 204;
+    }
+
+    # REST API - Cosmos SDK
+    location / {
+        proxy_pass http://127.0.0.1:1317;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    # Tendermint RPC
+    location /rpc/ {
+        proxy_pass http://127.0.0.1:26657/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket support for subscriptions
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+ENDHTTPS
+
+    # Replace ${DOMAIN} placeholder with actual domain
+    sed -i "s/\${DOMAIN}/$DOMAIN/g" /etc/nginx/sites-available/$DOMAIN
+
+    echo "✅ Created HTTPS configuration with existing certificate"
 else
     echo "Requesting SSL certificate for $DOMAIN..."
     echo "Email: $ADMIN_EMAIL"
