@@ -291,26 +291,45 @@ echo "Step 7: Obtaining SSL Certificate"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-echo "Requesting SSL certificate for $DOMAIN..."
-echo "Email: $ADMIN_EMAIL"
-echo ""
-echo "Certbot will automatically:"
-echo "  • Obtain SSL certificate from Let's Encrypt"
-echo "  • Configure NGINX for HTTPS"
-echo "  • Set up HTTP to HTTPS redirect"
+# Check if certificate already exists
+if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    echo "✅ SSL certificate already exists for $DOMAIN"
+    echo "Skipping certificate request"
+else
+    echo "Requesting SSL certificate for $DOMAIN..."
+    echo "Email: $ADMIN_EMAIL"
+    echo ""
+    echo "Certbot will automatically:"
+    echo "  • Obtain SSL certificate from Let's Encrypt"
+    echo "  • Configure NGINX for HTTPS"
+    echo "  • Set up HTTP to HTTPS redirect"
+    echo ""
+
+    # Run certbot to get certificate and auto-configure nginx
+    certbot --nginx \
+        --non-interactive \
+        --agree-tos \
+        --email $ADMIN_EMAIL \
+        --domains $DOMAIN \
+        --redirect \
+        --hsts \
+        --staple-ocsp
+fi
+
 echo ""
 
-# Run certbot to get certificate and auto-configure nginx
-certbot --nginx \
-    --non-interactive \
-    --agree-tos \
-    --email $ADMIN_EMAIL \
-    --domains $DOMAIN \
-    --redirect \
-    --hsts \
-    --staple-ocsp
+# Check for duplicate listen directives (certbot sometimes creates them)
+echo "Checking for duplicate listen directives..."
+if grep -c "listen \[::\]:443 ssl" /etc/nginx/sites-available/$DOMAIN | grep -q '^[2-9]'; then
+    echo "⚠️  Found duplicate IPv6 listen directives, fixing..."
 
-echo ""
+    # Create a temporary file with duplicates removed
+    awk '!seen[$0]++ || !/listen \[::\]:443/' /etc/nginx/sites-available/$DOMAIN > /tmp/nginx-$DOMAIN-fixed
+    mv /tmp/nginx-$DOMAIN-fixed /etc/nginx/sites-available/$DOMAIN
+
+    echo "✅ Removed duplicate listen directives"
+fi
+
 echo "✅ SSL certificate obtained and NGINX configured for HTTPS"
 
 echo ""
