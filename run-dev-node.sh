@@ -13,6 +13,7 @@ NODE_HOME="${HOME}/.pokerchain-dev"
 MONIKER="dev-node-$(hostname)"
 SYNC_NODE="node1.block52.xyz"
 SYNC_NODE_RPC="http://node1.block52.xyz:26657"
+REBUILD=false
 
 # Colors
 RED='\033[0;31m'
@@ -33,6 +34,47 @@ print_header() {
     echo -e "${NC}"
 }
 
+# Build binary for the current system architecture
+# The Makefile automatically detects the OS (darwin/linux/windows) and architecture (arm64/amd64)
+# and builds the correct binary via: GOOS=$(uname -s | tr '[:upper:]' '[:lower:]') GOARCH=$(...)
+build_binary() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}Building Binary${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    if ! command -v make &> /dev/null; then
+        echo -e "${RED}❌ make not found${NC}"
+        exit 1
+    fi
+
+    local OS=$(uname -s)
+    local ARCH=$(uname -m)
+    echo "Building pokerchaind for $OS $ARCH..."
+    echo ""
+
+    # The 'make build' command automatically builds for the current system
+    # It detects: macOS (darwin) vs Linux, and ARM64 vs x86_64
+    if make build; then
+        CHAIN_BINARY="./build/pokerchaind"
+        echo ""
+        echo -e "${GREEN}✓${NC} Build successful: $CHAIN_BINARY"
+
+        # Show binary info
+        if command -v file &> /dev/null; then
+            echo -e "${GREEN}✓${NC} Binary info: $(file $CHAIN_BINARY)"
+        fi
+        
+        # Show version
+        local version=$($CHAIN_BINARY version 2>/dev/null || echo "unknown")
+        echo -e "${GREEN}✓${NC} Version: $version"
+    else
+        echo -e "${RED}❌ Build failed${NC}"
+        exit 1
+    fi
+}
+
 # Check if binary exists and matches system architecture
 check_binary() {
     echo ""
@@ -40,6 +82,13 @@ check_binary() {
     echo -e "${CYAN}Checking Binary${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
+
+    # If --rebuild flag is set, rebuild immediately
+    if [ "$REBUILD" = true ]; then
+        echo -e "${YELLOW}Rebuild requested...${NC}"
+        build_binary
+        return 0
+    fi
 
     # Detect system architecture
     # macOS: uname -s returns "Darwin", uname -m returns "arm64" or "x86_64"
@@ -151,12 +200,61 @@ check_binary() {
                 esac
             else
                 echo -e "${GREEN}✓${NC} Hashes match - binary is up to date!"
+                echo ""
+                echo "Options:"
+                echo "  1) Use existing binary (recommended - already up to date)"
+                echo "  2) Rebuild anyway"
+                echo "  3) Cancel"
+                echo ""
+                read -p "Choose option [1-3, default: 1]: " MATCH_BINARY_CHOICE
+                MATCH_BINARY_CHOICE=${MATCH_BINARY_CHOICE:-1}
+                
+                case $MATCH_BINARY_CHOICE in
+                    1)
+                        echo -e "${GREEN}✓${NC} Using existing binary"
+                        ;;
+                    2)
+                        build_binary
+                        ;;
+                    3)
+                        echo "Cancelled"
+                        exit 0
+                        ;;
+                    *)
+                        echo "Invalid choice. Using existing binary."
+                        ;;
+                esac
             fi
         else
             echo ""
             echo -e "${YELLOW}⚠ Cannot compare with remote (architecture mismatch)${NC}"
-            echo "Using local binary - ensure it's the correct version"
         fi
+        
+        # Ask if user wants to rebuild
+        echo ""
+        echo "Options:"
+        echo "  1) Use existing binary (may work if version matches)"
+        echo "  2) Rebuild for your system ($OS/$ARCH)"
+        echo "  3) Cancel"
+        echo ""
+        read -p "Choose option [1-3]: " LOCAL_BINARY_CHOICE
+        
+        case $LOCAL_BINARY_CHOICE in
+            1)
+                echo ""
+                echo -e "${GREEN}✓${NC} Using existing binary: $CHAIN_BINARY"
+                ;;
+            2)
+                build_binary
+                ;;
+            3)
+                echo "Cancelled"
+                exit 0
+                ;;
+            *)
+                echo "Invalid choice. Using existing binary."
+                ;;
+        esac
         
         return 0
     fi
@@ -168,7 +266,32 @@ check_binary() {
         $CHAIN_BINARY version 2>/dev/null || echo "Version: unknown"
         echo ""
         echo -e "${YELLOW}Note: Using system binary. For best results, use ./build/pokerchaind${NC}"
-        return 0
+        echo ""
+        echo "Options:"
+        echo "  1) Use system binary"
+        echo "  2) Build local binary for your system ($OS/$ARCH)"
+        echo "  3) Cancel"
+        echo ""
+        read -p "Choose option [1-3]: " PATH_BINARY_CHOICE
+        
+        case $PATH_BINARY_CHOICE in
+            1)
+                echo -e "${GREEN}✓${NC} Using system binary"
+                return 0
+                ;;
+            2)
+                build_binary
+                return 0
+                ;;
+            3)
+                echo "Cancelled"
+                exit 0
+                ;;
+            *)
+                echo "Using system binary"
+                return 0
+                ;;
+        esac
     fi
 
     # Binary not found - offer options
@@ -218,43 +341,6 @@ check_binary() {
             exit 1
             ;;
     esac
-}
-
-# Build binary for the current system architecture
-# The Makefile automatically detects the OS (darwin/linux/windows) and architecture (arm64/amd64)
-# and builds the correct binary via: GOOS=$(uname -s | tr '[:upper:]' '[:lower:]') GOARCH=$(...)
-build_binary() {
-    echo ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}Building Binary${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-
-    if ! command -v make &> /dev/null; then
-        echo -e "${RED}❌ make not found${NC}"
-        exit 1
-    fi
-
-    local OS=$(uname -s)
-    local ARCH=$(uname -m)
-    echo "Building pokerchaind for $OS $ARCH..."
-    echo ""
-
-    # The 'make build' command automatically builds for the current system
-    # It detects: macOS (darwin) vs Linux, and ARM64 vs x86_64
-    if make build; then
-        CHAIN_BINARY="./build/pokerchaind"
-        echo ""
-        echo -e "${GREEN}✓${NC} Build successful: $CHAIN_BINARY"
-
-        # Show binary info
-        if command -v file &> /dev/null; then
-            echo -e "${GREEN}✓${NC} Binary info: $(file $CHAIN_BINARY)"
-        fi
-    else
-        echo -e "${RED}❌ Build failed${NC}"
-        exit 1
-    fi
 }
 
 # Get genesis from sync node
@@ -497,6 +583,7 @@ show_help() {
     echo "Options:"
     echo "  --help, -h          Show this help message"
     echo "  --reset             Reset node data and start fresh"
+    echo "  --rebuild           Rebuild binary before starting"
     echo "  --sync-node <url>   Specify sync node (default: node1.block52.xyz)"
     echo "  --home <path>       Specify custom home directory"
     echo "  --moniker <name>    Specify custom moniker"
@@ -504,6 +591,8 @@ show_help() {
     echo "Examples:"
     echo "  $0                                    # Start with defaults"
     echo "  $0 --reset                            # Reset and start fresh"
+    echo "  $0 --rebuild                          # Rebuild binary then start"
+    echo "  $0 --rebuild --reset                  # Rebuild and reset"
     echo "  $0 --sync-node node2.example.com      # Use different sync node"
     echo "  $0 --home ~/.my-dev-node              # Use custom home directory"
     echo ""
@@ -522,6 +611,10 @@ parse_args() {
                     echo "Removing existing node data: $NODE_HOME"
                     rm -rf "$NODE_HOME"
                 fi
+                shift
+                ;;
+            --rebuild)
+                REBUILD=true
                 shift
                 ;;
             --sync-node)

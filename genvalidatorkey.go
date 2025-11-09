@@ -1,3 +1,5 @@
+// go build -o genvalidatorkey genvalidatorkey.go
+
 package main
 
 import (
