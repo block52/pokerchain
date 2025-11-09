@@ -584,6 +584,16 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
     if [ "$USE_MNEMONICS" = true ]; then
         mnemonic=$(generate_validator_key_from_mnemonic "$NODE_HOME" "$NODE_MONIKER" "${NODE_MNEMONICS[$i]}")
 
+        # Create priv_validator_state.json BEFORE running init
+        # This is required because init expects it when priv_validator_key.json exists
+        cat > "$NODE_HOME/data/priv_validator_state.json" << 'STATEJSON'
+{
+  "height": "0",
+  "round": 0,
+  "step": 0
+}
+STATEJSON
+
         # Save mnemonic to backup file
         cat >> $MNEMONICS_FILE << EOF
 # Node $i: ${NODE_MONIKER}
@@ -604,6 +614,7 @@ EOF
     fi
 
     # Ensure priv_validator_state.json exists with proper initial state
+    # (in case mnemonics weren't used or init didn't create it)
     if [ ! -f "$NODE_HOME/data/priv_validator_state.json" ]; then
         cat > "$NODE_HOME/data/priv_validator_state.json" << 'STATEJSON'
 {
