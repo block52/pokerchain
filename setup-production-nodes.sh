@@ -529,13 +529,17 @@ fi
 for i in $(seq 0 $((NUM_NODES - 1))); do
     NODE_HOME="$OUTPUT_DIR/node$i"
     NODE_MONIKER="${NODE_MONIKERS[$i]}"
-    
+
     echo "Initializing ${NODE_MONIKER}..."
-    
+
+    # Create directory structure first
+    mkdir -p "$NODE_HOME/config"
+    mkdir -p "$NODE_HOME/data"
+
     # Generate validator key from mnemonic if enabled
     if [ "$USE_MNEMONICS" = true ]; then
         mnemonic=$(generate_validator_key_from_mnemonic "$NODE_HOME" "$NODE_MONIKER" "${NODE_MNEMONICS[$i]}")
-        
+
         # Save mnemonic to backup file
         cat >> $MNEMONICS_FILE << EOF
 # Node $i: ${NODE_MONIKER}
@@ -545,14 +549,25 @@ $mnemonic
 
 EOF
     fi
-    
+
     # Initialize the node (will use existing priv_validator_key.json if present)
     $CHAIN_BINARY init $NODE_MONIKER --chain-id $CHAIN_ID --home $NODE_HOME
-    
+
     # If we generated the key from mnemonic, the init might have overwritten it
     # So regenerate it after init if needed
     if [ "$USE_MNEMONICS" = true ] && [ -n "$mnemonic" ]; then
         ./genvalidatorkey "$mnemonic" "$NODE_HOME/config/priv_validator_key.json" > /dev/null 2>&1
+    fi
+
+    # Ensure priv_validator_state.json exists with proper initial state
+    if [ ! -f "$NODE_HOME/data/priv_validator_state.json" ]; then
+        cat > "$NODE_HOME/data/priv_validator_state.json" << 'STATEJSON'
+{
+  "height": "0",
+  "round": 0,
+  "step": 0
+}
+STATEJSON
     fi
     
     # Create validator key
