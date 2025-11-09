@@ -4,10 +4,19 @@
 # Generates production-ready configs locally in ./production/nodeX directories
 # Supports generating validator keys from mnemonics for secure backup/recovery
 #
+# Seed Phrase Management:
+#   - If seeds.txt exists, the script will use line N for node N-1 (0-indexed)
+#   - Users can press Enter to accept the seed from seeds.txt
+#   - Or paste their own custom mnemonic to override
+#   - If no seed is provided, a new mnemonic will be generated
+#
 # Usage: ./setup-production-cluster.sh [num_nodes] [chain_binary] [chain_id]
 #        If parameters are not provided, the script will prompt interactively
 
 set -e
+
+# Trap errors to show which line failed
+trap 'echo "Error on line $LINENO. Command: $BASH_COMMAND"' ERR
 
 # Configuration
 OUTPUT_DIR="./production"
@@ -458,14 +467,42 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
     
     read -p "Moniker (e.g., validator$i): " moniker
     NODE_MONIKERS[$i]=${moniker:-"validator$i"}
-    
+
     # Get mnemonic if using mnemonic-based keys
     if [ "$USE_MNEMONICS" = true ]; then
         echo ""
-        read -p "Mnemonic (press Enter to generate new): " input_mnemonic
-        NODE_MNEMONICS[$i]="$input_mnemonic"
+
+        # Try to read default seed from seeds.txt
+        DEFAULT_SEED=""
+        SEEDS_FILE="./seeds.txt"
+        if [ -f "$SEEDS_FILE" ]; then
+            # Read the (i+1)th line from seeds.txt (since i is 0-indexed)
+            DEFAULT_SEED=$(sed -n "$((i + 1))p" "$SEEDS_FILE" | tr -d '\r\n')
+
+            if [ -n "$DEFAULT_SEED" ]; then
+                echo -e "  ${GREEN}Found seed phrase for node $i in seeds.txt${NC}"
+                echo -e "  ${YELLOW}Preview: $(echo "$DEFAULT_SEED" | cut -d' ' -f1-3)...${NC}"
+                echo ""
+                read -p "Use this seed? (Enter=yes, or paste your own mnemonic): " input_mnemonic
+
+                # If user pressed Enter (empty input), use the default seed
+                if [ -z "$input_mnemonic" ]; then
+                    NODE_MNEMONICS[$i]="$DEFAULT_SEED"
+                else
+                    NODE_MNEMONICS[$i]="$input_mnemonic"
+                fi
+            else
+                echo -e "  ${YELLOW}No seed found for node $i in seeds.txt (line $((i + 1)) is empty)${NC}"
+                read -p "Mnemonic (press Enter to generate new): " input_mnemonic
+                NODE_MNEMONICS[$i]="$input_mnemonic"
+            fi
+        else
+            echo -e "  ${YELLOW}seeds.txt not found${NC}"
+            read -p "Mnemonic (press Enter to generate new): " input_mnemonic
+            NODE_MNEMONICS[$i]="$input_mnemonic"
+        fi
     fi
-    
+
     echo ""
 done
 
@@ -483,7 +520,17 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
         if [ -z "${NODE_MNEMONICS[$i]}" ]; then
             echo "  Key:      New mnemonic will be generated"
         else
-            echo "  Key:      Using provided mnemonic"
+            # Check if this matches a seed from seeds.txt
+            if [ -f "./seeds.txt" ]; then
+                SEEDS_LINE=$(sed -n "$((i + 1))p" "./seeds.txt" | tr -d '\r\n')
+                if [ "${NODE_MNEMONICS[$i]}" = "$SEEDS_LINE" ]; then
+                    echo "  Key:      Using seed from seeds.txt (line $((i + 1)))"
+                else
+                    echo "  Key:      Using custom provided mnemonic"
+                fi
+            else
+                echo "  Key:      Using provided mnemonic"
+            fi
         fi
     fi
     echo ""
@@ -529,13 +576,27 @@ fi
 for i in $(seq 0 $((NUM_NODES - 1))); do
     NODE_HOME="$OUTPUT_DIR/node$i"
     NODE_MONIKER="${NODE_MONIKERS[$i]}"
-    
+
     echo "Initializing ${NODE_MONIKER}..."
-    
+
+    # Create directory structure first
+    mkdir -p "$NODE_HOME/config"
+    mkdir -p "$NODE_HOME/data"
+
     # Generate validator key from mnemonic if enabled
     if [ "$USE_MNEMONICS" = true ]; then
         mnemonic=$(generate_validator_key_from_mnemonic "$NODE_HOME" "$NODE_MONIKER" "${NODE_MNEMONICS[$i]}")
-        
+
+        # Create priv_validator_state.json BEFORE running init
+        # This is required because init expects it when priv_validator_key.json exists
+        cat > "$NODE_HOME/data/priv_validator_state.json" << 'STATEJSON'
+{
+  "height": "0",
+  "round": 0,
+  "step": 0
+}
+STATEJSON
+
         # Save mnemonic to backup file
         cat >> $MNEMONICS_FILE << EOF
 # Node $i: ${NODE_MONIKER}
@@ -545,14 +606,35 @@ $mnemonic
 
 EOF
     fi
-    
+
     # Initialize the node (will use existing priv_validator_key.json if present)
     $CHAIN_BINARY init $NODE_MONIKER --chain-id $CHAIN_ID --home $NODE_HOME
-    
+
     # If we generated the key from mnemonic, the init might have overwritten it
     # So regenerate it after init if needed
     if [ "$USE_MNEMONICS" = true ] && [ -n "$mnemonic" ]; then
-        ./genvalidatorkey "$mnemonic" "$NODE_HOME/config/priv_validator_key.json" > /dev/null 2>&1
+        # Regenerate the key from mnemonic (init may have overwritten it)
+        if [ -x "./genvalidatorkey" ]; then
+            ./genvalidatorkey "$mnemonic" "$NODE_HOME/config/priv_validator_key.json" > /dev/null 2>&1 || {
+                echo -e "  ${YELLOW}⚠️  Warning: Could not regenerate validator key from mnemonic${NC}"
+                echo -e "  ${YELLOW}   The key generated during init will be used instead${NC}"
+            }
+        else
+            echo -e "  ${YELLOW}⚠️  genvalidatorkey tool not found or not executable${NC}"
+            echo -e "  ${YELLOW}   Using validator key created by init command${NC}"
+        fi
+    fi
+
+    # Ensure priv_validator_state.json exists with proper initial state
+    # (in case mnemonics weren't used or init didn't create it)
+    if [ ! -f "$NODE_HOME/data/priv_validator_state.json" ]; then
+        cat > "$NODE_HOME/data/priv_validator_state.json" << 'STATEJSON'
+{
+  "height": "0",
+  "round": 0,
+  "step": 0
+}
+STATEJSON
     fi
     
     # Create validator key
@@ -1136,4 +1218,198 @@ echo "  • Set up monitoring and alerting"
 echo "  • Review and adjust gas prices in app.toml"
 echo ""
 echo -e "${GREEN}🎉 Your production cluster is ready to deploy!${NC}"
+echo ""
+
+# Interactive SSH deployment prompts
+echo ""
+echo -e "${BLUE}╔══════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║        SSH DEPLOYMENT                                            ║${NC}"
+echo -e "${BLUE}╚══════════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo "Would you like to deploy the nodes to remote servers now via SSH?"
+echo ""
+read -p "Deploy nodes via SSH? (y/n): " DEPLOY_NOW
+
+if [[ ! $DEPLOY_NOW =~ ^[Yy]$ ]]; then
+    echo ""
+    echo "Skipping deployment. You can deploy later using:"
+    echo "  cd $OUTPUT_DIR"
+    echo "  ./deploy-node0.sh  # Deploy individual node"
+    echo "  ./deploy-all.sh    # Deploy all nodes"
+    echo ""
+    exit 0
+fi
+
+echo ""
+echo "Deployment Options:"
+echo "1) Deploy all nodes at once"
+echo "2) Deploy specific nodes"
+echo "3) Skip deployment"
+echo ""
+read -p "Enter choice [1-3] (default: 1): " DEPLOY_CHOICE
+DEPLOY_CHOICE=${DEPLOY_CHOICE:-1}
+
+case $DEPLOY_CHOICE in
+    1)
+        echo ""
+        echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
+        echo -e "${BLUE}Deploying All Nodes${NC}"
+        echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
+        echo ""
+
+        read -p "SSH username for remote servers [default: root]: " SSH_USER
+        SSH_USER=${SSH_USER:-root}
+
+        echo ""
+        echo "SSH user: $SSH_USER"
+        echo ""
+        read -p "Continue with deployment? (y/n): " CONFIRM_DEPLOY
+
+        if [[ ! $CONFIRM_DEPLOY =~ ^[Yy]$ ]]; then
+            echo "Deployment cancelled."
+            exit 0
+        fi
+
+        # Check if deploy-production-node.sh exists
+        if [ ! -f "./deploy-production-node.sh" ]; then
+            echo -e "${RED}❌ deploy-production-node.sh not found in current directory${NC}"
+            echo "Please ensure you are in the repository root directory."
+            exit 1
+        fi
+
+        chmod +x ./deploy-production-node.sh
+
+        # Deploy each node
+        for i in $(seq 0 $((NUM_NODES - 1))); do
+            echo ""
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${GREEN}Deploying Node $i: ${NODE_MONIKERS[$i]}${NC}"
+            echo -e "${GREEN}Target: ${NODE_HOSTNAMES[$i]} (${NODE_IPS[$i]})${NC}"
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+
+            if ./deploy-production-node.sh "$i" "${NODE_HOSTNAMES[$i]}" "$SSH_USER"; then
+                echo -e "${GREEN}✅ Node $i deployed successfully${NC}"
+            else
+                echo -e "${RED}❌ Failed to deploy Node $i${NC}"
+                echo ""
+                read -p "Continue with remaining nodes? (y/n): " CONTINUE
+                if [[ ! $CONTINUE =~ ^[Yy]$ ]]; then
+                    echo "Deployment stopped."
+                    exit 1
+                fi
+            fi
+        done
+
+        echo ""
+        echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${GREEN}║        ALL NODES DEPLOYED!                                       ║${NC}"
+        echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        ;;
+
+    2)
+        echo ""
+        echo "Available nodes:"
+        for i in $(seq 0 $((NUM_NODES - 1))); do
+            echo "  $i) ${NODE_MONIKERS[$i]} @ ${NODE_HOSTNAMES[$i]} (${NODE_IPS[$i]})"
+        done
+        echo ""
+        read -p "Enter node numbers to deploy (space-separated, e.g., '0 2 3'): " NODES_TO_DEPLOY
+
+        if [ -z "$NODES_TO_DEPLOY" ]; then
+            echo "No nodes selected. Exiting."
+            exit 0
+        fi
+
+        read -p "SSH username for remote servers [default: root]: " SSH_USER
+        SSH_USER=${SSH_USER:-root}
+
+        echo ""
+        echo "Will deploy nodes: $NODES_TO_DEPLOY"
+        echo "SSH user: $SSH_USER"
+        echo ""
+        read -p "Continue with deployment? (y/n): " CONFIRM_DEPLOY
+
+        if [[ ! $CONFIRM_DEPLOY =~ ^[Yy]$ ]]; then
+            echo "Deployment cancelled."
+            exit 0
+        fi
+
+        # Check if deploy-production-node.sh exists
+        if [ ! -f "./deploy-production-node.sh" ]; then
+            echo -e "${RED}❌ deploy-production-node.sh not found in current directory${NC}"
+            echo "Please ensure you are in the repository root directory."
+            exit 1
+        fi
+
+        chmod +x ./deploy-production-node.sh
+
+        # Deploy selected nodes
+        for i in $NODES_TO_DEPLOY; do
+            if [ $i -ge 0 ] && [ $i -lt $NUM_NODES ]; then
+                echo ""
+                echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo -e "${GREEN}Deploying Node $i: ${NODE_MONIKERS[$i]}${NC}"
+                echo -e "${GREEN}Target: ${NODE_HOSTNAMES[$i]} (${NODE_IPS[$i]})${NC}"
+                echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo ""
+
+                if ./deploy-production-node.sh "$i" "${NODE_HOSTNAMES[$i]}" "$SSH_USER"; then
+                    echo -e "${GREEN}✅ Node $i deployed successfully${NC}"
+                else
+                    echo -e "${RED}❌ Failed to deploy Node $i${NC}"
+                    echo ""
+                    read -p "Continue with remaining nodes? (y/n): " CONTINUE
+                    if [[ ! $CONTINUE =~ ^[Yy]$ ]]; then
+                        echo "Deployment stopped."
+                        exit 1
+                    fi
+                fi
+            else
+                echo -e "${RED}Invalid node number: $i (valid range: 0-$((NUM_NODES - 1)))${NC}"
+            fi
+        done
+
+        echo ""
+        echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${GREEN}║        SELECTED NODES DEPLOYED!                                  ║${NC}"
+        echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        ;;
+
+    3)
+        echo ""
+        echo "Skipping deployment. You can deploy later using:"
+        echo "  cd $OUTPUT_DIR"
+        echo "  ./deploy-node0.sh  # Deploy individual node"
+        echo "  ./deploy-all.sh    # Deploy all nodes"
+        echo ""
+        exit 0
+        ;;
+
+    *)
+        echo ""
+        echo -e "${YELLOW}Invalid choice. Skipping deployment.${NC}"
+        echo "You can deploy later using:"
+        echo "  cd $OUTPUT_DIR"
+        echo "  ./deploy-node0.sh  # Deploy individual node"
+        echo "  ./deploy-all.sh    # Deploy all nodes"
+        echo ""
+        exit 0
+        ;;
+esac
+
+echo ""
+echo -e "${YELLOW}🎯 Next Steps:${NC}"
+echo ""
+echo "Your nodes are now deployed! Monitor them with:"
+for i in $(seq 0 $((NUM_NODES - 1))); do
+    echo "  ssh $SSH_USER@${NODE_HOSTNAMES[$i]} 'journalctl -u pokerchaind -f'"
+done
+echo ""
+echo "Check node status:"
+for i in $(seq 0 $((NUM_NODES - 1))); do
+    echo "  curl http://${NODE_IPS[$i]}:26657/status | jq .result.sync_info"
+done
 echo ""
