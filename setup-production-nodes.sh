@@ -4,6 +4,12 @@
 # Generates production-ready configs locally in ./production/nodeX directories
 # Supports generating validator keys from mnemonics for secure backup/recovery
 #
+# Seed Phrase Management:
+#   - If seeds.txt exists, the script will use line N for node N-1 (0-indexed)
+#   - Users can press Enter to accept the seed from seeds.txt
+#   - Or paste their own custom mnemonic to override
+#   - If no seed is provided, a new mnemonic will be generated
+#
 # Usage: ./setup-production-cluster.sh [num_nodes] [chain_binary] [chain_id]
 #        If parameters are not provided, the script will prompt interactively
 
@@ -458,14 +464,42 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
     
     read -p "Moniker (e.g., validator$i): " moniker
     NODE_MONIKERS[$i]=${moniker:-"validator$i"}
-    
+
     # Get mnemonic if using mnemonic-based keys
     if [ "$USE_MNEMONICS" = true ]; then
         echo ""
-        read -p "Mnemonic (press Enter to generate new): " input_mnemonic
-        NODE_MNEMONICS[$i]="$input_mnemonic"
+
+        # Try to read default seed from seeds.txt
+        DEFAULT_SEED=""
+        SEEDS_FILE="./seeds.txt"
+        if [ -f "$SEEDS_FILE" ]; then
+            # Read the (i+1)th line from seeds.txt (since i is 0-indexed)
+            DEFAULT_SEED=$(sed -n "$((i + 1))p" "$SEEDS_FILE" | tr -d '\r\n')
+
+            if [ -n "$DEFAULT_SEED" ]; then
+                echo -e "  ${GREEN}Found seed phrase for node $i in seeds.txt${NC}"
+                echo -e "  ${YELLOW}Preview: $(echo "$DEFAULT_SEED" | cut -d' ' -f1-3)...${NC}"
+                echo ""
+                read -p "Use this seed? (Enter=yes, or paste your own mnemonic): " input_mnemonic
+
+                # If user pressed Enter (empty input), use the default seed
+                if [ -z "$input_mnemonic" ]; then
+                    NODE_MNEMONICS[$i]="$DEFAULT_SEED"
+                else
+                    NODE_MNEMONICS[$i]="$input_mnemonic"
+                fi
+            else
+                echo -e "  ${YELLOW}No seed found for node $i in seeds.txt (line $((i + 1)) is empty)${NC}"
+                read -p "Mnemonic (press Enter to generate new): " input_mnemonic
+                NODE_MNEMONICS[$i]="$input_mnemonic"
+            fi
+        else
+            echo -e "  ${YELLOW}seeds.txt not found${NC}"
+            read -p "Mnemonic (press Enter to generate new): " input_mnemonic
+            NODE_MNEMONICS[$i]="$input_mnemonic"
+        fi
     fi
-    
+
     echo ""
 done
 
@@ -483,7 +517,17 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
         if [ -z "${NODE_MNEMONICS[$i]}" ]; then
             echo "  Key:      New mnemonic will be generated"
         else
-            echo "  Key:      Using provided mnemonic"
+            # Check if this matches a seed from seeds.txt
+            if [ -f "./seeds.txt" ]; then
+                SEEDS_LINE=$(sed -n "$((i + 1))p" "./seeds.txt" | tr -d '\r\n')
+                if [ "${NODE_MNEMONICS[$i]}" = "$SEEDS_LINE" ]; then
+                    echo "  Key:      Using seed from seeds.txt (line $((i + 1)))"
+                else
+                    echo "  Key:      Using custom provided mnemonic"
+                fi
+            else
+                echo "  Key:      Using provided mnemonic"
+            fi
         fi
     fi
     echo ""
@@ -529,13 +573,27 @@ fi
 for i in $(seq 0 $((NUM_NODES - 1))); do
     NODE_HOME="$OUTPUT_DIR/node$i"
     NODE_MONIKER="${NODE_MONIKERS[$i]}"
-    
+
     echo "Initializing ${NODE_MONIKER}..."
-    
+
+    # Create directory structure first
+    mkdir -p "$NODE_HOME/config"
+    mkdir -p "$NODE_HOME/data"
+
     # Generate validator key from mnemonic if enabled
     if [ "$USE_MNEMONICS" = true ]; then
         mnemonic=$(generate_validator_key_from_mnemonic "$NODE_HOME" "$NODE_MONIKER" "${NODE_MNEMONICS[$i]}")
-        
+
+        # Create priv_validator_state.json BEFORE running init
+        # This is required because init expects it when priv_validator_key.json exists
+        cat > "$NODE_HOME/data/priv_validator_state.json" << 'STATEJSON'
+{
+  "height": "0",
+  "round": 0,
+  "step": 0
+}
+STATEJSON
+
         # Save mnemonic to backup file
         cat >> $MNEMONICS_FILE << EOF
 # Node $i: ${NODE_MONIKER}
@@ -545,14 +603,26 @@ $mnemonic
 
 EOF
     fi
-    
+
     # Initialize the node (will use existing priv_validator_key.json if present)
     $CHAIN_BINARY init $NODE_MONIKER --chain-id $CHAIN_ID --home $NODE_HOME
-    
+
     # If we generated the key from mnemonic, the init might have overwritten it
     # So regenerate it after init if needed
     if [ "$USE_MNEMONICS" = true ] && [ -n "$mnemonic" ]; then
         ./genvalidatorkey "$mnemonic" "$NODE_HOME/config/priv_validator_key.json" > /dev/null 2>&1
+    fi
+
+    # Ensure priv_validator_state.json exists with proper initial state
+    # (in case mnemonics weren't used or init didn't create it)
+    if [ ! -f "$NODE_HOME/data/priv_validator_state.json" ]; then
+        cat > "$NODE_HOME/data/priv_validator_state.json" << 'STATEJSON'
+{
+  "height": "0",
+  "round": 0,
+  "step": 0
+}
+STATEJSON
     fi
     
     # Create validator key
