@@ -613,7 +613,16 @@ EOF
     # If we generated the key from mnemonic, the init might have overwritten it
     # So regenerate it after init if needed
     if [ "$USE_MNEMONICS" = true ] && [ -n "$mnemonic" ]; then
-        ./genvalidatorkey "$mnemonic" "$NODE_HOME/config/priv_validator_key.json" > /dev/null 2>&1
+        # Regenerate the key from mnemonic (init may have overwritten it)
+        if [ -x "./genvalidatorkey" ]; then
+            ./genvalidatorkey "$mnemonic" "$NODE_HOME/config/priv_validator_key.json" > /dev/null 2>&1 || {
+                echo -e "  ${YELLOW}⚠️  Warning: Could not regenerate validator key from mnemonic${NC}"
+                echo -e "  ${YELLOW}   The key generated during init will be used instead${NC}"
+            }
+        else
+            echo -e "  ${YELLOW}⚠️  genvalidatorkey tool not found or not executable${NC}"
+            echo -e "  ${YELLOW}   Using validator key created by init command${NC}"
+        fi
     fi
 
     # Ensure priv_validator_state.json exists with proper initial state
