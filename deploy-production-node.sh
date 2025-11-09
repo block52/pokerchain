@@ -264,30 +264,69 @@ setup_firewall() {
 setup_systemd() {
     local remote_host=$1
     local remote_user=$2
-    
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "${BLUE}Step 6: Setting Up Systemd Service (via setup-systemd.sh)${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    
+
     if [ ! -f "setup-systemd.sh" ]; then
         echo -e "${RED}❌ setup-systemd.sh not found in current directory${NC}"
         exit 1
     fi
-    
+
     chmod +x ./setup-systemd.sh
     ./setup-systemd.sh "$remote_host" "$remote_user"
+}
+
+# Setup NGINX and SSL
+setup_nginx() {
+    local remote_host=$1
+    local remote_user=$2
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 7: Setting Up NGINX & SSL (Optional)${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    if [ ! -f "setup-nginx.sh" ]; then
+        echo -e "${YELLOW}⚠️  setup-nginx.sh not found - skipping NGINX setup${NC}"
+        echo "You can set up NGINX later using: ./setup-nginx.sh <domain> <remote-host> <remote-user>"
+        return 0
+    fi
+
+    echo "NGINX provides HTTPS access to your node's REST API and gRPC endpoints."
+    echo ""
+    read -p "Do you want to set up NGINX and SSL now? (y/n): " setup_nginx_choice
+
+    if [[ ! $setup_nginx_choice =~ ^[Yy]$ ]]; then
+        echo "Skipping NGINX setup. You can set it up later with:"
+        echo "  ./setup-nginx.sh <domain> $remote_host $remote_user"
+        return 0
+    fi
+
+    echo ""
+    read -p "Enter your domain name (e.g., api.yourproject.com): " domain_name
+
+    if [ -z "$domain_name" ]; then
+        echo -e "${YELLOW}⚠️  No domain provided - skipping NGINX setup${NC}"
+        return 0
+    fi
+
+    chmod +x ./setup-nginx.sh
+    ./setup-nginx.sh "$domain_name" "$remote_host" "$remote_user"
 }
 
 # Start node
 start_node() {
     local remote_host=$1
     local remote_user=$2
-    
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 7: Starting Node${NC}"
+    echo -e "${BLUE}Step 8: Starting Node${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -309,10 +348,10 @@ start_node() {
 verify_deployment() {
     local remote_host=$1
     local remote_user=$2
-    
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 8: Verifying Deployment${NC}"
+    echo -e "${BLUE}Step 9: Verifying Deployment${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -438,6 +477,7 @@ main() {
     deploy_config "$node_num" "$remote_host" "$remote_user"
     setup_firewall "$remote_host" "$remote_user"
     setup_systemd "$remote_host" "$remote_user"
+    setup_nginx "$remote_host" "$remote_user"
     start_node "$remote_host" "$remote_user"
     verify_deployment "$remote_host" "$remote_user"
     show_next_steps "$node_num" "$remote_host" "$remote_user"

@@ -1207,3 +1207,197 @@ echo "  • Review and adjust gas prices in app.toml"
 echo ""
 echo -e "${GREEN}🎉 Your production cluster is ready to deploy!${NC}"
 echo ""
+
+# Interactive SSH deployment prompts
+echo ""
+echo -e "${BLUE}╔══════════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║        SSH DEPLOYMENT                                            ║${NC}"
+echo -e "${BLUE}╚══════════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo "Would you like to deploy the nodes to remote servers now via SSH?"
+echo ""
+read -p "Deploy nodes via SSH? (y/n): " DEPLOY_NOW
+
+if [[ ! $DEPLOY_NOW =~ ^[Yy]$ ]]; then
+    echo ""
+    echo "Skipping deployment. You can deploy later using:"
+    echo "  cd $OUTPUT_DIR"
+    echo "  ./deploy-node0.sh  # Deploy individual node"
+    echo "  ./deploy-all.sh    # Deploy all nodes"
+    echo ""
+    exit 0
+fi
+
+echo ""
+echo "Deployment Options:"
+echo "1) Deploy all nodes at once"
+echo "2) Deploy specific nodes"
+echo "3) Skip deployment"
+echo ""
+read -p "Enter choice [1-3] (default: 1): " DEPLOY_CHOICE
+DEPLOY_CHOICE=${DEPLOY_CHOICE:-1}
+
+case $DEPLOY_CHOICE in
+    1)
+        echo ""
+        echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
+        echo -e "${BLUE}Deploying All Nodes${NC}"
+        echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
+        echo ""
+
+        read -p "SSH username for remote servers [default: root]: " SSH_USER
+        SSH_USER=${SSH_USER:-root}
+
+        echo ""
+        echo "SSH user: $SSH_USER"
+        echo ""
+        read -p "Continue with deployment? (y/n): " CONFIRM_DEPLOY
+
+        if [[ ! $CONFIRM_DEPLOY =~ ^[Yy]$ ]]; then
+            echo "Deployment cancelled."
+            exit 0
+        fi
+
+        # Check if deploy-production-node.sh exists
+        if [ ! -f "./deploy-production-node.sh" ]; then
+            echo -e "${RED}❌ deploy-production-node.sh not found in current directory${NC}"
+            echo "Please ensure you are in the repository root directory."
+            exit 1
+        fi
+
+        chmod +x ./deploy-production-node.sh
+
+        # Deploy each node
+        for i in $(seq 0 $((NUM_NODES - 1))); do
+            echo ""
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${GREEN}Deploying Node $i: ${NODE_MONIKERS[$i]}${NC}"
+            echo -e "${GREEN}Target: ${NODE_HOSTNAMES[$i]} (${NODE_IPS[$i]})${NC}"
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+
+            if ./deploy-production-node.sh "$i" "${NODE_HOSTNAMES[$i]}" "$SSH_USER"; then
+                echo -e "${GREEN}✅ Node $i deployed successfully${NC}"
+            else
+                echo -e "${RED}❌ Failed to deploy Node $i${NC}"
+                echo ""
+                read -p "Continue with remaining nodes? (y/n): " CONTINUE
+                if [[ ! $CONTINUE =~ ^[Yy]$ ]]; then
+                    echo "Deployment stopped."
+                    exit 1
+                fi
+            fi
+        done
+
+        echo ""
+        echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${GREEN}║        ALL NODES DEPLOYED!                                       ║${NC}"
+        echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        ;;
+
+    2)
+        echo ""
+        echo "Available nodes:"
+        for i in $(seq 0 $((NUM_NODES - 1))); do
+            echo "  $i) ${NODE_MONIKERS[$i]} @ ${NODE_HOSTNAMES[$i]} (${NODE_IPS[$i]})"
+        done
+        echo ""
+        read -p "Enter node numbers to deploy (space-separated, e.g., '0 2 3'): " NODES_TO_DEPLOY
+
+        if [ -z "$NODES_TO_DEPLOY" ]; then
+            echo "No nodes selected. Exiting."
+            exit 0
+        fi
+
+        read -p "SSH username for remote servers [default: root]: " SSH_USER
+        SSH_USER=${SSH_USER:-root}
+
+        echo ""
+        echo "Will deploy nodes: $NODES_TO_DEPLOY"
+        echo "SSH user: $SSH_USER"
+        echo ""
+        read -p "Continue with deployment? (y/n): " CONFIRM_DEPLOY
+
+        if [[ ! $CONFIRM_DEPLOY =~ ^[Yy]$ ]]; then
+            echo "Deployment cancelled."
+            exit 0
+        fi
+
+        # Check if deploy-production-node.sh exists
+        if [ ! -f "./deploy-production-node.sh" ]; then
+            echo -e "${RED}❌ deploy-production-node.sh not found in current directory${NC}"
+            echo "Please ensure you are in the repository root directory."
+            exit 1
+        fi
+
+        chmod +x ./deploy-production-node.sh
+
+        # Deploy selected nodes
+        for i in $NODES_TO_DEPLOY; do
+            if [ $i -ge 0 ] && [ $i -lt $NUM_NODES ]; then
+                echo ""
+                echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo -e "${GREEN}Deploying Node $i: ${NODE_MONIKERS[$i]}${NC}"
+                echo -e "${GREEN}Target: ${NODE_HOSTNAMES[$i]} (${NODE_IPS[$i]})${NC}"
+                echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo ""
+
+                if ./deploy-production-node.sh "$i" "${NODE_HOSTNAMES[$i]}" "$SSH_USER"; then
+                    echo -e "${GREEN}✅ Node $i deployed successfully${NC}"
+                else
+                    echo -e "${RED}❌ Failed to deploy Node $i${NC}"
+                    echo ""
+                    read -p "Continue with remaining nodes? (y/n): " CONTINUE
+                    if [[ ! $CONTINUE =~ ^[Yy]$ ]]; then
+                        echo "Deployment stopped."
+                        exit 1
+                    fi
+                fi
+            else
+                echo -e "${RED}Invalid node number: $i (valid range: 0-$((NUM_NODES - 1)))${NC}"
+            fi
+        done
+
+        echo ""
+        echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${GREEN}║        SELECTED NODES DEPLOYED!                                  ║${NC}"
+        echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        ;;
+
+    3)
+        echo ""
+        echo "Skipping deployment. You can deploy later using:"
+        echo "  cd $OUTPUT_DIR"
+        echo "  ./deploy-node0.sh  # Deploy individual node"
+        echo "  ./deploy-all.sh    # Deploy all nodes"
+        echo ""
+        exit 0
+        ;;
+
+    *)
+        echo ""
+        echo -e "${YELLOW}Invalid choice. Skipping deployment.${NC}"
+        echo "You can deploy later using:"
+        echo "  cd $OUTPUT_DIR"
+        echo "  ./deploy-node0.sh  # Deploy individual node"
+        echo "  ./deploy-all.sh    # Deploy all nodes"
+        echo ""
+        exit 0
+        ;;
+esac
+
+echo ""
+echo -e "${YELLOW}🎯 Next Steps:${NC}"
+echo ""
+echo "Your nodes are now deployed! Monitor them with:"
+for i in $(seq 0 $((NUM_NODES - 1))); do
+    echo "  ssh $SSH_USER@${NODE_HOSTNAMES[$i]} 'journalctl -u pokerchaind -f'"
+done
+echo ""
+echo "Check node status:"
+for i in $(seq 0 $((NUM_NODES - 1))); do
+    echo "  curl http://${NODE_IPS[$i]}:26657/status | jq .result.sync_info"
+done
+echo ""
