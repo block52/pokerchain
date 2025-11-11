@@ -5,6 +5,16 @@
 
 set -e
 
+# Load environment variables from .env
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    source "$SCRIPT_DIR/.env"
+    echo "✅ Loaded .env configuration"
+else
+    echo "⚠️  Warning: .env file not found"
+    echo "   Bridge service may not work. See BRIDGE_CONFIGURATION.md"
+fi
+
 # Color codes
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -16,37 +26,50 @@ NC='\033[0m'
 BASE_DIR="$HOME/.pokerchain-testnet"
 CHAIN_ID="pokerchain"
 
-# Node configurations
-declare -A NODE_DIRS
-declare -A NODE_P2P_PORTS
-declare -A NODE_RPC_PORTS
-declare -A NODE_API_PORTS
-declare -A NODE_GRPC_PORTS
-declare -A NODE_GRPC_WEB_PORTS
+# Helper functions for node configurations (bash 3.2 compatible)
+get_node_dir() {
+    echo "$BASE_DIR/node$1"
+}
 
-NODE_DIRS[1]="$BASE_DIR/node1"
-NODE_DIRS[2]="$BASE_DIR/node2"
-NODE_DIRS[3]="$BASE_DIR/node3"
+get_p2p_port() {
+    case $1 in
+        1) echo 26656 ;;
+        2) echo 26666 ;;
+        3) echo 26676 ;;
+    esac
+}
 
-NODE_P2P_PORTS[1]=26656
-NODE_P2P_PORTS[2]=26666
-NODE_P2P_PORTS[3]=26676
+get_rpc_port() {
+    case $1 in
+        1) echo 26657 ;;
+        2) echo 26667 ;;
+        3) echo 26677 ;;
+    esac
+}
 
-NODE_RPC_PORTS[1]=26657
-NODE_RPC_PORTS[2]=26667
-NODE_RPC_PORTS[3]=26677
+get_api_port() {
+    case $1 in
+        1) echo 1317 ;;
+        2) echo 1327 ;;
+        3) echo 1337 ;;
+    esac
+}
 
-NODE_API_PORTS[1]=1317
-NODE_API_PORTS[2]=1327
-NODE_API_PORTS[3]=1337
+get_grpc_port() {
+    case $1 in
+        1) echo 9090 ;;
+        2) echo 9091 ;;
+        3) echo 9092 ;;
+    esac
+}
 
-NODE_GRPC_PORTS[1]=9090
-NODE_GRPC_PORTS[2]=9091
-NODE_GRPC_PORTS[3]=9092
-
-NODE_GRPC_WEB_PORTS[1]=9091
-NODE_GRPC_WEB_PORTS[2]=9092
-NODE_GRPC_WEB_PORTS[3]=9093
+get_grpc_web_port() {
+    case $1 in
+        1) echo 9091 ;;
+        2) echo 9092 ;;
+        3) echo 9093 ;;
+    esac
+}
 
 # Print header
 print_header() {
@@ -73,9 +96,12 @@ check_binary() {
 # Initialize testnet
 init_testnet() {
     print_header
-    echo -e "${BLUE}Initializing 3-node local testnet...${NC}"
+    echo -e "${BLUE}Initializing single-node testnet...${NC}"
     echo ""
-    
+    echo -e "${YELLOW}Note: This sets up 1 validator node (Node 1)${NC}"
+    echo -e "${YELLOW}Node 2 and 3 slots are reserved but not initialized${NC}"
+    echo ""
+
     # Clean old data
     if [ -d "$BASE_DIR" ]; then
         echo -e "${YELLOW}⚠️  Existing testnet data found at $BASE_DIR${NC}"
@@ -88,70 +114,95 @@ init_testnet() {
             exit 0
         fi
     fi
-    
-    echo "Creating testnet configuration..."
+
+    # Create base directory
+    mkdir -p "$BASE_DIR"
+
+    echo "Initializing Node 1..."
     echo ""
-    
-    # Create testnet with 3 validators
-    pokerchaind testnet init-files \
-        --v 3 \
-        --output-dir "$BASE_DIR" \
+
+    # Initialize node 1 using standard pokerchaind init
+    local node1_dir="$(get_node_dir 1)"
+    pokerchaind init node1 --chain-id "$CHAIN_ID" --home "$node1_dir" --default-denom stake
+
+    # Add a test key
+    echo "Creating test validator key..."
+    pokerchaind keys add validator --keyring-backend test --home "$node1_dir" 2>&1 | grep -E "address:|mnemonic:" || true
+
+    # Get the validator address
+    local validator_addr=$(pokerchaind keys show validator -a --keyring-backend test --home "$node1_dir")
+
+    # Add genesis account with funds
+    echo ""
+    echo "Adding genesis account with 1000000000000stake..."
+    pokerchaind genesis add-genesis-account "$validator_addr" 1000000000000stake --home "$node1_dir"
+
+    # Generate genesis transaction
+    echo "Creating genesis transaction..."
+    pokerchaind genesis gentx validator 5000000000stake \
         --chain-id "$CHAIN_ID" \
         --keyring-backend test \
-        --starting-ip-address 192.168.1.2
-    
+        --home "$node1_dir"
+
+    # Collect genesis transactions
+    echo "Collecting genesis transactions..."
+    pokerchaind genesis collect-gentxs --home "$node1_dir"
+
+    # Validate genesis
+    echo "Validating genesis..."
+    pokerchaind genesis validate --home "$node1_dir"
+
     echo ""
-    echo -e "${GREEN}✅ Testnet initialized!${NC}"
+    echo -e "${GREEN}✅ Node 1 initialized!${NC}"
     echo ""
-    
-    # Update ports for each node
-    for i in 1 2 3; do
-        local node_dir="${NODE_DIRS[$i]}"
-        local config_file="$node_dir/config/config.toml"
-        local app_file="$node_dir/config/app.toml"
-        
-        echo "Configuring Node $i ports..."
-        
-        # Update config.toml
-        if [ -f "$config_file" ]; then
-            # P2P port
-            sed -i.bak "s/laddr = \"tcp:\/\/0.0.0.0:26656\"/laddr = \"tcp:\/\/0.0.0.0:${NODE_P2P_PORTS[$i]}\"/" "$config_file"
-            # RPC port
-            sed -i.bak "s/laddr = \"tcp:\/\/127.0.0.1:26657\"/laddr = \"tcp:\/\/127.0.0.1:${NODE_RPC_PORTS[$i]}\"/" "$config_file"
-            # Allow all CORS
-            sed -i.bak 's/cors_allowed_origins = \[\]/cors_allowed_origins = \["\*"\]/' "$config_file"
+
+    # Configure Node 1 settings
+    local node_dir="$(get_node_dir 1)"
+    local config_file="$node_dir/config/config.toml"
+    local app_file="$node_dir/config/app.toml"
+
+    echo "Configuring Node 1 settings..."
+
+    # Update config.toml
+    if [ -f "$config_file" ]; then
+        # Allow all CORS for development
+        sed -i.bak 's/cors_allowed_origins = \[\]/cors_allowed_origins = \["\*"\]/' "$config_file"
+        echo "  ✅ Enabled CORS"
+    fi
+
+    # Update app.toml
+    if [ -f "$app_file" ]; then
+        # Enable API
+        sed -i.bak 's/enable = false/enable = true/' "$app_file"
+        echo "  ✅ Enabled API server"
+
+        # Inject Alchemy URL from .env if available
+        if [ -n "$ALCHEMY_URL" ]; then
+            # Update ethereum_rpc_url in bridge section
+            sed -i.bak "s|ethereum_rpc_url = .*|ethereum_rpc_url = \"$ALCHEMY_URL\"|" "$app_file"
+            echo "  ✅ Configured bridge with Alchemy URL"
+            echo "     URL: ${ALCHEMY_URL:0:50}..."
+        else
+            echo "  ⚠️  No ALCHEMY_URL found in .env - bridge will use default config"
         fi
-        
-        # Update app.toml
-        if [ -f "$app_file" ]; then
-            # API port
-            sed -i.bak "s/address = \"tcp:\/\/localhost:1317\"/address = \"tcp:\/\/localhost:${NODE_API_PORTS[$i]}\"/" "$app_file"
-            # gRPC port
-            sed -i.bak "s/address = \"localhost:9090\"/address = \"localhost:${NODE_GRPC_PORTS[$i]}\"/" "$app_file"
-            # gRPC-web port
-            sed -i.bak "s/address = \"localhost:9091\"/address = \"localhost:${NODE_GRPC_WEB_PORTS[$i]}\"/" "$app_file"
-            # Enable API
-            sed -i.bak 's/enable = false/enable = true/' "$app_file"
-        fi
-        
-        # Clean up backup files
-        rm -f "$config_file.bak" "$app_file.bak"
-    done
+    fi
+
+    # Clean up backup files
+    rm -f "$config_file.bak" "$app_file.bak"
     
     echo ""
-    echo -e "${GREEN}✅ All nodes configured!${NC}"
+    echo -e "${GREEN}✅ Node 1 configured and ready!${NC}"
     echo ""
-    echo "Node configurations:"
-    for i in 1 2 3; do
-        echo -e "${GREEN}Node $i:${NC}"
-        echo "  Home: ${NODE_DIRS[$i]}"
-        echo "  P2P:  ${NODE_P2P_PORTS[$i]}"
-        echo "  RPC:  ${NODE_RPC_PORTS[$i]}"
-        echo "  API:  ${NODE_API_PORTS[$i]}"
-        echo "  gRPC: ${NODE_GRPC_PORTS[$i]}"
-        echo ""
-    done
-    
+    echo "Node 1 configuration:"
+    echo "  Home: $(get_node_dir 1)"
+    echo "  P2P:  $(get_p2p_port 1)"
+    echo "  RPC:  http://localhost:$(get_rpc_port 1)"
+    echo "  API:  http://localhost:$(get_api_port 1)"
+    echo "  gRPC: localhost:$(get_grpc_port 1)"
+    echo ""
+    echo -e "${YELLOW}To start the node, select option 2 from the menu${NC}"
+    echo ""
+
     read -p "Press Enter to continue..."
 }
 
@@ -165,14 +216,14 @@ show_status() {
         echo -e "${GREEN}Node $i:${NC}"
         
         # Check if process is running
-        local pid_file="${NODE_DIRS[$i]}/pokerchaind.pid"
+        local pid_file="$(get_node_dir $i)/pokerchaind.pid"
         if [ -f "$pid_file" ]; then
             local pid=$(cat "$pid_file")
             if ps -p "$pid" > /dev/null 2>&1; then
                 echo -e "  Status: ${GREEN}Running${NC} (PID: $pid)"
                 
                 # Try to get block height
-                local rpc_port="${NODE_RPC_PORTS[$i]}"
+                local rpc_port="$(get_rpc_port $i)"
                 if curl -s --max-time 2 "http://localhost:$rpc_port/status" > /dev/null 2>&1; then
                     local height=$(curl -s "http://localhost:$rpc_port/status" | jq -r '.result.sync_info.latest_block_height' 2>/dev/null)
                     if [ -n "$height" ] && [ "$height" != "null" ]; then
@@ -187,8 +238,8 @@ show_status() {
             echo -e "  Status: ${RED}Stopped${NC}"
         fi
         
-        echo "  RPC:  http://localhost:${NODE_RPC_PORTS[$i]}"
-        echo "  API:  http://localhost:${NODE_API_PORTS[$i]}"
+        echo "  RPC:  http://localhost:$(get_rpc_port $i)"
+        echo "  API:  http://localhost:$(get_api_port $i)"
         echo ""
     done
     
@@ -198,7 +249,7 @@ show_status() {
 # Start a specific node
 start_node() {
     local node_num=$1
-    local node_dir="${NODE_DIRS[$node_num]}"
+    local node_dir="$(get_node_dir $node_num)"
     local pid_file="$node_dir/pokerchaind.pid"
     
     print_header
@@ -230,10 +281,10 @@ start_node() {
     
     echo "Node $node_num Configuration:"
     echo "  Home:    $node_dir"
-    echo "  P2P:     ${NODE_P2P_PORTS[$node_num]}"
-    echo "  RPC:     http://localhost:${NODE_RPC_PORTS[$node_num]}"
-    echo "  API:     http://localhost:${NODE_API_PORTS[$node_num]}"
-    echo "  gRPC:    localhost:${NODE_GRPC_PORTS[$node_num]}"
+    echo "  P2P:     $(get_p2p_port $node_num)"
+    echo "  RPC:     http://localhost:$(get_rpc_port $node_num)"
+    echo "  API:     http://localhost:$(get_api_port $node_num)"
+    echo "  gRPC:    localhost:$(get_grpc_port $node_num)"
     echo ""
     echo -e "${YELLOW}Starting node in foreground...${NC}"
     echo -e "${YELLOW}Press Ctrl+C to stop the node and return to menu${NC}"
@@ -257,7 +308,7 @@ start_node() {
 # Stop a specific node
 stop_node() {
     local node_num=$1
-    local pid_file="${NODE_DIRS[$node_num]}/pokerchaind.pid"
+    local pid_file="$(get_node_dir $node_num)/pokerchaind.pid"
     
     echo "Stopping Node $node_num..."
     
@@ -299,7 +350,7 @@ show_menu() {
     # Show quick status
     echo -e "${BLUE}Quick Status:${NC}"
     for i in 1 2 3; do
-        local pid_file="${NODE_DIRS[$i]}/pokerchaind.pid"
+        local pid_file="$(get_node_dir $i)/pokerchaind.pid"
         local status="${RED}●${NC} Stopped"
         if [ -f "$pid_file" ]; then
             local pid=$(cat "$pid_file")
@@ -307,7 +358,7 @@ show_menu() {
                 status="${GREEN}●${NC} Running"
             fi
         fi
-        echo -e "  Node $i: $status (RPC: ${NODE_RPC_PORTS[$i]}, API: ${NODE_API_PORTS[$i]})"
+        echo -e "  Node $i: $status (RPC: $(get_rpc_port $i), API: $(get_api_port $i))"
     done
     
     echo ""
@@ -394,7 +445,7 @@ main() {
                 # Stop any running nodes
                 echo "Checking for running nodes..."
                 for i in 1 2 3; do
-                    local pid_file="${NODE_DIRS[$i]}/pokerchaind.pid"
+                    local pid_file="$(get_node_dir $i)/pokerchaind.pid"
                     if [ -f "$pid_file" ]; then
                         local pid=$(cat "$pid_file")
                         if ps -p "$pid" > /dev/null 2>&1; then

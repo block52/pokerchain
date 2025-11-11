@@ -33,6 +33,13 @@ if [ ! -d "$HOME_DIR" ]; then
     exit 1
 fi
 
+# Update bridge configuration from .env (if .env exists)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/.env" ] && [ -f "$SCRIPT_DIR/update-bridge-config.sh" ]; then
+    print_info "Updating bridge configuration from .env..."
+    "$SCRIPT_DIR/update-bridge-config.sh" > /dev/null 2>&1 || print_warning "Could not update bridge config (continuing anyway)"
+fi
+
 # Check if pokerchaind is installed
 POKERCHAIND_BIN=""
 

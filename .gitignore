@@ -11,3 +11,6 @@ pokerchaind
 build/
 test/
 production/
+
+# Environment variables with secrets
+.env

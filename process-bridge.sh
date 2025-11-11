@@ -5,8 +5,17 @@
 
 set -e
 
+# Load environment variables from .env file
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    source "$SCRIPT_DIR/.env"
+else
+    echo "❌ ERROR: .env file not found!"
+    echo "Please copy .env.example to .env and add your Alchemy API key"
+    exit 1
+fi
+
 # Configuration
-ALCHEMY_URL="https://base-mainnet.g.alchemy.com/v2/uwae8IxsUFGbRFh8fagTMrGz1w5iuvpc"
 CONTRACT_ADDRESS="0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"
 VALIDATOR_HOST="${VALIDATOR_HOST:-node1.block52.xyz}"
 VALIDATOR_USER="${VALIDATOR_USER:-root}"
