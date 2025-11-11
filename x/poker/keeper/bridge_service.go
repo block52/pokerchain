@@ -103,7 +103,7 @@ func (bs *BridgeService) processNewDeposits(ctx context.Context) error {
 	}
 
 	// Process blocks in chunks to avoid "range too large" errors
-	const maxBlockRange = 9 // Alchemy Free Tier limits to 10 blocks per query
+	const maxBlockRange = 999 // Most RPC providers limit to ~1000 blocks
 	startBlock := bs.lastProcessedBlock + 1
 
 	for startBlock <= latestBlock {
