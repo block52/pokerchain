@@ -163,6 +163,10 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 	// PVM requires explicit seat number - keeper should have resolved seat=0 to actual seat
 	seatData := fmt.Sprintf("seat=%d", seat)
 
+	// Get deterministic timestamp from Cosmos block (for PVM determinism)
+	// This ensures all validators get the same timestamp for consensus
+	blockTimestamp := sdkCtx.BlockTime().UnixMilli() // Milliseconds since epoch
+
 	request := JSONRPCRequest{
 		Method: "perform_action",
 		Params: []interface{}{
@@ -174,6 +178,7 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 			string(gameStateJson),          // gameStateJson
 			string(gameOptionsJson),        // gameOptionsJson
 			seatData,                       // data with seat parameter (empty = auto-assign)
+			blockTimestamp,                 // timestamp (Cosmos block time for deterministic gameplay)
 		},
 		ID:      1,
 		JSONRPC: "2.0",
