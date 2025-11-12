@@ -122,6 +122,19 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 		return fmt.Errorf("failed to marshal game state: %w", err)
 	}
 
+	// Convert string game type to GameType enum
+	var gameType types.GameType
+	switch game.GameType {
+	case "cash":
+		gameType = types.GameTypeCash
+	case "sit-and-go":
+		gameType = types.GameTypeSitAndGo
+	case "tournament":
+		gameType = types.GameTypeTournament
+	default:
+		gameType = types.GameTypeCash // default to cash if unrecognized
+	}
+
 	// Create GameOptionsDTO from the game object
 	gameOptions := types.GameOptionsDTO{
 		MinBuyIn:   &[]string{strconv.FormatUint(game.MinBuyIn, 10)}[0],
@@ -131,7 +144,7 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 		SmallBlind: &[]string{strconv.FormatUint(game.SmallBlind, 10)}[0],
 		BigBlind:   &[]string{strconv.FormatUint(game.BigBlind, 10)}[0],
 		Timeout:    &[]int{int(game.Timeout)}[0],
-		Type:       &[]types.GameType{types.GameTypeSitAndGo}[0],
+		Type:       &gameType,
 	}
 
 	// Convert game options to JSON

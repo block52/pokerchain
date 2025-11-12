@@ -1,5 +1,14 @@
 # Bridge Deposit Processing Flow
 
+> **📦 ARCHIVED - November 12, 2025**
+>
+> This document is **COMPLETE** and archived for reference. The bridge implementation has been successfully deployed and tested.
+>
+> **Status**: ✅ All phases complete - Manual deposit processing working
+> - CLI command: `pokerchaind tx poker process-deposit [index]`
+> - UI page: `/bridge/manual`
+> - Admin dashboard: `/admin/bridge-dashboard`
+
 ## Overview
 
 This document explains how bridge deposits work from Ethereum to Cosmos, including data structures, verification, and the minting process.

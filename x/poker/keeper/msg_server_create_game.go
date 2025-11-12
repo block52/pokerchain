@@ -90,7 +90,19 @@ func (k msgServer) CreateGame(ctx context.Context, msg *types.MsgCreateGame) (*t
 	bigBlindStr := fmt.Sprintf("%d", msg.BigBlind)
 	minPlayersInt := int(msg.MinPlayers)
 	maxPlayersInt := int(msg.MaxPlayers)
-	gameType := types.GameTypeTexasHoldem
+
+	// Convert string game type to GameType enum
+	var gameType types.GameType
+	switch msg.GameType {
+	case "cash":
+		gameType = types.GameTypeCash
+	case "sit-and-go":
+		gameType = types.GameTypeSitAndGo
+	case "tournament":
+		gameType = types.GameTypeTournament
+	default:
+		gameType = types.GameTypeCash // default to cash if unrecognized
+	}
 
 	defaultGameState := types.TexasHoldemStateDTO{
 		Type:        types.GameTypeTexasHoldem,
