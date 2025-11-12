@@ -41,6 +41,11 @@ service Query {
   rpc GameState(QueryGameStateRequest) returns (QueryGameStateResponse) {
     option (google.api.http).get = "/block52/pokerchain/poker/v1/game_state/{game_id}";
   }
+
+  // IsTxProcessed checks if an Ethereum transaction hash has been processed
+  rpc IsTxProcessed(QueryIsTxProcessedRequest) returns (QueryIsTxProcessedResponse) {
+    option (google.api.http).get = "/block52/pokerchain/poker/v1/is_tx_processed/{eth_tx_hash}";
+  }
 }
 
 // QueryParamsRequest is request type for the Query/Params RPC method.
@@ -102,4 +107,14 @@ message QueryGameStateRequest {
 // QueryGameStateResponse defines the QueryGameStateResponse message.
 message QueryGameStateResponse {
   string game_state = 1;
+}
+
+// QueryIsTxProcessedRequest defines the request for checking if a tx has been processed
+message QueryIsTxProcessedRequest {
+  string eth_tx_hash = 1;
+}
+
+// QueryIsTxProcessedResponse defines the response for checking if a tx has been processed
+message QueryIsTxProcessedResponse {
+  bool processed = 1;
 }

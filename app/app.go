@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"io"
 
 	clienthelpers "cosmossdk.io/client/v2/helpers"
@@ -236,39 +235,11 @@ func New(
 	)
 	logger.Info("✅ Bridge config set on poker keeper for deposit verification")
 
-	if bridgeConfig.Enabled {
-		logger.Info("🌉 Initializing Ethereum Bridge Service",
-			"rpc_url", bridgeConfig.EthereumRPCURL,
-			"deposit_contract", bridgeConfig.DepositContractAddress,
-			"usdc_contract", bridgeConfig.USDCContractAddress,
-			"starting_block", bridgeConfig.StartingBlock,
-		)
-
-		bridgeService, err := pokermodulekeeper.NewBridgeService(
-			app.PokerKeeper,
-			bridgeConfig.EthereumRPCURL,
-			bridgeConfig.DepositContractAddress,
-			bridgeConfig.USDCContractAddress,
-			logger.With("module", "bridge"),
-		)
-		if err != nil {
-			logger.Error("❌ Failed to create bridge service", "error", err)
-		} else {
-			// Set starting block if configured
-			if bridgeConfig.StartingBlock > 0 {
-				bridgeService.SetLastProcessedBlock(bridgeConfig.StartingBlock - 1)
-			}
-
-			// Set bridge service on keeper so EndBlocker can access it
-			app.PokerKeeper.SetBridgeService(bridgeService)
-
-			// Start bridge service in background
-			go bridgeService.Start(context.Background())
-			logger.Info("✅ Bridge service started successfully")
-		}
-	} else {
-		logger.Info("⏸️  Bridge service disabled in config")
-	}
+	// NOTE: Auto-sync bridge service removed (migrated to manual index-based processing)
+	// Deposits are now processed via MsgProcessDeposit transactions submitted by users/relayers
+	// This ensures deterministic consensus - all nodes process the same transactions in the same order
+	// See BRIDGE_DEPOSIT_FLOW.md for the new manual processing architecture
+	logger.Info("🌉 Bridge: Manual index-based processing enabled (no auto-sync)")
 
 	return app
 }

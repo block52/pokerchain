@@ -14,10 +14,11 @@ import { MsgDealCards } from "./types/pokerchain/poker/v1/tx";
 import { MsgPerformAction } from "./types/pokerchain/poker/v1/tx";
 import { MsgMint } from "./types/pokerchain/poker/v1/tx";
 import { MsgBurn } from "./types/pokerchain/poker/v1/tx";
+import { MsgProcessDeposit } from "./types/pokerchain/poker/v1/tx";
 
 import { Params as typeParams} from "./types"
 
-export { MsgUpdateParams, MsgCreateGame, MsgJoinGame, MsgLeaveGame, MsgDealCards, MsgPerformAction, MsgMint, MsgBurn };
+export { MsgUpdateParams, MsgCreateGame, MsgJoinGame, MsgLeaveGame, MsgDealCards, MsgPerformAction, MsgMint, MsgBurn, MsgProcessDeposit };
 
 type sendMsgUpdateParamsParams = {
   value: MsgUpdateParams,
@@ -67,6 +68,12 @@ type sendMsgBurnParams = {
   memo?: string
 };
 
+type sendMsgProcessDepositParams = {
+  value: MsgProcessDeposit,
+  fee?: StdFee,
+  memo?: string
+};
+
 
 type msgUpdateParamsParams = {
   value: MsgUpdateParams,
@@ -98,6 +105,10 @@ type msgMintParams = {
 
 type msgBurnParams = {
   value: MsgBurn,
+};
+
+type msgProcessDepositParams = {
+  value: MsgProcessDeposit,
 };
 
 
@@ -242,6 +253,20 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 			}
 		},
 		
+		async sendMsgProcessDeposit({ value, fee, memo }: sendMsgProcessDepositParams): Promise<DeliverTxResponse> {
+			if (!signer) {
+					throw new Error('TxClient:sendMsgProcessDeposit: Unable to sign Tx. Signer is not present.')
+			}
+			try {			
+				const { address } = (await signer.getAccounts())[0]; 
+				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry});
+				let msg = this.msgProcessDeposit({ value: MsgProcessDeposit.fromPartial(value) })
+				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
+			} catch (e: any) {
+				throw new Error('TxClient:sendMsgProcessDeposit: Could not broadcast Tx: '+ e.message)
+			}
+		},
+		
 		
 		msgUpdateParams({ value }: msgUpdateParamsParams): EncodeObject {
 			try {
@@ -304,6 +329,14 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 				return { typeUrl: "/pokerchain.poker.v1.MsgBurn", value: MsgBurn.fromPartial( value ) }  
 			} catch (e: any) {
 				throw new Error('TxClient:MsgBurn: Could not create message: ' + e.message)
+			}
+		},
+		
+		msgProcessDeposit({ value }: msgProcessDepositParams): EncodeObject {
+			try {
+				return { typeUrl: "/pokerchain.poker.v1.MsgProcessDeposit", value: MsgProcessDeposit.fromPartial( value ) }  
+			} catch (e: any) {
+				throw new Error('TxClient:MsgProcessDeposit: Could not create message: ' + e.message)
 			}
 		},
 		

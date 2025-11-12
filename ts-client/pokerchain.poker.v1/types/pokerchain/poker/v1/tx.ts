@@ -111,6 +111,22 @@ export interface MsgBurn {
 export interface MsgBurnResponse {
 }
 
+/**
+ * MsgProcessDeposit defines the MsgProcessDeposit message.
+ * Processes an Ethereum deposit by querying the bridge contract for the deposit index.
+ */
+export interface MsgProcessDeposit {
+  creator: string;
+  depositIndex: Long;
+}
+
+/** MsgProcessDepositResponse defines the MsgProcessDepositResponse message. */
+export interface MsgProcessDepositResponse {
+  recipient: string;
+  amount: string;
+  depositIndex: Long;
+}
+
 function createBaseMsgUpdateParams(): MsgUpdateParams {
   return { authority: "", params: undefined };
 }
@@ -1337,6 +1353,178 @@ export const MsgBurnResponse: MessageFns<MsgBurnResponse> = {
   },
 };
 
+function createBaseMsgProcessDeposit(): MsgProcessDeposit {
+  return { creator: "", depositIndex: Long.UZERO };
+}
+
+export const MsgProcessDeposit: MessageFns<MsgProcessDeposit> = {
+  encode(message: MsgProcessDeposit, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.creator !== "") {
+      writer.uint32(10).string(message.creator);
+    }
+    if (!message.depositIndex.equals(Long.UZERO)) {
+      writer.uint32(16).uint64(message.depositIndex.toString());
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MsgProcessDeposit {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMsgProcessDeposit();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.creator = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.depositIndex = Long.fromString(reader.uint64().toString(), true);
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): MsgProcessDeposit {
+    return {
+      creator: isSet(object.creator) ? globalThis.String(object.creator) : "",
+      depositIndex: isSet(object.depositIndex) ? Long.fromValue(object.depositIndex) : Long.UZERO,
+    };
+  },
+
+  toJSON(message: MsgProcessDeposit): unknown {
+    const obj: any = {};
+    if (message.creator !== "") {
+      obj.creator = message.creator;
+    }
+    if (!message.depositIndex.equals(Long.UZERO)) {
+      obj.depositIndex = (message.depositIndex || Long.UZERO).toString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<MsgProcessDeposit>, I>>(base?: I): MsgProcessDeposit {
+    return MsgProcessDeposit.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MsgProcessDeposit>, I>>(object: I): MsgProcessDeposit {
+    const message = createBaseMsgProcessDeposit();
+    message.creator = object.creator ?? "";
+    message.depositIndex = (object.depositIndex !== undefined && object.depositIndex !== null)
+      ? Long.fromValue(object.depositIndex)
+      : Long.UZERO;
+    return message;
+  },
+};
+
+function createBaseMsgProcessDepositResponse(): MsgProcessDepositResponse {
+  return { recipient: "", amount: "", depositIndex: Long.UZERO };
+}
+
+export const MsgProcessDepositResponse: MessageFns<MsgProcessDepositResponse> = {
+  encode(message: MsgProcessDepositResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.recipient !== "") {
+      writer.uint32(10).string(message.recipient);
+    }
+    if (message.amount !== "") {
+      writer.uint32(18).string(message.amount);
+    }
+    if (!message.depositIndex.equals(Long.UZERO)) {
+      writer.uint32(24).uint64(message.depositIndex.toString());
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MsgProcessDepositResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMsgProcessDepositResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.recipient = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.amount = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.depositIndex = Long.fromString(reader.uint64().toString(), true);
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): MsgProcessDepositResponse {
+    return {
+      recipient: isSet(object.recipient) ? globalThis.String(object.recipient) : "",
+      amount: isSet(object.amount) ? globalThis.String(object.amount) : "",
+      depositIndex: isSet(object.depositIndex) ? Long.fromValue(object.depositIndex) : Long.UZERO,
+    };
+  },
+
+  toJSON(message: MsgProcessDepositResponse): unknown {
+    const obj: any = {};
+    if (message.recipient !== "") {
+      obj.recipient = message.recipient;
+    }
+    if (message.amount !== "") {
+      obj.amount = message.amount;
+    }
+    if (!message.depositIndex.equals(Long.UZERO)) {
+      obj.depositIndex = (message.depositIndex || Long.UZERO).toString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<MsgProcessDepositResponse>, I>>(base?: I): MsgProcessDepositResponse {
+    return MsgProcessDepositResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MsgProcessDepositResponse>, I>>(object: I): MsgProcessDepositResponse {
+    const message = createBaseMsgProcessDepositResponse();
+    message.recipient = object.recipient ?? "";
+    message.amount = object.amount ?? "";
+    message.depositIndex = (object.depositIndex !== undefined && object.depositIndex !== null)
+      ? Long.fromValue(object.depositIndex)
+      : Long.UZERO;
+    return message;
+  },
+};
+
 /** Msg defines the Msg service. */
 export interface Msg {
   /**
@@ -1358,6 +1546,11 @@ export interface Msg {
   Mint(request: MsgMint): Promise<MsgMintResponse>;
   /** Burn defines the Burn RPC. */
   Burn(request: MsgBurn): Promise<MsgBurnResponse>;
+  /**
+   * ProcessDeposit defines the ProcessDeposit RPC.
+   * Processes an Ethereum deposit by querying the deposit index from the bridge contract.
+   */
+  ProcessDeposit(request: MsgProcessDeposit): Promise<MsgProcessDepositResponse>;
 }
 
 export const MsgServiceName = "pokerchain.poker.v1.Msg";
@@ -1375,6 +1568,7 @@ export class MsgClientImpl implements Msg {
     this.PerformAction = this.PerformAction.bind(this);
     this.Mint = this.Mint.bind(this);
     this.Burn = this.Burn.bind(this);
+    this.ProcessDeposit = this.ProcessDeposit.bind(this);
   }
   UpdateParams(request: MsgUpdateParams): Promise<MsgUpdateParamsResponse> {
     const data = MsgUpdateParams.encode(request).finish();
@@ -1422,6 +1616,12 @@ export class MsgClientImpl implements Msg {
     const data = MsgBurn.encode(request).finish();
     const promise = this.rpc.request(this.service, "Burn", data);
     return promise.then((data) => MsgBurnResponse.decode(new BinaryReader(data)));
+  }
+
+  ProcessDeposit(request: MsgProcessDeposit): Promise<MsgProcessDepositResponse> {
+    const data = MsgProcessDeposit.encode(request).finish();
+    const promise = this.rpc.request(this.service, "ProcessDeposit", data);
+    return promise.then((data) => MsgProcessDepositResponse.decode(new BinaryReader(data)));
   }
 }
 

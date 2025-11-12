@@ -176,6 +176,10 @@ init_testnet() {
         sed -i.bak 's/enable = false/enable = true/' "$app_file"
         echo "  ✅ Enabled API server"
 
+        # Enable CORS for API (allows UI at localhost:5173 to connect)
+        sed -i.bak 's/enabled-unsafe-cors = false/enabled-unsafe-cors = true/' "$app_file"
+        echo "  ✅ Enabled API CORS (for UI development)"
+
         # Inject Alchemy URL from .env if available
         if [ -n "$ALCHEMY_URL" ]; then
             # Update ethereum_rpc_url in bridge section

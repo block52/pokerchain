@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -167,6 +170,69 @@ func (bv *BridgeVerifier) parseRecipientFromTxData(txData []byte) (string, error
 	}
 
 	return recipientStr, nil
+}
+
+// DepositData contains deposit information from Ethereum contract
+type DepositData struct {
+	Account string
+	Amount  *big.Int
+	Index   uint64
+}
+
+// GetDepositByIndex queries the Ethereum bridge contract for deposit data by index
+// It calls the deposits(uint256) view function and returns the account and amount
+func (bv *BridgeVerifier) GetDepositByIndex(
+	ctx context.Context,
+	depositIndex uint64,
+) (*DepositData, error) {
+	// ABI for deposits(uint256) function
+	// function deposits(uint256) external view returns (string memory account, uint256 amount)
+	depositsABI := `[{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"deposits","outputs":[{"internalType":"string","name":"account","type":"string"},{"internalType":"uint256","name":"amount","type":"uint256"}],"stateMutability":"view","type":"function"}]`
+
+	// Parse ABI
+	parsedABI, err := abi.JSON(strings.NewReader(depositsABI))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse ABI: %w", err)
+	}
+
+	// Pack function call data
+	data, err := parsedABI.Pack("deposits", big.NewInt(int64(depositIndex)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack function call: %w", err)
+	}
+
+	// Call contract
+	msg := ethereum.CallMsg{
+		To:   &bv.depositContract,
+		Data: data,
+	}
+
+	result, err := bv.ethClient.CallContract(ctx, msg, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call contract: %w", err)
+	}
+
+	// Unpack result
+	var out struct {
+		Account string
+		Amount  *big.Int
+	}
+
+	err = parsedABI.UnpackIntoInterface(&out, "deposits", result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unpack result: %w", err)
+	}
+
+	// Check if deposit exists (account will be empty if deposit doesn't exist)
+	if out.Account == "" {
+		return nil, fmt.Errorf("deposit index %d not found in contract", depositIndex)
+	}
+
+	return &DepositData{
+		Account: out.Account,
+		Amount:  out.Amount,
+		Index:   depositIndex,
+	}, nil
 }
 
 // Close closes the Ethereum client connection

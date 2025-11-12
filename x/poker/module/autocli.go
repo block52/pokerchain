@@ -98,6 +98,12 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 					Short:          "Send a burn tx",
 					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "amount"}, {ProtoField: "eth_recipient"}},
 				},
+				{
+					RpcMethod:      "ProcessDeposit",
+					Use:            "process-deposit [deposit-index]",
+					Short:          "Process an Ethereum bridge deposit by index",
+					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "deposit_index"}},
+				},
 				// this line is used by ignite scaffolding # autocli/tx
 			},
 		},

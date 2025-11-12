@@ -71,6 +71,16 @@ export interface QueryGameStateResponse {
   gameState: string;
 }
 
+/** QueryIsTxProcessedRequest defines the request for checking if a tx has been processed */
+export interface QueryIsTxProcessedRequest {
+  ethTxHash: string;
+}
+
+/** QueryIsTxProcessedResponse defines the response for checking if a tx has been processed */
+export interface QueryIsTxProcessedResponse {
+  processed: boolean;
+}
+
 function createBaseQueryParamsRequest(): QueryParamsRequest {
   return {};
 }
@@ -757,6 +767,122 @@ export const QueryGameStateResponse: MessageFns<QueryGameStateResponse> = {
   },
 };
 
+function createBaseQueryIsTxProcessedRequest(): QueryIsTxProcessedRequest {
+  return { ethTxHash: "" };
+}
+
+export const QueryIsTxProcessedRequest: MessageFns<QueryIsTxProcessedRequest> = {
+  encode(message: QueryIsTxProcessedRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.ethTxHash !== "") {
+      writer.uint32(10).string(message.ethTxHash);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QueryIsTxProcessedRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseQueryIsTxProcessedRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.ethTxHash = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryIsTxProcessedRequest {
+    return { ethTxHash: isSet(object.ethTxHash) ? globalThis.String(object.ethTxHash) : "" };
+  },
+
+  toJSON(message: QueryIsTxProcessedRequest): unknown {
+    const obj: any = {};
+    if (message.ethTxHash !== "") {
+      obj.ethTxHash = message.ethTxHash;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<QueryIsTxProcessedRequest>, I>>(base?: I): QueryIsTxProcessedRequest {
+    return QueryIsTxProcessedRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<QueryIsTxProcessedRequest>, I>>(object: I): QueryIsTxProcessedRequest {
+    const message = createBaseQueryIsTxProcessedRequest();
+    message.ethTxHash = object.ethTxHash ?? "";
+    return message;
+  },
+};
+
+function createBaseQueryIsTxProcessedResponse(): QueryIsTxProcessedResponse {
+  return { processed: false };
+}
+
+export const QueryIsTxProcessedResponse: MessageFns<QueryIsTxProcessedResponse> = {
+  encode(message: QueryIsTxProcessedResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.processed !== false) {
+      writer.uint32(8).bool(message.processed);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QueryIsTxProcessedResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseQueryIsTxProcessedResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.processed = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryIsTxProcessedResponse {
+    return { processed: isSet(object.processed) ? globalThis.Boolean(object.processed) : false };
+  },
+
+  toJSON(message: QueryIsTxProcessedResponse): unknown {
+    const obj: any = {};
+    if (message.processed !== false) {
+      obj.processed = message.processed;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<QueryIsTxProcessedResponse>, I>>(base?: I): QueryIsTxProcessedResponse {
+    return QueryIsTxProcessedResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<QueryIsTxProcessedResponse>, I>>(object: I): QueryIsTxProcessedResponse {
+    const message = createBaseQueryIsTxProcessedResponse();
+    message.processed = object.processed ?? false;
+    return message;
+  },
+};
+
 /** Query defines the gRPC querier service. */
 export interface Query {
   /** Parameters queries the parameters of the module. */
@@ -771,6 +897,8 @@ export interface Query {
   LegalActions(request: QueryLegalActionsRequest): Promise<QueryLegalActionsResponse>;
   /** GameState Queries the detailed game state for a game. */
   GameState(request: QueryGameStateRequest): Promise<QueryGameStateResponse>;
+  /** IsTxProcessed checks if an Ethereum transaction hash has been processed */
+  IsTxProcessed(request: QueryIsTxProcessedRequest): Promise<QueryIsTxProcessedResponse>;
 }
 
 export const QueryServiceName = "pokerchain.poker.v1.Query";
@@ -786,6 +914,7 @@ export class QueryClientImpl implements Query {
     this.PlayerGames = this.PlayerGames.bind(this);
     this.LegalActions = this.LegalActions.bind(this);
     this.GameState = this.GameState.bind(this);
+    this.IsTxProcessed = this.IsTxProcessed.bind(this);
   }
   Params(request: QueryParamsRequest): Promise<QueryParamsResponse> {
     const data = QueryParamsRequest.encode(request).finish();
@@ -821,6 +950,12 @@ export class QueryClientImpl implements Query {
     const data = QueryGameStateRequest.encode(request).finish();
     const promise = this.rpc.request(this.service, "GameState", data);
     return promise.then((data) => QueryGameStateResponse.decode(new BinaryReader(data)));
+  }
+
+  IsTxProcessed(request: QueryIsTxProcessedRequest): Promise<QueryIsTxProcessedResponse> {
+    const data = QueryIsTxProcessedRequest.encode(request).finish();
+    const promise = this.rpc.request(this.service, "IsTxProcessed", data);
+    return promise.then((data) => QueryIsTxProcessedResponse.decode(new BinaryReader(data)));
   }
 }
 
