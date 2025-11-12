@@ -244,10 +244,10 @@ deploy_config() {
 setup_firewall() {
     local remote_host=$1
     local remote_user=$2
-    
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 5: Setting Up Firewall (via setup-firewall.sh)${NC}"
+    echo -e "${BLUE}Step 6: Setting Up Firewall (via setup-firewall.sh)${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -267,7 +267,7 @@ setup_systemd() {
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 6: Setting Up Systemd Service (via setup-systemd.sh)${NC}"
+    echo -e "${BLUE}Step 7: Setting Up Systemd Service (via setup-systemd.sh)${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
@@ -287,7 +287,7 @@ setup_nginx() {
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 7: Setting Up NGINX & SSL (Optional)${NC}"
+    echo -e "${BLUE}Step 8: Setting Up NGINX & SSL (Optional)${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
@@ -326,7 +326,7 @@ start_node() {
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 8: Starting Node${NC}"
+    echo -e "${BLUE}Step 9: Starting Node${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -344,6 +344,80 @@ start_node() {
     echo -e "${GREEN}✅ Node started${NC}"
 }
 
+# Verify file hashes
+verify_file_hashes() {
+    local node_num=$1
+    local remote_host=$2
+    local remote_user=$3
+    local node_dir="$PROD_DIR/node$node_num"
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 5: Verifying File Hashes${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    local hash_check_failed=false
+
+    # Verify binary hash
+    echo "Verifying pokerchaind binary..."
+    local local_binary_hash=$(sha256sum build/pokerchaind | awk '{print $1}')
+    echo "  Local binary hash:  $local_binary_hash"
+
+    local remote_binary_hash=$(ssh "$remote_user@$remote_host" "sha256sum /usr/local/bin/pokerchaind 2>/dev/null" | awk '{print $1}')
+    echo "  Remote binary hash: $remote_binary_hash"
+
+    if [ "$local_binary_hash" = "$remote_binary_hash" ]; then
+        echo -e "  ${GREEN}✅ Binary hashes match${NC}"
+    else
+        echo -e "  ${RED}❌ Binary hashes DO NOT match!${NC}"
+        hash_check_failed=true
+    fi
+
+    echo ""
+
+    # Verify genesis.json hash
+    echo "Verifying genesis.json..."
+    if [ -f "$node_dir/config/genesis.json" ]; then
+        local local_genesis_hash=$(sha256sum "$node_dir/config/genesis.json" | awk '{print $1}')
+        echo "  Local genesis hash:  $local_genesis_hash"
+
+        local remote_genesis_hash=$(ssh "$remote_user@$remote_host" "sha256sum ~/.pokerchain/config/genesis.json 2>/dev/null" | awk '{print $1}')
+        echo "  Remote genesis hash: $remote_genesis_hash"
+
+        if [ "$local_genesis_hash" = "$remote_genesis_hash" ]; then
+            echo -e "  ${GREEN}✅ Genesis hashes match${NC}"
+        else
+            echo -e "  ${RED}❌ Genesis hashes DO NOT match!${NC}"
+            hash_check_failed=true
+        fi
+    else
+        echo -e "  ${YELLOW}⚠️  Local genesis.json not found - skipping hash verification${NC}"
+    fi
+
+    echo ""
+
+    if [ "$hash_check_failed" = true ]; then
+        echo -e "${RED}╔══════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${RED}║  ⚠️  HASH VERIFICATION FAILED!                                   ║${NC}"
+        echo -e "${RED}╚══════════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        echo "One or more files failed hash verification."
+        echo "This could indicate:"
+        echo "  - File corruption during transfer"
+        echo "  - Network issues"
+        echo "  - Files were modified after deployment"
+        echo ""
+        read -p "Continue anyway? (y/n): " continue_choice
+        if [[ ! $continue_choice =~ ^[Yy]$ ]]; then
+            echo "Deployment aborted due to hash verification failure."
+            exit 1
+        fi
+    else
+        echo -e "${GREEN}✅ All file hashes verified successfully${NC}"
+    fi
+}
+
 # Verify deployment
 verify_deployment() {
     local remote_host=$1
@@ -351,7 +425,7 @@ verify_deployment() {
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 9: Verifying Deployment${NC}"
+    echo -e "${BLUE}Step 10: Verifying Deployment${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -475,6 +549,7 @@ main() {
     build_binary
     deploy_binary "$remote_host" "$remote_user"
     deploy_config "$node_num" "$remote_host" "$remote_user"
+    verify_file_hashes "$node_num" "$remote_host" "$remote_user"
     setup_firewall "$remote_host" "$remote_user"
     setup_systemd "$remote_host" "$remote_user"
     setup_nginx "$remote_host" "$remote_user"
