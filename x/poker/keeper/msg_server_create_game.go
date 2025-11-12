@@ -104,6 +104,12 @@ func (k msgServer) CreateGame(ctx context.Context, msg *types.MsgCreateGame) (*t
 		gameType = types.GameTypeCash // default to cash if unrecognized
 	}
 
+	// Initialize and shuffle deck for the new game
+	deck, err := k.InitializeAndShuffleDeck(ctx)
+	if err != nil {
+		return nil, errorsmod.Wrap(err, "failed to initialize deck")
+	}
+
 	defaultGameState := types.TexasHoldemStateDTO{
 		Type:        types.GameTypeTexasHoldem,
 		Address:     gameId,
@@ -121,7 +127,7 @@ func (k msgServer) CreateGame(ctx context.Context, msg *types.MsgCreateGame) (*t
 		},
 		Players:         []types.PlayerDTO{},
 		CommunityCards:  []string{},
-		Deck:            "",
+		Deck:            deck.ToString(), // Shuffled deck serialized to string
 		Pots:            []string{},
 		NextToAct:       0,
 		PreviousActions: []types.ActionDTO{},

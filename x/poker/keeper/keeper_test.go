@@ -41,8 +41,10 @@ func initFixture(t *testing.T) *fixture {
 		encCfg.Codec,
 		addressCodec,
 		authority,
-		nil,
-		nil,
+		nil, // bankKeeper (not needed for basic tests)
+		nil, // stakingKeeper (not needed for basic tests)
+		"",  // ethRPCURL (empty for tests)
+		"",  // depositContractAddr (empty for tests)
 	)
 
 	// Initialize params
