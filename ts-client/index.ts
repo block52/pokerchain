@@ -74,6 +74,24 @@ const registry = new Registry([
   
 ])
 
+// WebSocket client exports
+export {
+    PokerWebSocketClient,
+    createPokerWebSocketClient,
+    type GameStateEvent,
+    type EventHandler,
+    type ErrorHandler,
+    type ConnectionHandler,
+    type PokerWebSocketOptions,
+} from './websocket-client';
+
+export {
+    usePokerWebSocket,
+    useMultipleGames,
+    type UsePokerWebSocketResult,
+    type UsePokerWebSocketOptions,
+} from './usePokerWebSocket';
+
 export {
     Client,
     registry,

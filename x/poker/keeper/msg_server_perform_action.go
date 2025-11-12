@@ -242,6 +242,21 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 		if err := k.GameStates.Set(ctx, gameId, updatedGameState); err != nil {
 			return fmt.Errorf("failed to store updated game state: %w", err)
 		}
+
+		// Emit detailed event for WebSocket subscriptions
+		sdkCtx.EventManager().EmitEvents(sdk.Events{
+			sdk.NewEvent(
+				"game_state_updated",
+				sdk.NewAttribute("game_id", gameId),
+				sdk.NewAttribute("player", playerId),
+				sdk.NewAttribute("action", action),
+				sdk.NewAttribute("amount", strconv.FormatUint(amount, 10)),
+				sdk.NewAttribute("round", string(updatedGameState.Round)),
+				sdk.NewAttribute("next_to_act", strconv.Itoa(updatedGameState.NextToAct)),
+				sdk.NewAttribute("action_count", strconv.Itoa(updatedGameState.ActionCount)),
+				sdk.NewAttribute("hand_number", strconv.Itoa(updatedGameState.HandNumber)),
+			),
+		})
 	} else {
 		return fmt.Errorf("no result returned from poker engine")
 	}
