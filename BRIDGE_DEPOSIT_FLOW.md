@@ -1460,3 +1460,286 @@ If you encounter issues:
 2. Verify Ethereum RPC: `./test-bridge-connection.sh`
 3. Check Cosmos balance: `pokerchaind query bank balances <address>`
 4. Review this document for troubleshooting steps
+
+---
+
+## ✅ PHASE 12: Table Admin Dashboard (Nov 12, 2025 - Evening)
+
+### Objective
+Create an admin interface for creating and managing poker tables on the blockchain.
+
+### Features Implemented
+
+**1. TableAdminPage Component** (`poker-vm/ui/src/pages/TableAdminPage.tsx`):
+- **Create Tables**: Form to create new poker games with customizable settings
+  - Game Type: Sit & Go, Tournament, Cash Game
+  - Max Players: 2-9 players
+  - Buy-In Range: Min/Max in USDC
+  - Blinds: Small Blind / Big Blind in USDC
+- **View All Tables**: Display all existing tables in a sortable table
+  - Shows: Table ID, Game Type, Players, Buy-In Range, Blinds, Status
+  - Copy Table ID to clipboard
+  - Copy Table URL for sharing
+- **Table Stats Dashboard**:
+  - Total Tables count
+  - Active Tables count
+  - Sit & Go Tables count
+
+**2. Integration with useNewTable Hook**:
+- Reused existing `useNewTable` hook for game creation
+- Handles all blockchain transaction logic
+- Automatic USDC amount conversion (dollars → micro-USDC)
+- Gas estimation and fee calculation
+- Error handling with toast notifications
+
+**3. SDK Integration**:
+- Uses SigningCosmosClient's `createGame()` method
+- Queries games via REST API: `/block52/pokerchain/poker/v1/list_games`
+- Formats amounts using COSMOS_CONSTANTS.USDC_DECIMALS
+
+**4. Routing**:
+- Added route: `/table/admin`
+- Styled similar to `/bridge/admin` for consistency
+- Direct navigation link: "Back to Dashboard"
+
+### Game Creation Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as TableAdminPage
+    participant Hook as useNewTable
+    participant SDK as SigningCosmosClient
+    participant Chain as Cosmos Blockchain
+
+    User->>UI: Fill form & click "Create Table"
+    UI->>Hook: createTable(gameOptions)
+    Hook->>SDK: createGame(gameType, players, buyIns, blinds)
+    SDK->>Chain: MsgCreateGame transaction
+    Chain->>Chain: Validate & Store Game
+    Chain-->>SDK: TxHash
+    SDK-->>Hook: TxHash
+    Hook-->>UI: Success + TxHash
+    UI->>User: Success toast + refresh table list
+    UI->>Chain: Query list_games
+    Chain-->>UI: All games
+    UI->>User: Display updated table list
+```
+
+### Table Display Features
+
+**Table Row Information**:
+- **Table ID**: First 16 chars with copy button
+- **Game Type**: texas-holdem, sit_and_go, tournament
+- **Players**: Min-Max range (e.g., "2-6")
+- **Buy-In Range**: Formatted USDC (e.g., "$10.00 - $100.00")
+- **Blinds**: Formatted USDC (e.g., "$0.50 / $1.00")
+- **Status**: Color-coded badges (playing, waiting, finished)
+- **Copy URL**: One-click button to share table link
+
+**Amount Formatting**:
+```typescript
+const formatUSDC = (microAmount: string | number): string => {
+    const amount = typeof microAmount === "string" ? parseFloat(microAmount) : microAmount;
+    return (amount / 1_000_000).toFixed(2);
+};
+```
+
+### Configuration
+
+**Default Settings** (Sit & Go, 4 players):
+- Game Type: Sit & Go (Texas Hold'em)
+- Min Players: 2
+- Max Players: 4
+- Min Buy-In: $10 USDC
+- Max Buy-In: $100 USDC
+- Small Blind: $0.50 USDC
+- Big Blind: $1.00 USDC
+- Timeout: 300 seconds (5 minutes)
+
+**Customizable Options**:
+- Game Type: Sit & Go / Tournament / Cash Game
+- Max Players: 2 / 4 / 6 / 9
+- All buy-in and blind amounts
+
+### UI/UX Design
+
+**Styling** (matching BridgeAdminDashboard):
+- Dark gradient background: `from-gray-900 via-gray-800 to-gray-900`
+- Stats cards with colored borders (gray, green, blue)
+- Form with dark input fields: `bg-gray-900 border-gray-600`
+- Table with hover effects: `hover:bg-gray-700/50`
+- Color-coded status badges:
+  - Playing: `bg-green-900/50 text-green-300 border-green-700`
+  - Waiting: `bg-yellow-900/50 text-yellow-300 border-yellow-700`
+  - Other: `bg-gray-700 text-gray-300`
+
+**Responsive Design**:
+- Grid layouts adapt to mobile/desktop
+- 2-column form on desktop, stacks on mobile
+- Scrollable table on mobile devices
+
+### Testing Notes
+
+**Prerequisites**:
+- Cosmos wallet must be connected
+- Wallet must have `stake` tokens for gas fees
+- Node must be running at `http://localhost:26657`
+
+**Usage**:
+1. Navigate to `http://localhost:5173/table/admin`
+2. Configure table settings in form
+3. Click "Create Table" button
+4. Wait for transaction confirmation
+5. Table appears in list automatically
+6. Click "Copy URL" to share with players
+
+### Technical Details
+
+**useNewTable Hook Logic**:
+- Fetches mnemonic from storage
+- Creates SigningCosmosClient with config:
+  - Chain ID: `pokerchain`
+  - Prefix: `b52`
+  - Gas denom: `b52Token`
+  - Gas price: `0.025b52Token`
+- Converts USDC amounts using `Math.pow(10, COSMOS_CONSTANTS.USDC_DECIMALS)`
+- Special blind calculation for Sit & Go/Tournament:
+  - Fixed starting blinds: 10,000/20,000 (0.01/0.02 USDC)
+  - Cash games: 1% of min/max buy-in
+
+**Game Type Mapping**:
+```typescript
+const gameTypeStr = gameOptions.type === GameType.SIT_AND_GO ? "sit_and_go" :
+                   gameOptions.type === GameType.TOURNAMENT ? "tournament" : "cash";
+```
+
+### Known Limitations
+
+1. **No Filtering**: Table list shows all games (no search/filter)
+2. **No Pagination**: All tables loaded at once
+3. **Manual Refresh**: Must click "Refresh" to see new tables
+4. **No Game Details**: Click on table row doesn't show full details
+5. **No Delete**: Can't delete/cancel tables
+
+### Future Enhancements
+
+**Short-term**:
+- Add table search/filter functionality
+- Add pagination for large table lists
+- Auto-refresh table list after creation
+- Click table row to view full details
+
+**Long-term**:
+- Add table status management (start, pause, cancel)
+- Add player list for each table
+- Add game history and statistics
+- Export table data to CSV
+- Batch create multiple tables
+
+### Integration with Existing Features
+
+**Related Pages**:
+- `/` - Dashboard (main lobby)
+- `/table/:id` - Individual table view
+- `/bridge/admin` - Bridge admin (similar styling)
+- `/test-signing` - Wallet testing
+
+**SDK Methods Used**:
+- `createGame()` - Create new game
+- `listGames()` - Query all games (via REST)
+- `usdcToB52usdc()` - Amount conversion
+- `b52usdcToUsdc()` - Amount formatting
+
+### Success Criteria
+
+All criteria met ✅:
+- [x] Admin can create tables with custom settings
+- [x] Default is Sit & Go, 4 players, Texas Hold'em
+- [x] Tables displayed in rows with settings
+- [x] Click to copy table URL
+- [x] Styled like `/bridge/admin`
+- [x] Integrated with existing SDK and hooks
+- [x] Error handling and user feedback
+
+---
+
+### Access the Table Admin
+
+**URL**: `http://localhost:5173/table/admin`
+
+**Quick Start**:
+1. Ensure testnet is running
+2. Ensure wallet is funded with stake tokens
+3. Navigate to `/table/admin`
+4. Create your first table!
+
+---
+
+### Fixes Applied (Nov 12, 2025 - Evening Session 2)
+
+**Issue 1: Gas Fee Denomination Mismatch**
+- **Problem**: All hooks were configured to use `b52Token` for gas fees, but local testnet requires `stake`
+- **Error**: `insufficient fees; got: 5000b52Token required: 2000stake`
+- **Fix**: Updated 20+ files to use `stake` instead of `b52Token`:
+  - ✅ `useNewTable.ts`
+  - ✅ `useSitAndGoPlayerJoinRandomSeat.ts`
+  - ✅ All 18 `playerActions` hooks (fold, call, bet, join, etc.)
+  - ✅ `BuyInModal.tsx`
+- **Result**: All transactions now use `stake` for gas fees on testnet
+
+**Issue 2: Table List Not Loading**
+- **Problem**: REST API returns `games` as JSON string, not parsed array
+- **Error**: `TypeError: gamesArray.map is not a function`
+- **Fix**: Replaced custom fetch logic with `useFindGames` hook
+  - Hook properly uses SDK's `cosmosClient.findGames()`
+  - SDK handles JSON parsing automatically
+- **Result**: Tables now load and display correctly
+
+**Issue 3: Default Form Values**
+- **Updated defaults** to match Sit & Go requirements:
+  - Min Buy-In: $1 (was $10)
+  - Max Buy-In: $10 (was $100)
+  - Small Blind: $0.01 (was $0.50)
+  - Big Blind: $0.02 (was $1.00)
+
+**Testing Results:**
+- ✅ Successfully created first game at block 301
+- ✅ Game ID: `0xbc28eaef3c63b78b750a5e51ea05a79454c72e9d1de63cc6cded294c7a038f03`
+- ✅ Transaction: `2C54ABBD0353DC13E03216550E45001C05CE435B0169E5FA7C4092F53C7A05B8`
+- ✅ Gas Used: 102,364 (out of 200,000 limit)
+- ✅ Fee Paid: 5,000 stake
+- ✅ Game Type: sit_and_go
+- ✅ Players: 2-4
+- ✅ Buy-In: $1-$10 USDC
+- ✅ Blinds: $0.01/$0.02 USDC
+- ✅ Table displays in admin list after creation
+
+**Code Changes:**
+```diff
+// Before (broken)
+- denom: "b52Token"
+- gasPrice: "0.025b52Token"
+
+// After (working)
++ denom: "stake"
++ gasPrice: "0.025stake"
+```
+
+```diff
+// Before (custom fetch)
+- const response = await fetch(`${restEndpoint}/block52/pokerchain/poker/v1/list_games`);
+- const data = await response.json();
+- const gamesArray = data.games || [];
+
+// After (using hook)
++ const { games: fetchedGames, isLoading, refetch } = useFindGames();
++ const tables = fetchedGames.map(game => ({ ... }));
+```
+
+**Production Note:**
+- For production deployment, change `denom` and `gasPrice` back to `b52Token`
+- Consider using environment variable: `VITE_GAS_DENOM` to switch between testnet/production
+- Example: `denom: import.meta.env.VITE_GAS_DENOM || "stake"`
+
+---
