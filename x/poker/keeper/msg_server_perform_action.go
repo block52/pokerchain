@@ -32,12 +32,13 @@ const (
 	Show       PlayerActionType = "show"
 	Join       PlayerActionType = "join"
 	Deal       PlayerActionType = "deal"
+	NewHand    PlayerActionType = "new-hand"
 )
 
 // isValidAction checks if the action is valid
 func isValidAction(action string) bool {
 	validActions := []PlayerActionType{
-		SmallBlind, BigBlind, Fold, Check, Bet, Call, Raise, AllIn, Muck, SitIn, SitOut, Show, Join, Deal,
+		SmallBlind, BigBlind, Fold, Check, Bet, Call, Raise, AllIn, Muck, SitIn, SitOut, Show, Join, Deal, NewHand,
 	}
 	for _, validAction := range validActions {
 		if PlayerActionType(action) == validAction {
@@ -159,9 +160,22 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 	// Match PVM's getActionIndex() logic: actionCount + previousActions.length + 1
 	actionIndex := gameState.ActionCount + len(gameState.PreviousActions) + 1
 
-	// Format seat parameter for data field
-	// PVM requires explicit seat number - keeper should have resolved seat=0 to actual seat
-	seatData := fmt.Sprintf("seat=%d", seat)
+	// Format data parameter based on action type
+	var seatData string
+	if action == "new-hand" {
+		// For new-hand action, generate a deterministic shuffled deck from block hash
+		deck, err := k.Keeper.InitializeAndShuffleDeck(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to initialize and shuffle deck: %w", err)
+		}
+		deckStr := k.Keeper.SaveDeckToState(deck)
+		seatData = fmt.Sprintf("deck=%s", deckStr)
+		sdkCtx.Logger().Info("🃏 Generated shuffled deck for new hand", "gameId", gameId)
+	} else {
+		// For other actions, use seat parameter
+		// PVM requires explicit seat number - keeper should have resolved seat=0 to actual seat
+		seatData = fmt.Sprintf("seat=%d", seat)
+	}
 
 	// Get deterministic timestamp from Cosmos block (for PVM determinism)
 	// This ensures all validators get the same timestamp for consensus
