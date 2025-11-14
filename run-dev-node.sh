@@ -175,8 +175,9 @@ check_binary() {
                 echo "  1) Download remote binary (recommended - ensures compatibility)"
                 echo "  2) Keep local binary (may cause sync issues if different version)"
                 echo "  3) Build new binary locally"
+                echo "  4) Cancel"
                 echo ""
-                read -p "Choose option [1-3]: " BINARY_CHOICE
+                read -p "Choose option [1-4]: " BINARY_CHOICE
                 
                 case $BINARY_CHOICE in
                     1)
@@ -193,6 +194,10 @@ check_binary() {
                         ;;
                     3)
                         build_binary
+                        ;;
+                    4)
+                        echo "Cancelled"
+                        exit 0
                         ;;
                     *)
                         echo "Invalid choice. Keeping local binary."
@@ -226,35 +231,34 @@ check_binary() {
                 esac
             fi
         else
+            # Architecture mismatch - only offer to use local or rebuild
             echo ""
             echo -e "${YELLOW}⚠ Cannot compare with remote (architecture mismatch)${NC}"
+            echo ""
+            echo "Options:"
+            echo "  1) Use existing local binary (built for $OS/$ARCH)"
+            echo "  2) Rebuild for your system ($OS/$ARCH)"
+            echo "  3) Cancel"
+            echo ""
+            read -p "Choose option [1-3]: " LOCAL_BINARY_CHOICE
+            
+            case $LOCAL_BINARY_CHOICE in
+                1)
+                    echo ""
+                    echo -e "${GREEN}✓${NC} Using existing binary: $CHAIN_BINARY"
+                    ;;
+                2)
+                    build_binary
+                    ;;
+                3)
+                    echo "Cancelled"
+                    exit 0
+                    ;;
+                *)
+                    echo "Invalid choice. Using existing binary."
+                    ;;
+            esac
         fi
-        
-        # Ask if user wants to rebuild
-        echo ""
-        echo "Options:"
-        echo "  1) Use existing binary (may work if version matches)"
-        echo "  2) Rebuild for your system ($OS/$ARCH)"
-        echo "  3) Cancel"
-        echo ""
-        read -p "Choose option [1-3]: " LOCAL_BINARY_CHOICE
-        
-        case $LOCAL_BINARY_CHOICE in
-            1)
-                echo ""
-                echo -e "${GREEN}✓${NC} Using existing binary: $CHAIN_BINARY"
-                ;;
-            2)
-                build_binary
-                ;;
-            3)
-                echo "Cancelled"
-                exit 0
-                ;;
-            *)
-                echo "Invalid choice. Using existing binary."
-                ;;
-        esac
         
         return 0
     fi
