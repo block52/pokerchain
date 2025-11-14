@@ -95,9 +95,16 @@ show_menu() {
     echo "   - Restarts chain from block 0"
     echo "   - ⚠️  Use when bug requires full chain restart"
     echo ""
-    echo -e "${GREEN}11)${NC} Exit"
+    echo -e "${GREEN}11)${NC} Deploy Remote PVM"
+    echo "   Deploy Poker VM to a remote Linux server"
+    echo "   - Checks and installs Docker if needed"
+    echo "   - Clones poker-vm repository"
+    echo "   - Builds Docker image from pvm/ts"
+    echo "   - Sets up systemd service"
     echo ""
-    echo -n "Enter your choice [1-11]: "
+    echo -e "${GREEN}12)${NC} Exit"
+    echo ""
+    echo -n "Enter your choice [1-12]: "
 }
 
 # Check if script exists
@@ -1106,6 +1113,23 @@ reset_chain() {
     read -p "Press Enter to continue..."
 }
 
+# Deploy Remote PVM (option 11)
+deploy_remote_pvm() {
+    print_header
+    echo ""
+    echo "Deploying Remote Poker VM"
+    echo ""
+    
+    if check_script "./deploy-pvm.sh"; then
+        chmod +x ./deploy-pvm.sh
+        ./deploy-pvm.sh
+    else
+        echo "Please ensure deploy-pvm.sh is in the current directory"
+    fi
+    
+    read -p "Press Enter to continue..."
+}
+
 # Check dependencies
 check_dependencies() {
     local missing_deps=()
@@ -1164,6 +1188,9 @@ main() {
                 reset_chain
                 ;;
             11)
+                deploy_remote_pvm
+                ;;
+            12)
                 print_header
                 echo ""
                 echo "Thank you for using Pokerchain Network Setup!"
@@ -1172,7 +1199,7 @@ main() {
                 ;;
             *)
                 echo ""
-                echo -e "${YELLOW}Invalid option. Please choose 1-11.${NC}"
+                echo -e "${YELLOW}Invalid option. Please choose 1-12.${NC}"
                 sleep 2
                 ;;
         esac
