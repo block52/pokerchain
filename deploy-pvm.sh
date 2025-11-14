@@ -201,8 +201,15 @@ build_docker_image() {
             exit 1
         fi
         
-        echo "🐳 Building Docker image (this may take several minutes)..."
-        docker build -t poker-vm:latest .
+        echo "🧹 Cleaning up old containers and images..."
+        # Remove any orphaned containers
+        docker ps -aq --filter "status=exited" --filter "status=dead" | xargs -r docker rm
+        
+        # Prune orphaned images and containers
+        docker system prune -f --filter "label!=keep" 2>/dev/null || true
+        
+        echo "🐳 Building Docker image with --no-cache (this may take several minutes)..."
+        docker build --no-cache -t poker-vm:latest .
         
         if [ \$? -eq 0 ]; then
             echo "✅ Docker image built successfully"
@@ -267,6 +274,93 @@ EOF
 ENDSSH
 }
 
+# Check PVM health
+check_pvm_health() {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Checking PVM Health...${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    echo "Waiting for PVM to be ready..."
+    local max_attempts=30
+    local attempt=0
+    local success=false
+    
+    while [ $attempt -lt $max_attempts ]; do
+        attempt=$((attempt + 1))
+        echo -n "  Attempt $attempt/$max_attempts: "
+        
+        # Check if service is running first
+        if ! ssh "$remote_user@$remote_host" "systemctl is-active --quiet poker-vm" 2>/dev/null; then
+            echo -e "${RED}✗ Service not running${NC}"
+            
+            # Show service status and logs if failing
+            if [ $attempt -eq 5 ] || [ $attempt -eq 15 ]; then
+                echo ""
+                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                echo -e "${YELLOW}Service Status:${NC}"
+                ssh "$remote_user@$remote_host" "systemctl status poker-vm --no-pager -l" 2>/dev/null || true
+                echo ""
+                echo -e "${YELLOW}Recent Logs:${NC}"
+                ssh "$remote_user@$remote_host" "journalctl -u poker-vm -n 20 --no-pager" 2>/dev/null || true
+                echo ""
+                echo -e "${YELLOW}Docker Logs (if container exists):${NC}"
+                ssh "$remote_user@$remote_host" "docker logs poker-vm 2>&1 | tail -20" 2>/dev/null || echo "No container logs available"
+                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                echo ""
+            fi
+            sleep 2
+            continue
+        fi
+        
+        # Try to curl the PVM endpoint
+        if response=$(curl -s -f -m 5 "http://$remote_host:$pvm_port" 2>/dev/null); then
+            echo -e "${GREEN}✅ PVM is responding!${NC}"
+            success=true
+            break
+        else
+            echo -e "${YELLOW}⏳ Not ready yet...${NC}"
+            sleep 2
+        fi
+    done
+    
+    echo ""
+    
+    if [ "$success" = true ]; then
+        echo -e "${GREEN}✅ Health check passed!${NC}"
+        echo ""
+        echo "PVM Response:"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        curl -s "http://$remote_host:$pvm_port" | head -20
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    else
+        echo -e "${RED}⚠️  Warning: PVM did not respond within $((max_attempts * 2)) seconds${NC}"
+        echo ""
+        echo "Diagnostics:"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "Service Status:"
+        ssh "$remote_user@$remote_host" "systemctl status poker-vm --no-pager -l" 2>/dev/null || true
+        echo ""
+        echo "Recent Service Logs:"
+        ssh "$remote_user@$remote_host" "journalctl -u poker-vm -n 30 --no-pager" 2>/dev/null || true
+        echo ""
+        echo "Docker Container Logs:"
+        ssh "$remote_user@$remote_host" "docker logs poker-vm 2>&1 | tail -30" 2>/dev/null || echo "No container logs available"
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "To troubleshoot manually:"
+        echo "  ssh $remote_user@$remote_host"
+        echo "  journalctl -u poker-vm -f              # Watch service logs"
+        echo "  docker logs poker-vm -f                # Watch container logs"
+        echo "  docker ps -a                           # Check container status"
+        echo "  docker run -it poker-vm:latest /bin/sh # Test container interactively"
+    fi
+}
+
 # Print success summary
 print_success() {
     echo ""
@@ -300,6 +394,7 @@ main() {
     clone_repository
     build_docker_image
     setup_systemd_service
+    check_pvm_health
     print_success
 }
 
