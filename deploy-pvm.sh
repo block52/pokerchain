@@ -15,7 +15,7 @@ NC='\033[0m'
 
 # Default values
 DEFAULT_USER="root"
-DEFAULT_PORT="3000"
+DEFAULT_PORT="8545"
 
 # Print header
 print_header() {
