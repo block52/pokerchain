@@ -825,7 +825,7 @@ parse_args() {
                 ;;
             --sync-node)
                 SYNC_NODE="$2"
-                SYNC_NODE_RPC="https://$2/rpc"
+                SYNC_NODE_RPC="http://$2:26657"
                 shift 2
                 ;;
             --home)
