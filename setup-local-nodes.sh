@@ -8,11 +8,11 @@ set -e
 # Configuration
 NUM_NODES=${1:-4}
 CHAIN_BINARY=${2:-"pokerchaind"}
-CHAIN_ID=${3:-"pokerchain-testnet-1"}
+CHAIN_ID=${3:-"pokerchain"}
 OUTPUT_DIR="./test"
 KEYRING_BACKEND="test"
-STAKE_AMOUNT="1000000stake"
-INITIAL_BALANCE="100000000000stake"
+STAKE_AMOUNT="1000000b52usdc"
+INITIAL_BALANCE="100000000000b52usdc"
 AUTO_BUILD=false
 
 # Check for --build flag
@@ -216,10 +216,14 @@ echo -e "  ${GREEN}✓${NC} Collected all genesis transactions"
 
 echo ""
 echo -e "${GREEN}Step 5: Distributing final genesis to all nodes...${NC}"
-for i in $(seq 1 $((NUM_NODES - 1))); do
-    cp $OUTPUT_DIR/node0/config/genesis.json $OUTPUT_DIR/node$i/config/genesis.json
-    echo -e "  ${GREEN}✓${NC} Copied genesis to node$i"
-done
+if [ $NUM_NODES -gt 1 ]; then
+    for i in $(seq 1 $((NUM_NODES - 1))); do
+        cp $OUTPUT_DIR/node0/config/genesis.json $OUTPUT_DIR/node$i/config/genesis.json
+        echo -e "  ${GREEN}✓${NC} Copied genesis to node$i"
+    done
+else
+    echo -e "  ${YELLOW}ℹ${NC}  Single node setup - no distribution needed"
+fi
 
 echo ""
 echo -e "${GREEN}Step 6: Configuring persistent peers...${NC}"

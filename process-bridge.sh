@@ -21,7 +21,7 @@ VALIDATOR_HOST="${VALIDATOR_HOST:-node1.block52.xyz}"
 VALIDATOR_USER="${VALIDATOR_USER:-root}"
 CHAIN_ID="pokerchain"
 GAS="300000"
-GAS_PRICES="0.001stake"
+GAS_PRICES="0.001b52usdc"
 
 # Event signature for Deposited(string indexed account, uint256 amount, uint256 index)
 # keccak256("Deposited(string,uint256,uint256)") = 0x46008385c8bcecb546cb0a96e5b409f34ac1a8ece8f3ea98488282519372bdf2
@@ -459,10 +459,10 @@ submit_mint_tx() {
     echo ""
     
     # Build the pokerchaind command
-    local cmd="pokerchaind tx poker mint \
-  --recipient='$recipient' \
-  --amount=$amount \
-  --nonce=$nonce \
+    # Syntax: pokerchaind tx poker process-deposit [index] [flags]
+    # The keeper will query the contract using the index to get recipient and amount
+    local cmd="pokerchaind tx poker process-deposit \
+  $nonce \
   --from='$from_address' \
   --chain-id='$CHAIN_ID' \
   --gas='$GAS' \
@@ -470,7 +470,7 @@ submit_mint_tx() {
   --yes"
     
     if [ "$local_mode" = "true" ] && [ -n "$home_dir" ]; then
-        cmd="$cmd --home='$home_dir'"
+        cmd="$cmd --home='$home_dir' --keyring-backend=test"
     fi
     
     if [ "$dry_run" = "true" ]; then
