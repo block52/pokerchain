@@ -70,13 +70,13 @@ cors_allowed_origins = ["*"]
 
 ### Network Endpoints
 
-| Service | URL                                     | Purpose                       |
-| ------- | --------------------------------------- | ----------------------------- |
-| P2P     | node1.block52.xyz:26656                 | Peer-to-peer consensus        |
-| RPC     | https://node1.block52.xyz/rpc           | RPC queries and transactions  |
-| API     | https://node1.block52.xyz               | REST API for queries          |
-| Swagger | https://node1.block52.xyz/swagger/      | API documentation             |
-| gRPC    | node1.block52.xyz:9090                  | gRPC queries (localhost only) |
+| Service | URL                                | Purpose                       |
+| ------- | ---------------------------------- | ----------------------------- |
+| P2P     | node1.block52.xyz:26656            | Peer-to-peer consensus        |
+| RPC     | https://node1.block52.xyz/rpc      | RPC queries and transactions  |
+| API     | https://node1.block52.xyz          | REST API for queries          |
+| Swagger | https://node1.block52.xyz/swagger/ | API documentation             |
+| gRPC    | node1.block52.xyz:9090             | gRPC queries (localhost only) |
 
 ### Monitoring
 
