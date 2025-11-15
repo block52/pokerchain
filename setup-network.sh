@@ -38,7 +38,7 @@ show_menu() {
     echo "   - Does NOT participate in consensus"
     echo "   - Perfect for development and testing"
     echo ""
-    echo -e "${GREEN}2)${NC} Remote Sync Node (deploy to remote server)"
+    echo -e "${GREEN}2)${NC} Remote Sync Node (deploy light client to remote server)"
     echo "   Deploy a read-only sync node to a remote Linux server"
     echo "   - Builds and uploads binary"
     echo "   - Configures systemd service"
@@ -88,19 +88,19 @@ show_menu() {
     echo "   - Safely replace binary on remote server"
     echo "   - Option to restart service if needed"
     echo ""
-    echo -e "${GREEN}10)${NC} Reset Chain (DANGER!)"
-    echo "   Reset blockchain to genesis state"
-    echo "   - Preserves validator keys and genesis.json (or optionally replace genesis)"
-    echo "   - Deletes all blocks and application state"
-    echo "   - Restarts chain from block 0"
-    echo "   - ⚠️  Use when bug requires full chain restart"
-    echo ""
-    echo -e "${GREEN}11)${NC} Deploy Remote PVM"
+    echo -e "${GREEN}10)${NC} Deploy Remote PVM (Execution Layer)"
     echo "   Deploy Poker VM to a remote Linux server"
     echo "   - Checks and installs Docker if needed"
     echo "   - Clones poker-vm repository"
     echo "   - Builds Docker image from pvm/ts"
     echo "   - Sets up systemd service"
+    echo ""
+    echo -e "${GREEN}11)${NC} Reset Chain (DANGER!)"
+    echo "   Reset blockchain to genesis state"
+    echo "   - Preserves validator keys and genesis.json (or optionally replace genesis)"
+    echo "   - Deletes all blocks and application state"
+    echo "   - Restarts chain from block 0"
+    echo "   - ⚠️  Use when bug requires full chain restart"
     echo ""
     echo -e "${GREEN}12)${NC} Exit"
     echo ""
@@ -1185,10 +1185,10 @@ main() {
                 push_new_binary_version
                 ;;
             10)
-                reset_chain
+                deploy_remote_pvm
                 ;;
             11)
-                deploy_remote_pvm
+                reset_chain
                 ;;
             12)
                 print_header

@@ -28,12 +28,13 @@ This will:
 Use the dedicated block production checker:
 
 ```bash
-./check-block-production.sh [node] [port] [wait_time]
+./check-block-production.sh [node] [rpc_url] [wait_time]
 
 # Examples:
-./check-block-production.sh                           # Default: node1.block52.xyz:26657, 10 seconds
-./check-block-production.sh node1.block52.xyz         # Custom node
-./check-block-production.sh node1.block52.xyz 26657 20  # Wait 20 seconds
+./check-block-production.sh                                      # Default: HTTPS RPC, 10 seconds
+./check-block-production.sh node2.block52.xyz                     # Custom node (uses HTTPS)
+./check-block-production.sh node1.block52.xyz 26657 20            # Legacy: direct port (backward compatible)
+./check-block-production.sh node1.block52.xyz https://node1.block52.xyz/rpc 15  # Custom RPC URL
 ```
 
 ### Method 3: Manual Testing
@@ -42,14 +43,14 @@ Quick manual check with curl:
 
 ```bash
 # Get current block height
-BLOCK1=$(curl -s http://node1.block52.xyz:26657/status | jq -r '.result.sync_info.latest_block_height')
+BLOCK1=$(curl -s https://node1.block52.xyz/rpc/status | jq -r '.result.sync_info.latest_block_height')
 echo "Block 1: $BLOCK1"
 
 # Wait 10 seconds
 sleep 10
 
 # Get new block height
-BLOCK2=$(curl -s http://node1.block52.xyz:26657/status | jq -r '.result.sync_info.latest_block_height')
+BLOCK2=$(curl -s https://node1.block52.xyz/rpc/status | jq -r '.result.sync_info.latest_block_height')
 echo "Block 2: $BLOCK2"
 
 # Calculate difference
@@ -95,7 +96,7 @@ Possible causes:
 3. **No Voting Power**
 
     ```bash
-    curl http://node1.block52.xyz:26657/validators | jq '.result.validators[]'
+    curl https://node1.block52.xyz/rpc/validators | jq '.result.validators[]'
     ```
 
     - Ensure your validator has voting_power > 0
@@ -150,10 +151,10 @@ ssh node1.block52.xyz 'sudo journalctl -u pokerchaind -f'
 
 ```bash
 # Check consensus state
-curl http://node1.block52.xyz:26657/dump_consensus_state | jq '.result.round_state.height_vote_set[].prevotes_bit_array'
+curl https://node1.block52.xyz/rpc/dump_consensus_state | jq '.result.round_state.height_vote_set[].prevotes_bit_array'
 
 # Check if validator is in active set
-curl http://node1.block52.xyz:26657/validators | jq '.result.validators[] | select(.voting_power != "0")'
+curl https://node1.block52.xyz/rpc/validators | jq '.result.validators[] | select(.voting_power != "0")'
 
 # Verify validator key matches
 ssh node1.block52.xyz 'pokerchaind tendermint show-validator'
@@ -180,7 +181,7 @@ Export block height as a metric:
 ```bash
 #!/bin/bash
 # prometheus-export.sh
-BLOCK_HEIGHT=$(curl -s http://node1.block52.xyz:26657/status | jq -r '.result.sync_info.latest_block_height')
+BLOCK_HEIGHT=$(curl -s https://node1.block52.xyz/rpc/status | jq -r '.result.sync_info.latest_block_height')
 echo "pokerchain_block_height{chain=\"pokerchain\"} $BLOCK_HEIGHT"
 ```
 
@@ -202,25 +203,25 @@ ssh node1.block52.xyz "cat ~/.pokerchain/config/config.toml | grep -A 5 'timeout
 
 ```bash
 # Node Status
-curl http://node1.block52.xyz:26657/status | jq
+curl https://node1.block52.xyz/rpc/status | jq
 
 # Validator Set
-curl http://node1.block52.xyz:26657/validators | jq
+curl https://node1.block52.xyz/rpc/validators | jq
 
 # Network Info (peers)
-curl http://node1.block52.xyz:26657/net_info | jq
+curl https://node1.block52.xyz/rpc/net_info | jq
 
 # Consensus State
-curl http://node1.block52.xyz:26657/dump_consensus_state | jq
+curl https://node1.block52.xyz/rpc/dump_consensus_state | jq
 
 # Genesis Info
-curl http://node1.block52.xyz:26657/genesis | jq '.result.genesis'
+curl https://node1.block52.xyz/rpc/genesis | jq '.result.genesis'
 
 # Node Info
-curl http://node1.block52.xyz:26657/status | jq '.result.node_info'
+curl https://node1.block52.xyz/rpc/status | jq '.result.node_info'
 
 # Sync Info
-curl http://node1.block52.xyz:26657/status | jq '.result.sync_info'
+curl https://node1.block52.xyz/rpc/status | jq '.result.sync_info'
 
 # Service Status (on node)
 ssh node1.block52.xyz 'sudo systemctl status pokerchaind'

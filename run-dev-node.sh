@@ -14,6 +14,8 @@ MONIKER="dev-node-$(hostname)"
 SYNC_NODE="node1.block52.xyz"
 SYNC_NODE_RPC="http://node1.block52.xyz:26657"
 REBUILD=false
+RUN_PVM=false
+PVM_TEMP_DIR="/tmp/poker-vm-dev"
 
 # Colors
 RED='\033[0;31m'
@@ -531,6 +533,14 @@ show_pre_start_info() {
     echo "  RPC:  http://127.0.0.1:26657"
     echo "  API:  http://127.0.0.1:1317"
     echo "  gRPC: 127.0.0.1:9090"
+    
+    if [ "$RUN_PVM" = true ]; then
+        echo ""
+        echo "PVM Endpoints:"
+        echo "  RPC:  http://localhost:8545"
+        echo "  Health: http://localhost:8545/health"
+    fi
+    
     echo ""
     echo "Useful Commands (in another terminal):"
     echo "  # Check status"
@@ -544,6 +554,13 @@ show_pre_start_info() {
     echo ""
     echo "  # View logs"
     echo "  tail -f $NODE_HOME/pokerchaind.log"
+    
+    if [ "$RUN_PVM" = true ]; then
+        echo ""
+        echo "  # View PVM logs"
+        echo "  docker compose -f $PVM_TEMP_DIR/docker-compose.yaml logs -f pvm"
+    fi
+    
     echo ""
     echo -e "${YELLOW}Note: Initial sync may take some time. Watch for 'catching_up: false'${NC}"
     echo ""
@@ -565,6 +582,181 @@ start_node() {
     $CHAIN_BINARY start --home "$NODE_HOME" --minimum-gas-prices="0.001stake"
 }
 
+# Check if user wants to run PVM
+prompt_pvm() {
+    echo ""
+    echo -e "${YELLOW}Execution Layer (PVM) Setup${NC}"
+    echo ""
+    echo "Do you want to run the PVM (Poker Virtual Machine) execution layer?"
+    echo ""
+    echo "  1) Chain only (default)"
+    echo "  2) Chain + PVM Execution Layer (requires Docker)"
+    echo "  3) Cancel and exit"
+    echo ""
+    read -p "Choose option [1-3, default: 1]: " PVM_CHOICE
+    PVM_CHOICE=${PVM_CHOICE:-1}
+    
+    if [ "$PVM_CHOICE" = "2" ]; then
+        RUN_PVM=true
+        echo ""
+        echo -e "${GREEN}✓${NC} Will run chain + PVM"
+    elif [ "$PVM_CHOICE" = "3" ]; then
+        echo ""
+        echo "Setup cancelled."
+        exit 0
+    else
+        echo ""
+        echo -e "${GREEN}✓${NC} Will run chain only"
+    fi
+}
+
+# Setup PVM Docker files
+setup_pvm() {
+    if [ "$RUN_PVM" != true ]; then
+        return 0
+    fi
+    
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}Setting up PVM${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    # Check if Docker is installed
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}❌ Docker not found${NC}"
+        echo "Please install Docker first: https://docs.docker.com/get-docker/"
+        exit 1
+    fi
+    
+    # Check if Docker Compose is available
+    if ! docker compose version &> /dev/null; then
+        echo -e "${RED}❌ Docker Compose not found${NC}"
+        echo "Please install Docker Compose: https://docs.docker.com/compose/install/"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✓${NC} Docker and Docker Compose are available"
+    echo ""
+    
+    # Create temporary directory
+    echo "Creating temporary directory: $PVM_TEMP_DIR"
+    mkdir -p "$PVM_TEMP_DIR"
+    
+    # Download docker-compose.yaml
+    echo "Downloading docker-compose.yaml..."
+    if curl -fsSL https://raw.githubusercontent.com/block52/poker-vm/main/docker-compose.yaml \
+        -o "$PVM_TEMP_DIR/docker-compose.yaml"; then
+        echo -e "${GREEN}✓${NC} Downloaded docker-compose.yaml"
+    else
+        echo -e "${RED}❌ Failed to download docker-compose.yaml${NC}"
+        exit 1
+    fi
+    
+    # Create pvm/ts directory structure
+    mkdir -p "$PVM_TEMP_DIR/pvm/ts"
+    
+    # Download Dockerfile
+    echo "Downloading Dockerfile..."
+    if curl -fsSL https://raw.githubusercontent.com/block52/poker-vm/main/pvm/ts/Dockerfile \
+        -o "$PVM_TEMP_DIR/pvm/ts/Dockerfile"; then
+        echo -e "${GREEN}✓${NC} Downloaded Dockerfile"
+    else
+        echo -e "${RED}❌ Failed to download Dockerfile${NC}"
+        exit 1
+    fi
+    
+    echo ""
+    echo -e "${YELLOW}Note: To build the PVM images, you'll need the full poker-vm repository.${NC}"
+    echo -e "${YELLOW}The Docker files have been downloaded to: $PVM_TEMP_DIR${NC}"
+    echo ""
+    echo "Do you want to clone the full poker-vm repository now?"
+    echo "  1) Yes, clone the repository (recommended for building)"
+    echo "  2) No, I'll handle it manually"
+    echo ""
+    read -p "Choose option [1-2]: " CLONE_CHOICE
+    
+    if [ "$CLONE_CHOICE" = "1" ]; then
+        echo ""
+        echo "Cloning poker-vm repository..."
+        if git clone https://github.com/block52/poker-vm.git "$PVM_TEMP_DIR/poker-vm" 2>/dev/null; then
+            echo -e "${GREEN}✓${NC} Repository cloned successfully"
+            PVM_TEMP_DIR="$PVM_TEMP_DIR/poker-vm"
+        else
+            echo -e "${RED}❌ Failed to clone repository${NC}"
+            echo "You can manually clone it later with:"
+            echo "  git clone https://github.com/block52/poker-vm.git"
+            return 1
+        fi
+    fi
+}
+
+# Start PVM services
+start_pvm() {
+    if [ "$RUN_PVM" != true ]; then
+        return 0
+    fi
+    
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}Starting PVM${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    if [ ! -f "$PVM_TEMP_DIR/docker-compose.yaml" ]; then
+        echo -e "${RED}❌ docker-compose.yaml not found in $PVM_TEMP_DIR${NC}"
+        return 1
+    fi
+    
+    echo "Starting PVM services with Docker Compose..."
+    echo "Working directory: $PVM_TEMP_DIR"
+    echo ""
+    
+    cd "$PVM_TEMP_DIR"
+    
+    # Start only the PVM service (not the frontend)
+    echo -e "${YELLOW}Note: Starting PVM backend only (not frontend UI)${NC}"
+    echo "If you want the frontend, run: docker compose up -d"
+    echo ""
+    
+    if docker compose up -d pvm; then
+        echo ""
+        echo -e "${GREEN}✓${NC} PVM service started"
+        echo ""
+        echo "PVM Information:"
+        echo "  RPC Endpoint: http://localhost:8545"
+        echo "  Health Check: http://localhost:8545/health"
+        echo ""
+        echo "To view logs:"
+        echo "  docker compose logs -f pvm"
+        echo ""
+        echo "To stop PVM:"
+        echo "  cd $PVM_TEMP_DIR && docker compose down"
+        echo ""
+    else
+        echo -e "${RED}❌ Failed to start PVM${NC}"
+        return 1
+    fi
+    
+    cd - > /dev/null
+}
+
+# Stop PVM services
+stop_pvm() {
+    if [ "$RUN_PVM" != true ]; then
+        return 0
+    fi
+    
+    if [ -f "$PVM_TEMP_DIR/docker-compose.yaml" ]; then
+        echo ""
+        echo "Stopping PVM services..."
+        cd "$PVM_TEMP_DIR"
+        docker compose down 2>/dev/null || true
+        cd - > /dev/null
+        echo -e "${GREEN}✓${NC} PVM services stopped"
+    fi
+}
+
 # Cleanup on exit
 cleanup() {
     echo ""
@@ -573,6 +765,10 @@ cleanup() {
     echo -e "${YELLOW}Node Stopped${NC}"
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
+    
+    # Stop PVM if it was running
+    stop_pvm
+    
     echo "Developer node has been stopped."
     echo ""
     echo "To start again, run:"
@@ -588,6 +784,7 @@ show_help() {
     echo "  --help, -h          Show this help message"
     echo "  --reset             Reset node data and start fresh"
     echo "  --rebuild           Rebuild binary before starting"
+    echo "  --pvm               Also run PVM (Poker Virtual Machine) execution layer"
     echo "  --sync-node <url>   Specify sync node (default: node1.block52.xyz)"
     echo "  --home <path>       Specify custom home directory"
     echo "  --moniker <name>    Specify custom moniker"
@@ -596,6 +793,7 @@ show_help() {
     echo "  $0                                    # Start with defaults"
     echo "  $0 --reset                            # Reset and start fresh"
     echo "  $0 --rebuild                          # Rebuild binary then start"
+    echo "  $0 --pvm                              # Start chain + PVM"
     echo "  $0 --rebuild --reset                  # Rebuild and reset"
     echo "  $0 --sync-node node2.example.com      # Use different sync node"
     echo "  $0 --home ~/.my-dev-node              # Use custom home directory"
@@ -619,6 +817,10 @@ parse_args() {
                 ;;
             --rebuild)
                 REBUILD=true
+                shift
+                ;;
+            --pvm)
+                RUN_PVM=true
                 shift
                 ;;
             --sync-node)
@@ -654,6 +856,16 @@ main() {
     # Print header
     print_header
     
+    # Prompt for PVM if not specified via flag
+    if [ "$RUN_PVM" != true ]; then
+        prompt_pvm
+    fi
+    
+    # Setup PVM if requested
+    if [ "$RUN_PVM" = true ]; then
+        setup_pvm
+    fi
+    
     # Check/build binary
     check_binary
     
@@ -665,6 +877,11 @@ main() {
     
     # Configure node
     configure_node
+    
+    # Start PVM if requested
+    if [ "$RUN_PVM" = true ]; then
+        start_pvm
+    fi
     
     # Show info
     show_pre_start_info

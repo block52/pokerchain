@@ -4,10 +4,10 @@
 
 The `run-dev-node.sh` script sets up and runs a **local read-only node** for development purposes. This node syncs with the production network and allows you to:
 
-- Query blockchain data locally
-- Test queries and transactions
-- Develop applications against a live network
-- Debug without affecting production
+-   Query blockchain data locally
+-   Test queries and transactions
+-   Develop applications against a live network
+-   Debug without affecting production
 
 ## Quick Start
 
@@ -18,6 +18,7 @@ The `run-dev-node.sh` script sets up and runs a **local read-only node** for dev
 ```
 
 That's it! The script will:
+
 1. ✅ Check/build the binary
 2. ✅ Initialize the node (if needed)
 3. ✅ Download genesis from node1.block52.xyz
@@ -35,6 +36,7 @@ cd your-project
 ```
 
 **Output:**
+
 ```
 ╔════════════════════════════════════════════════════════════════════╗
 ║                                                                    ║
@@ -87,36 +89,92 @@ Press Ctrl+C to stop
 ## Command-Line Options
 
 ### Show Help
+
 ```bash
 ./run-dev-node.sh --help
 ```
 
 ### Reset Node Data
+
 ```bash
 ./run-dev-node.sh --reset
 ```
 
 Removes all existing data and starts fresh. Useful when:
-- Genesis has been updated
-- Node state is corrupted
-- You want a clean sync
+
+-   Genesis has been updated
+-   Node state is corrupted
+-   You want a clean sync
+
+### Run with PVM (Execution Layer)
+
+```bash
+./run-dev-node.sh --pvm
+```
+
+Runs both the chain and the PVM (Poker Virtual Machine) execution layer using Docker. This option:
+
+-   ✅ Downloads the required Docker configuration files from the poker-vm repository
+-   ✅ Optionally clones the full poker-vm repository for building
+-   ✅ Starts the PVM backend service on port 8545
+-   ✅ Provides a complete development environment with both layers
+
+**Requirements:**
+
+-   Docker must be installed and running
+-   Docker Compose must be available
+
+**Interactive Prompt:**
+If you don't use the `--pvm` flag, the script will ask:
+
+```
+Do you want to run the PVM (Poker Virtual Machine) execution layer?
+
+  1) Chain only (default)
+  2) Chain + PVM (requires Docker)
+
+Choose option [1-2, default: 1]:
+```
+
+**PVM Endpoints:**
+When running with PVM, you'll have access to:
+
+-   **RPC:** http://localhost:8545
+-   **Health Check:** http://localhost:8545/health
+
+**Managing PVM:**
+
+```bash
+# View PVM logs
+docker compose -f /tmp/poker-vm-dev/docker-compose.yaml logs -f pvm
+
+# Stop PVM (will auto-stop when you stop the node)
+cd /tmp/poker-vm-dev && docker compose down
+```
+
+-   Node state is corrupted
+-   You want a clean sync
 
 ### Use Different Sync Node
+
 ```bash
 ./run-dev-node.sh --sync-node node2.example.com
 ```
 
 ### Custom Home Directory
+
 ```bash
 ./run-dev-node.sh --home ~/.my-custom-dev-node
 ```
 
 ### Custom Moniker
+
 ```bash
 ./run-dev-node.sh --moniker "alice-dev-machine"
 ```
 
 ### Combined Options
+
 ```bash
 ./run-dev-node.sh --reset --sync-node node2.example.com --moniker "dev-v2"
 ```
@@ -125,27 +183,29 @@ Removes all existing data and starts fresh. Useful when:
 
 ### Default Settings
 
-- **Home Directory:** `~/.pokerchain-dev`
-- **Moniker:** `dev-node-<hostname>`
-- **Chain ID:** `pokerchain`
-- **Sync Node:** `node1.block52.xyz`
-- **Type:** Read-only (non-validator)
+-   **Home Directory:** `~/.pokerchain-dev`
+-   **Moniker:** `dev-node-<hostname>`
+-   **Chain ID:** `pokerchain`
+-   **Sync Node:** `node1.block52.xyz`
+-   **Type:** Read-only (non-validator)
 
 ### Endpoints
 
-| Service | URL | Purpose |
-|---------|-----|---------|
-| RPC | http://127.0.0.1:26657 | Tendermint RPC |
-| API | http://127.0.0.1:1317 | REST API |
-| gRPC | 127.0.0.1:9090 | gRPC endpoint |
+| Service | URL                    | Purpose              |
+| ------- | ---------------------- | -------------------- |
+| RPC     | http://127.0.0.1:26657 | Tendermint RPC       |
+| API     | http://127.0.0.1:1317  | REST API             |
+| gRPC    | 127.0.0.1:9090         | gRPC endpoint        |
+| PVM RPC | http://localhost:8545  | PVM RPC (with --pvm) |
 
 ### Developer-Friendly Features
 
 The script automatically enables:
-- ✅ REST API with Swagger docs
-- ✅ Relaxed address book strictness
-- ✅ Proper persistent peer configuration
-- ✅ Minimum gas prices configured
+
+-   ✅ REST API with Swagger docs
+-   ✅ Relaxed address book strictness
+-   ✅ Proper persistent peer configuration
+-   ✅ Minimum gas prices configured
 
 ## Using Your Dev Node
 
@@ -162,11 +222,12 @@ curl http://127.0.0.1:26657/status | jq .result.sync_info
 ```
 
 **Output:**
+
 ```json
 {
-  "latest_block_height": "12345",
-  "latest_block_time": "2025-01-02T14:30:00Z",
-  "catching_up": false
+	"latest_block_height": "12345",
+	"latest_block_time": "2025-01-02T14:30:00Z",
+	"catching_up": false
 }
 ```
 
@@ -249,6 +310,7 @@ watch -n 5 'curl -s http://127.0.0.1:26657/status | jq .result.sync_info'
 Press `Ctrl+C` in the terminal running the node.
 
 **Output:**
+
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Node Stopped
@@ -269,6 +331,7 @@ Your data is preserved in `~/.pokerchain-dev`. Just run the script again:
 ```
 
 It will detect existing data and ask:
+
 ```
 ⚠ Node directory already exists: /home/user/.pokerchain-dev
 
@@ -285,11 +348,13 @@ Choose option [1-3]:
 ### Binary Not Building
 
 **Issue:** Make fails to build
+
 ```bash
 ❌ Build failed
 ```
 
 **Solution:**
+
 ```bash
 # Check Go installation
 go version
@@ -305,14 +370,16 @@ make build
 ### Cannot Connect to Sync Node
 
 **Issue:**
+
 ```
 ❌ Failed to download genesis
 ```
 
 **Solution:**
+
 ```bash
 # Check if sync node is accessible
-curl http://node1.block52.xyz:26657/status
+curl https://node1.block52.xyz/rpc/status
 
 # Try different sync node
 ./run-dev-node.sh --sync-node node2.example.com
@@ -326,6 +393,7 @@ ping node1.block52.xyz
 **Issue:** Node stays at block 0 or "catching_up: true" for too long
 
 **Check:**
+
 ```bash
 # In another terminal, check logs
 tail -f ~/.pokerchain-dev/pokerchaind.log
@@ -335,6 +403,7 @@ curl http://127.0.0.1:26657/net_info | jq .result.n_peers
 ```
 
 **Solutions:**
+
 ```bash
 # If no peers, check persistent_peers config
 cat ~/.pokerchain-dev/config/config.toml | grep persistent_peers
@@ -349,11 +418,13 @@ cat ~/.pokerchain-dev/config/config.toml | grep persistent_peers
 ### Port Already in Use
 
 **Issue:**
+
 ```
 Error: Failed to listen on 0.0.0.0:26657
 ```
 
 **Solution:**
+
 ```bash
 # Check what's using the port
 lsof -i :26657
@@ -371,6 +442,7 @@ kill <PID>
 **Issue:** Node crashes or behaves strangely
 
 **Solution:**
+
 ```bash
 # Reset everything
 ./run-dev-node.sh --reset
@@ -447,34 +519,34 @@ tmux attach -t dev-node
 
 ## Comparison: Dev Node vs Production Node
 
-| Feature | Dev Node | Production Node |
-|---------|----------|-----------------|
-| **Purpose** | Development/testing | Production validator |
-| **Type** | Read-only | Validator |
-| **Run Mode** | Terminal (foreground) | systemd service |
-| **Home Dir** | `~/.pokerchain-dev` | `~/.pokerchain` |
-| **Signing** | No | Yes (validator key) |
-| **Endpoints** | localhost only | Public (0.0.0.0) |
-| **Setup** | One script | Multi-step deployment |
-| **Data Reset** | Easy (`--reset`) | Requires backup |
+| Feature        | Dev Node              | Production Node       |
+| -------------- | --------------------- | --------------------- |
+| **Purpose**    | Development/testing   | Production validator  |
+| **Type**       | Read-only             | Validator             |
+| **Run Mode**   | Terminal (foreground) | systemd service       |
+| **Home Dir**   | `~/.pokerchain-dev`   | `~/.pokerchain`       |
+| **Signing**    | No                    | Yes (validator key)   |
+| **Endpoints**  | localhost only        | Public (0.0.0.0)      |
+| **Setup**      | One script            | Multi-step deployment |
+| **Data Reset** | Easy (`--reset`)      | Requires backup       |
 
 ## Best Practices
 
 ### ✅ Do's
 
-- ✅ Use dev node for local development
-- ✅ Keep dev node data separate from production
-- ✅ Reset when genesis updates
-- ✅ Use for query testing
-- ✅ Monitor sync status regularly
+-   ✅ Use dev node for local development
+-   ✅ Keep dev node data separate from production
+-   ✅ Reset when genesis updates
+-   ✅ Use for query testing
+-   ✅ Monitor sync status regularly
 
 ### ❌ Don'ts
 
-- ❌ Don't use for production
-- ❌ Don't expect to submit transactions
-- ❌ Don't share validator keys (none exist)
-- ❌ Don't expose to internet
-- ❌ Don't run multiple instances on same ports
+-   ❌ Don't use for production
+-   ❌ Don't expect to submit transactions
+-   ❌ Don't share validator keys (none exist)
+-   ❌ Don't expose to internet
+-   ❌ Don't run multiple instances on same ports
 
 ## Quick Reference
 
@@ -504,7 +576,7 @@ If you encounter issues:
 
 1. Check this guide's troubleshooting section
 2. Reset and try again: `./run-dev-node.sh --reset`
-3. Check sync node is accessible: `curl http://node1.block52.xyz:26657/status`
+3. Check sync node is accessible: `curl https://node1.block52.xyz/rpc/status`
 4. Verify binary builds: `make build`
 
 Happy developing! 🚀

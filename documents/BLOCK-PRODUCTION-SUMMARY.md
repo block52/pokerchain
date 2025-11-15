@@ -9,13 +9,15 @@ Date: October 30, 2025
 **Location**: `./setup-network.sh` (Option 5: Verify Network Connectivity)
 
 **New Features**:
-- ✅ Automated block production testing
-- ✅ Measures blocks produced over 10 seconds
-- ✅ Calculates production rate (blocks/minute)
-- ✅ Provides visual feedback with color-coded results
-- ✅ Includes troubleshooting guidance for issues
+
+-   ✅ Automated block production testing
+-   ✅ Measures blocks produced over 10 seconds
+-   ✅ Calculates production rate (blocks/minute)
+-   ✅ Provides visual feedback with color-coded results
+-   ✅ Includes troubleshooting guidance for issues
 
 **How It Works**:
+
 1. Fetches initial block height from node1.block52.xyz
 2. Waits 10 seconds with countdown timer
 3. Fetches new block height
@@ -27,14 +29,16 @@ Date: October 30, 2025
 **Location**: `./check-block-production.sh`
 
 **Features**:
-- ✅ Quick command-line block production test
-- ✅ Customizable node, port, and wait time
-- ✅ Works with or without jq installed
-- ✅ Shows validator count and peer connections
-- ✅ Provides detailed troubleshooting commands
-- ✅ Color-coded output for easy reading
+
+-   ✅ Quick command-line block production test
+-   ✅ Customizable node, port, and wait time
+-   ✅ Works with or without jq installed
+-   ✅ Shows validator count and peer connections
+-   ✅ Provides detailed troubleshooting commands
+-   ✅ Color-coded output for easy reading
 
 **Usage**:
+
 ```bash
 # Basic test (10 seconds)
 ./check-block-production.sh
@@ -42,8 +46,11 @@ Date: October 30, 2025
 # Custom node
 ./check-block-production.sh node2.example.com
 
-# Custom wait time (20 seconds)
+# Custom wait time (20 seconds) - backward compatible with port
 ./check-block-production.sh node1.block52.xyz 26657 20
+
+# Or use HTTPS endpoint directly
+./check-block-production.sh node1.block52.xyz https://node1.block52.xyz/rpc 20
 ```
 
 ### 3. Comprehensive Documentation
@@ -51,19 +58,21 @@ Date: October 30, 2025
 **New File**: `BLOCK-PRODUCTION-TESTING.md`
 
 **Contents**:
-- Three testing methods (interactive, standalone, manual)
-- Result interpretation guide
-- Common troubleshooting scenarios
-- Expected block production rates
-- Automated monitoring examples
-- Complete command reference
+
+-   Three testing methods (interactive, standalone, manual)
+-   Result interpretation guide
+-   Common troubleshooting scenarios
+-   Expected block production rates
+-   Automated monitoring examples
+-   Complete command reference
 
 ### 4. Updated README
 
 **Changes**:
-- Added "Verification & Testing" section
-- Included reference to block production scripts
-- Added BLOCK-PRODUCTION-TESTING.md to documentation list
+
+-   Added "Verification & Testing" section
+-   Included reference to block production scripts
+-   Added BLOCK-PRODUCTION-TESTING.md to documentation list
 
 ## Usage Examples
 
@@ -75,6 +84,7 @@ Date: October 30, 2025
 ```
 
 **Output Example** (Healthy):
+
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Testing Block Production...
@@ -94,6 +104,7 @@ Block time: 2025-10-30T12:35:06.789Z
 ```
 
 **Output Example** (Issue Detected):
+
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Testing Block Production...
@@ -112,7 +123,7 @@ Block time: 1970-01-01T00:00:00Z
    Troubleshooting steps:
    1. Check if node is running: ssh node1.block52.xyz 'systemctl status pokerchaind'
    2. Check for errors: ssh node1.block52.xyz 'journalctl -u pokerchaind -n 50'
-   3. Verify validators: curl http://node1.block52.xyz:26657/validators
+   3. Verify validators: curl https://node1.block52.xyz/rpc/validators
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -130,11 +141,11 @@ Block time: 1970-01-01T00:00:00Z
 
 ```bash
 # Get current block
-curl http://node1.block52.xyz:26657/status | jq '.result.sync_info.latest_block_height'
+curl https://node1.block52.xyz/rpc/status | jq '.result.sync_info.latest_block_height'
 
 # Wait and check again
 sleep 10
-curl http://node1.block52.xyz:26657/status | jq '.result.sync_info.latest_block_height'
+curl https://node1.block52.xyz/rpc/status | jq '.result.sync_info.latest_block_height'
 ```
 
 ## Current Status: Node1.block52.xyz
@@ -159,18 +170,21 @@ Results:
 **Issue Identified**: Node is at block 0 (genesis not started)
 
 **Possible Causes**:
+
 1. Genesis time set in the future
 2. Node hasn't been started properly
 3. Validator not initialized correctly
 4. Service not running
 
 **Next Steps**:
+
 1. Check if pokerchaind service is running
 2. Verify genesis time is in the past
 3. Check node logs for errors
 4. Ensure validator keys are properly configured
 
 **Verification Commands**:
+
 ```bash
 # Check service status
 ssh node1.block52.xyz 'sudo systemctl status pokerchaind'
@@ -196,25 +210,26 @@ ssh node1.block52.xyz "cat ~/.pokerchain/config/genesis.json | jq '.app_state.ge
 
 ## Integration Points
 
-- **setup-network.sh**: Option 5 now includes block production test
-- **check-block-production.sh**: Standalone script for quick checks
-- **BLOCK-PRODUCTION-TESTING.md**: Complete documentation
-- **README.md**: Quick reference to testing tools
+-   **setup-network.sh**: Option 5 now includes block production test
+-   **check-block-production.sh**: Standalone script for quick checks
+-   **BLOCK-PRODUCTION-TESTING.md**: Complete documentation
+-   **README.md**: Quick reference to testing tools
 
 ## Future Enhancements
 
 Potential additions:
-- [ ] Email/Slack alerts when blocks stop
-- [ ] Prometheus metrics export
-- [ ] Historical block production tracking
-- [ ] Automatic restart on failure detection
-- [ ] Multi-node comparison testing
-- [ ] Block time variance analysis
+
+-   [ ] Email/Slack alerts when blocks stop
+-   [ ] Prometheus metrics export
+-   [ ] Historical block production tracking
+-   [ ] Automatic restart on failure detection
+-   [ ] Multi-node comparison testing
+-   [ ] Block time variance analysis
 
 ## Files Modified/Created
 
-- ✅ `setup-network.sh` - Enhanced verify_network() function
-- ✅ `check-block-production.sh` - New standalone testing script
-- ✅ `BLOCK-PRODUCTION-TESTING.md` - New comprehensive guide
-- ✅ `readme.md` - Updated with testing information
-- ✅ `BLOCK-PRODUCTION-SUMMARY.md` - This file
+-   ✅ `setup-network.sh` - Enhanced verify_network() function
+-   ✅ `check-block-production.sh` - New standalone testing script
+-   ✅ `BLOCK-PRODUCTION-TESTING.md` - New comprehensive guide
+-   ✅ `readme.md` - Updated with testing information
+-   ✅ `BLOCK-PRODUCTION-SUMMARY.md` - This file

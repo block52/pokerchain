@@ -70,13 +70,13 @@ cors_allowed_origins = ["*"]
 
 ### Network Endpoints
 
-| Service | URL                                    | Purpose                       |
-| ------- | -------------------------------------- | ----------------------------- |
-| P2P     | node1.block52.xyz:26656                | Peer-to-peer consensus        |
-| RPC     | http://node1.block52.xyz:26657         | RPC queries and transactions  |
-| API     | http://node1.block52.xyz:1317          | REST API for queries          |
-| Swagger | http://node1.block52.xyz:1317/swagger/ | API documentation             |
-| gRPC    | node1.block52.xyz:9090                 | gRPC queries (localhost only) |
+| Service | URL                                | Purpose                       |
+| ------- | ---------------------------------- | ----------------------------- |
+| P2P     | node1.block52.xyz:26656            | Peer-to-peer consensus        |
+| RPC     | https://node1.block52.xyz/rpc      | RPC queries and transactions  |
+| API     | https://node1.block52.xyz          | REST API for queries          |
+| Swagger | https://node1.block52.xyz/swagger/ | API documentation             |
+| gRPC    | node1.block52.xyz:9090             | gRPC queries (localhost only) |
 
 ### Monitoring
 
@@ -95,13 +95,13 @@ ssh root@node1.block52.xyz 'sudo journalctl -u pokerchaind -f'
 **Query node status**:
 
 ```bash
-curl http://node1.block52.xyz:26657/status
+curl https://node1.block52.xyz/rpc/status
 ```
 
 **Query node info via API**:
 
 ```bash
-curl http://node1.block52.xyz:1317/cosmos/base/tendermint/v1beta1/node_info
+curl https://node1.block52.xyz/cosmos/base/tendermint/v1beta1/node_info
 ```
 
 ### Getting Node ID for Peers
