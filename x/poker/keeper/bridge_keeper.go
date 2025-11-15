@@ -42,6 +42,17 @@ func (k Keeper) ProcessBridgeDeposit(ctx context.Context, ethTxHash string, reci
 	recipientStr, _ := k.addressCodec.BytesToString(recipientAddr)
 	logger.Info("✅ trackMint: Recipient address validated", "recipientAddr", recipientStr)
 
+	// Ensure account exists before sending coins
+	account := k.authKeeper.GetAccount(ctx, recipientAddr)
+	if account == nil {
+		logger.Info("📝 trackMint: Account doesn't exist, creating new account", "recipient", recipient)
+		account = k.authKeeper.NewAccountWithAddress(ctx, recipientAddr)
+		k.authKeeper.SetAccount(ctx, account)
+		logger.Info("✅ trackMint: New account created successfully")
+	} else {
+		logger.Info("✅ trackMint: Account already exists")
+	}
+
 	// Validate amount
 	if amount == 0 {
 		logger.Error("❌ trackMint: Invalid amount (zero)")

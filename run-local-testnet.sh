@@ -12,7 +12,7 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
     echo "✅ Loaded .env configuration"
 else
     echo "⚠️  Warning: .env file not found"
-    echo "   Bridge service may not work. See BRIDGE_CONFIGURATION.md"
+    echo "   Bridge service may not work. See documents/BRIDGE_CONFIGURATION.md"
 fi
 
 # Color codes

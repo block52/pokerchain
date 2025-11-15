@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Testnet Manager Script
-# Usage: ./manage-testnet.sh [start|stop|status|logs] [chain_binary]
+# Local Network Manager Script
+# Usage: ./manage-local-nodes.sh [start|stop|status|logs] [chain_binary]
 
 set -e
 

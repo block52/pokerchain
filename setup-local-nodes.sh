@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# Cosmos SDK Multi-Node Testnet Setup Script
-# Usage: ./setup-testnet.sh [num_nodes] [chain_binary] [chain_id] [--build]
+# Cosmos SDK Multi-Node Local Network Setup Script
+# Usage: ./setup-local-nodes.sh [num_nodes] [chain_binary] [chain_id] [--build]
 
 set -e
 
 # Configuration
 NUM_NODES=${1:-4}
 CHAIN_BINARY=${2:-"pokerchaind"}
-CHAIN_ID=${3:-"pokerchain-testnet-1"}
+CHAIN_ID=${3:-"pokerchain"}
 OUTPUT_DIR="./test"
 KEYRING_BACKEND="test"
 STAKE_AMOUNT="1000000stake"
@@ -49,7 +49,7 @@ detect_architecture() {
 DETECTED_ARCH=$(detect_architecture)
 
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Cosmos SDK Multi-Node Testnet Setup${NC}"
+echo -e "${GREEN}Cosmos SDK Multi-Node Local Network Setup${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo -e "Number of nodes: ${YELLOW}${NUM_NODES}${NC}"
 echo -e "Chain binary: ${YELLOW}${CHAIN_BINARY}${NC}"
@@ -135,9 +135,9 @@ check_and_build_binary() {
 check_and_build_binary
 echo ""
 
-# Clean up old testnet data
+# Clean up old local network data
 if [ -d "$OUTPUT_DIR" ]; then
-    echo -e "${YELLOW}Removing existing testnet directory...${NC}"
+    echo -e "${YELLOW}Removing existing local network directory...${NC}"
     rm -rf $OUTPUT_DIR
 fi
 
@@ -173,7 +173,14 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
 done
 
 echo ""
-echo -e "${GREEN}Step 2: Adding genesis accounts...${NC}"
+echo -e "${GREEN}Step 2: Fixing bond denomination in genesis...${NC}"
+# Update bond_denom to "stake" in node0's genesis
+GENESIS_FILE="$OUTPUT_DIR/node0/config/genesis.json"
+jq '.app_state.staking.params.bond_denom = "stake"' $GENESIS_FILE > $GENESIS_FILE.tmp && mv $GENESIS_FILE.tmp $GENESIS_FILE
+echo -e "  ${GREEN}✓${NC} Set bond_denom to stake"
+
+echo ""
+echo -e "${GREEN}Step 3: Adding genesis accounts...${NC}"
 # Add all validator accounts to node0's genesis first
 for i in $(seq 0 $((NUM_NODES - 1))); do
     echo "  Adding validator$i to genesis..."
@@ -184,7 +191,7 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
 done
 
 echo ""
-echo -e "${GREEN}Step 3: Creating genesis transactions...${NC}"
+echo -e "${GREEN}Step 4: Creating genesis transactions...${NC}"
 for i in $(seq 0 $((NUM_NODES - 1))); do
     NODE_HOME="$OUTPUT_DIR/node$i"
     NODE_MONIKER="validator$i"
@@ -210,19 +217,23 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
 done
 
 echo ""
-echo -e "${GREEN}Step 4: Collecting genesis transactions...${NC}"
+echo -e "${GREEN}Step 5: Collecting genesis transactions...${NC}"
 $CHAIN_BINARY genesis collect-gentxs --home $OUTPUT_DIR/node0 &> /dev/null
 echo -e "  ${GREEN}✓${NC} Collected all genesis transactions"
 
 echo ""
-echo -e "${GREEN}Step 5: Distributing final genesis to all nodes...${NC}"
-for i in $(seq 1 $((NUM_NODES - 1))); do
-    cp $OUTPUT_DIR/node0/config/genesis.json $OUTPUT_DIR/node$i/config/genesis.json
-    echo -e "  ${GREEN}✓${NC} Copied genesis to node$i"
-done
+echo -e "${GREEN}Step 6: Distributing final genesis to all nodes...${NC}"
+if [ $NUM_NODES -gt 1 ]; then
+    for i in $(seq 1 $((NUM_NODES - 1))); do
+        cp $OUTPUT_DIR/node0/config/genesis.json $OUTPUT_DIR/node$i/config/genesis.json
+        echo -e "  ${GREEN}✓${NC} Copied genesis to node$i"
+    done
+else
+    echo -e "  ${YELLOW}ℹ${NC}  Single node setup - no distribution needed"
+fi
 
 echo ""
-echo -e "${GREEN}Step 6: Configuring persistent peers...${NC}"
+echo -e "${GREEN}Step 7: Configuring persistent peers...${NC}"
 
 # Check if template-app.toml exists
 TEMPLATE_APP_TOML="./template-app.toml"
@@ -306,17 +317,17 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
 done
 
 echo ""
-echo -e "${GREEN}Step 7: Saving testnet configuration...${NC}"
-# Save the binary path for manage-testnet.sh to use
+echo -e "${GREEN}Step 8: Saving local network configuration...${NC}"
+# Save the binary path for scripts to use
 echo "$CHAIN_BINARY" > $OUTPUT_DIR/.chain_binary
 echo -e "  ${GREEN}✓${NC} Saved chain binary path: $CHAIN_BINARY"
 
 echo ""
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Testnet setup complete!${NC}"
+echo -e "${GREEN}Local network setup complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo -e "${YELLOW}To start the testnet, run the following commands in separate terminals:${NC}"
+echo -e "${YELLOW}To start the local network, run the following commands in separate terminals:${NC}"
 echo ""
 
 for i in $(seq 0 $((NUM_NODES - 1))); do
@@ -359,7 +370,7 @@ echo "# Stop all nodes:"
 echo "pkill -f $CHAIN_BINARY"
 echo ""
 echo -e "${BLUE}Script options:${NC}"
-echo "./setup-testnet.sh [num_nodes] [chain_binary] [chain_id] [--build]"
+echo "./setup-local-nodes.sh [num_nodes] [chain_binary] [chain_id] [--build]"
 echo "  --build: Automatically build the binary if not found"
 echo ""
 echo -e "${GREEN}Happy testing!${NC}"

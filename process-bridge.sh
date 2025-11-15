@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Bridge Deposit Processor
-# Fetches deposit data from Base (via Alchemy) and submits mint transaction to Pokerchain
+# Fetches deposit data from Base CosmosBridge contract by index and submits mint transaction to Pokerchain
 
 set -e
 
@@ -45,24 +45,28 @@ print_header() {
 
 # Show usage
 show_usage() {
-    echo "Usage: $0 <block_number> [options]"
+    echo "Usage: $0 <deposit_index> [options]"
     echo ""
     echo "Arguments:"
-    echo "  <block_number>         Block number to check for deposit events (decimal integer)"
+    echo "  <deposit_index>        Deposit index to process (decimal integer)"
     echo ""
     echo "Options:"
     echo "  --validator <host>     Validator host (default: node1.block52.xyz)"
     echo "  --user <user>          SSH user (default: root)"
     echo "  --from <address>       Cosmos address to submit from (optional, auto-detects)"
+    echo "  --local                Run locally without SSH (for testing)"
+    echo "  --home <path>          Home directory for local pokerchaind (default: ~/.pokerchain)"
     echo "  --dry-run              Show what would be done without executing"
     echo "  --debug                Show detailed debug information"
     echo ""
     echo "Examples:"
-    echo "  $0 36265934                               # Check block for deposits"
-    echo "  $0 36265934 --from cosmos1abc...          # Specify address"
-    echo "  $0 36265934 --validator node1.block52.xyz # Custom validator"
-    echo "  $0 36265934 --dry-run                     # Test without executing"
-    echo "  $0 36265934 --debug                       # Show debug output"
+    echo "  $0 42                                     # Process deposit index 42"
+    echo "  $0 42 --from cosmos1abc...                # Specify address"
+    echo "  $0 42 --validator node1.block52.xyz       # Custom validator"
+    echo "  $0 42 --local --from cosmos1abc...        # Run locally (no SSH)"
+    echo "  $0 42 --local --home ./test/node0         # Local with custom home"
+    echo "  $0 42 --dry-run                           # Test without executing"
+    echo "  $0 42 --debug                             # Show debug output"
     echo ""
 }
 
@@ -80,12 +84,151 @@ decode_hex_string() {
     echo "$hex" | xxd -r -p
 }
 
-# Convert decimal to hex with 0x prefix
+# Convert decimal to hex with 0x prefix and pad to 32 bytes
 dec_to_hex() {
     printf "0x%x" "$1"
 }
 
-# Query Ethereum logs for specific block
+# Pad hex value to 32 bytes (64 hex chars)
+pad_hex() {
+    local hex="$1"
+    # Remove 0x prefix if present
+    hex="${hex#0x}"
+    # Pad to 64 characters
+    printf "%064s" "$hex" | tr ' ' '0'
+}
+
+# Query deposit from contract by index
+query_deposit_by_index() {
+    local deposit_index="$1"
+    local debug="${2:-false}"
+    
+    echo -e "${BLUE}Querying deposit index ${deposit_index} from contract...${NC}"
+    
+    # Function signature for deposits(uint256): keccak256("deposits(uint256)") = 0xb02c43d0
+    local function_sig="0xb02c43d0"
+    
+    # Encode the index parameter (pad to 32 bytes)
+    local index_hex=$(dec_to_hex "$deposit_index")
+    local padded_index=$(pad_hex "$index_hex")
+    
+    # Construct the call data
+    local call_data="${function_sig}${padded_index}"
+    
+    if [ "$debug" = "true" ]; then
+        echo ""
+        echo "Debug Info:"
+        echo "  RPC URL: $ALCHEMY_URL"
+        echo "  Contract: $CONTRACT_ADDRESS"
+        echo "  Function: deposits(uint256)"
+        echo "  Deposit Index: $deposit_index"
+        echo "  Call Data: $call_data"
+        echo ""
+    fi
+    
+    # Query the contract
+    local payload=$(cat <<EOF
+{
+  "jsonrpc": "2.0",
+  "method": "eth_call",
+  "params": [{
+    "to": "$CONTRACT_ADDRESS",
+    "data": "$call_data"
+  }, "latest"],
+  "id": 1
+}
+EOF
+)
+    
+    if [ "$debug" = "true" ]; then
+        echo "Request payload:"
+        echo "$payload" | jq '.'
+        echo ""
+    fi
+    
+    echo "Fetching deposit data from Base..."
+    local response=$(curl -s -X POST "$ALCHEMY_URL" \
+        -H "Content-Type: application/json" \
+        -d "$payload")
+    
+    if [ "$debug" = "true" ]; then
+        echo ""
+        echo "Raw response:"
+        echo "$response" | jq '.' 2>/dev/null || echo "$response"
+        echo ""
+    fi
+    
+    # Check if response is valid
+    if [ -z "$response" ]; then
+        echo -e "${RED}❌ No response from Alchemy RPC${NC}"
+        return 1
+    fi
+    
+    # Check for JSON-RPC error
+    local error=$(echo "$response" | jq -r '.error.message // empty' 2>/dev/null)
+    if [ -n "$error" ]; then
+        echo -e "${RED}❌ RPC Error: $error${NC}"
+        if [ "$debug" = "true" ]; then
+            echo "$response" | jq '.error'
+        fi
+        return 1
+    fi
+    
+    # Get the result
+    local result=$(echo "$response" | jq -r '.result' 2>/dev/null)
+    if [ "$result" = "null" ] || [ -z "$result" ] || [ "$result" = "0x" ]; then
+        echo -e "${RED}❌ Deposit index $deposit_index not found${NC}"
+        return 1
+    fi
+    
+    echo "$result"
+}
+
+# Parse deposit data returned from contract
+parse_deposit_data() {
+    local result="$1"
+    local deposit_index="$2"
+    
+    # Remove 0x prefix
+    result="${result#0x}"
+    
+    # Solidity returns: (string account, uint256 amount)
+    # Layout: [offset_to_string(32)] [amount(32)] [string_length(32)] [string_data(...)]
+    
+    # Extract amount (bytes 32-64)
+    local amount_hex="0x${result:64:64}"
+    local amount=$(hex_to_dec "$amount_hex")
+    
+    # Extract string offset (bytes 0-32)
+    local string_offset_hex="0x${result:0:64}"
+    local string_offset=$(hex_to_dec "$string_offset_hex")
+    
+    # String data starts at offset * 2 (in hex chars)
+    local string_start=$((string_offset * 2))
+    
+    # Extract string length (32 bytes at the string offset)
+    local string_len_hex="0x${result:$string_start:64}"
+    local string_len=$(hex_to_dec "$string_len_hex")
+    
+    # Extract string data
+    local string_data_start=$((string_start + 64))
+    local string_hex="${result:$string_data_start:$((string_len * 2))}"
+    
+    # Convert hex to ASCII
+    local recipient=$(echo "$string_hex" | xxd -r -p)
+    
+    echo -e "${GREEN}✓ Deposit found:${NC}"
+    echo "  Index: $deposit_index"
+    echo "  Recipient: $recipient"
+    echo "  Amount: $amount"
+    
+    # Export for later use
+    export DEPOSIT_RECIPIENT="$recipient"
+    export DEPOSIT_AMOUNT="$amount"
+    export DEPOSIT_INDEX="$deposit_index"
+}
+
+# Query Ethereum logs for specific block (DEPRECATED - kept for reference)
 query_deposits_in_block() {
     local block_number="$1"
     local debug="${2:-false}"
@@ -201,7 +344,7 @@ EOF
     echo "$response"
 }
 
-# Parse deposit event
+# Parse deposit event (DEPRECATED - kept for reference)
 parse_deposit() {
     local event_file="$1"
     
@@ -294,11 +437,12 @@ extract_recipient_from_tx() {
 # Submit mint transaction to validator
 submit_mint_tx() {
     local from_address="$1"
-    local tx_hash="$2"
-    local recipient="$3"
-    local amount="$4"
-    local nonce="$5"
-    local dry_run="$6"
+    local recipient="$2"
+    local amount="$3"
+    local nonce="$4"
+    local dry_run="$5"
+    local local_mode="$6"
+    local home_dir="$7"
     
     echo ""
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -309,47 +453,66 @@ submit_mint_tx() {
     echo "  From: $from_address"
     echo "  Recipient: $recipient"
     echo "  Amount: $amount"
-    echo "  Eth TX: $tx_hash"
-    echo "  Nonce: $nonce"
+    echo "  Deposit Index: $nonce"
+    echo "  Mode: $([ "$local_mode" = "true" ] && echo "Local" || echo "Remote (SSH)")"
+    [ "$local_mode" = "true" ] && echo "  Home: $home_dir"
     echo ""
+    
+    # Build the pokerchaind command
+    # Syntax: pokerchaind tx poker process-deposit [index] [flags]
+    # The keeper will query the contract using the index to get recipient and amount
+    local cmd="pokerchaind tx poker process-deposit \
+  $nonce \
+  --from='$from_address' \
+  --chain-id='$CHAIN_ID' \
+  --gas='$GAS' \
+  --gas-prices='$GAS_PRICES' \
+  --yes"
+    
+    if [ "$local_mode" = "true" ] && [ -n "$home_dir" ]; then
+        cmd="$cmd --home='$home_dir' --keyring-backend=test"
+    fi
     
     if [ "$dry_run" = "true" ]; then
         echo -e "${YELLOW}DRY RUN - Command that would be executed:${NC}"
         echo ""
-        echo "ssh $VALIDATOR_USER@$VALIDATOR_HOST << 'ENDSSH'"
-        echo "pokerchaind tx poker mint \\"
-        echo "  --eth-tx-hash='$tx_hash' \\"
-        echo "  --recipient='$recipient' \\"
-        echo "  --amount=$amount \\"
-        echo "  --nonce=$nonce \\"
-        echo "  --from='$from_address' \\"
-        echo "  --chain-id='$CHAIN_ID' \\"
-        echo "  --gas='$GAS' \\"
-        echo "  --gas-prices='$GAS_PRICES' \\"
-        echo "  --yes"
-        echo "ENDSSH"
+        if [ "$local_mode" = "true" ]; then
+            echo "$cmd"
+        else
+            echo "ssh $VALIDATOR_USER@$VALIDATOR_HOST << 'ENDSSH'"
+            echo "$cmd"
+            echo "ENDSSH"
+        fi
         echo ""
         return 0
     fi
     
-    echo -e "${YELLOW}Connecting to validator...${NC}"
-    
-    # Execute on remote validator
-    ssh "$VALIDATOR_USER@$VALIDATOR_HOST" << ENDSSH
+    if [ "$local_mode" = "true" ]; then
+        echo -e "${YELLOW}Executing locally...${NC}"
+        echo ""
+        
+        eval $cmd
+        
+        if [ $? -eq 0 ]; then
+            echo ""
+            echo "Transaction submitted!"
+            echo ""
+            echo "Check transaction status:"
+            echo "  pokerchaind query tx <txhash>"
+            echo ""
+            echo "Verify recipient balance:"
+            echo "  pokerchaind query bank balances $recipient"
+        fi
+    else
+        echo -e "${YELLOW}Connecting to validator...${NC}"
+        
+        # Execute on remote validator
+        ssh "$VALIDATOR_USER@$VALIDATOR_HOST" << ENDSSH
 set -e
 
 echo "Submitting mint transaction..."
 
-pokerchaind tx poker mint \\
-  --eth-tx-hash='$tx_hash' \\
-  --recipient='$recipient' \\
-  --amount=$amount \\
-  --nonce=$nonce \\
-  --from='$from_address' \\
-  --chain-id='$CHAIN_ID' \\
-  --gas='$GAS' \\
-  --gas-prices='$GAS_PRICES' \\
-  --yes
+$cmd
 
 echo ""
 echo "Transaction submitted!"
@@ -361,26 +524,37 @@ echo "Verify recipient balance:"
 echo "  pokerchaind query bank balances $recipient"
 
 ENDSSH
-    
-    if [ $? -eq 0 ]; then
-        echo ""
-        echo -e "${GREEN}✅ Mint transaction submitted successfully!${NC}"
-    else
-        echo ""
-        echo -e "${RED}❌ Failed to submit transaction${NC}"
-        return 1
+        
+        if [ $? -eq 0 ]; then
+            echo ""
+            echo -e "${GREEN}✅ Mint transaction submitted successfully!${NC}"
+        else
+            echo ""
+            echo -e "${RED}❌ Failed to submit transaction${NC}"
+            return 1
+        fi
     fi
 }
 
-# Check if deposit was already processed
+# Check if deposit was already processed by nonce
 check_if_processed() {
-    local tx_hash="$1"
+    local nonce="$1"
+    local local_mode="$2"
+    local home_dir="$3"
     
-    echo -e "${BLUE}Checking if deposit already processed...${NC}"
+    echo -e "${BLUE}Checking if deposit index $nonce already processed...${NC}"
     
-    ssh "$VALIDATOR_USER@$VALIDATOR_HOST" << ENDSSH 2>/dev/null || true
-pokerchaind query poker processed-eth-tx $tx_hash 2>/dev/null
+    if [ "$local_mode" = "true" ]; then
+        local query_cmd="pokerchaind query poker processed-deposit $nonce"
+        if [ -n "$home_dir" ]; then
+            query_cmd="$query_cmd --home '$home_dir'"
+        fi
+        eval $query_cmd 2>/dev/null || true
+    else
+        ssh "$VALIDATOR_USER@$VALIDATOR_HOST" << ENDSSH 2>/dev/null || true
+pokerchaind query poker processed-deposit $nonce 2>/dev/null
 ENDSSH
+    fi
     
     if [ $? -eq 0 ]; then
         echo -e "${YELLOW}⚠️  This deposit may have already been processed${NC}"
@@ -391,7 +565,50 @@ ENDSSH
     fi
 }
 
-# Process deposits from a block
+# Process deposit by index
+process_deposit_by_index() {
+    local deposit_index="$1"
+    local from_address="$2"
+    local dry_run="$3"
+    local debug="$4"
+    local local_mode="$5"
+    local home_dir="$6"
+    
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}Processing Deposit Index: $deposit_index${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    
+    # Query deposit from contract
+    local result=$(query_deposit_by_index "$deposit_index" "$debug")
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}❌ Failed to fetch deposit data${NC}"
+        return 1
+    fi
+    
+    # Parse deposit details
+    if ! parse_deposit_data "$result" "$deposit_index"; then
+        echo -e "${RED}❌ Failed to parse deposit data${NC}"
+        return 1
+    fi
+    
+    # Check if already processed
+    if [ "$dry_run" != "true" ]; then
+        check_if_processed "$DEPOSIT_INDEX" "$local_mode" "$home_dir"
+    fi
+    
+    # Submit transaction
+    submit_mint_tx \
+        "$from_address" \
+        "$DEPOSIT_RECIPIENT" \
+        "$DEPOSIT_AMOUNT" \
+        "$DEPOSIT_INDEX" \
+        "$dry_run" \
+        "$local_mode" \
+        "$home_dir"
+}
+
+# Process deposits from a block (DEPRECATED - kept for reference)
 process_deposits_from_block() {
     local block_number="$1"
     local from_address="$2"
@@ -469,12 +686,22 @@ main() {
         exit 1
     fi
     
-    local block_number="$1"
+    # Check for help flag first
+    for arg in "$@"; do
+        if [[ "$arg" == "--help" ]] || [[ "$arg" == "-h" ]]; then
+            show_usage
+            exit 0
+        fi
+    done
+    
+    local deposit_index="$1"
     shift
     
     local dry_run="false"
     local from_address=""
     local debug="false"
+    local local_mode="false"
+    local home_dir="$HOME/.pokerchain"
     
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -490,6 +717,14 @@ main() {
                 from_address="$2"
                 shift 2
                 ;;
+            --local)
+                local_mode="true"
+                shift
+                ;;
+            --home)
+                home_dir="$2"
+                shift 2
+                ;;
             --dry-run)
                 dry_run="true"
                 shift
@@ -497,10 +732,6 @@ main() {
             --debug)
                 debug="true"
                 shift
-                ;;
-            --help|-h)
-                show_usage
-                exit 0
                 ;;
             *)
                 echo "Unknown option: $1"
@@ -510,9 +741,15 @@ main() {
         esac
     done
     
-    # Validate block number
-    if ! [[ "$block_number" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED}❌ Invalid block number. Must be a positive integer.${NC}"
+    # Auto-enable local mode if validator is localhost
+    if [[ "$VALIDATOR_HOST" == "localhost" ]] || [[ "$VALIDATOR_HOST" == "127.0.0.1" ]]; then
+        local_mode="true"
+        echo -e "${BLUE}ℹ️  Auto-enabling local mode (validator is localhost)${NC}"
+    fi
+    
+    # Validate deposit index
+    if ! [[ "$deposit_index" =~ ^[0-9]+$ ]]; then
+        echo -e "${RED}❌ Invalid deposit index. Must be a positive integer.${NC}"
         exit 1
     fi
     
@@ -523,9 +760,18 @@ main() {
         echo ""
         echo -e "${BLUE}Getting validator address...${NC}"
         
-        # Try to get the first key from the validator
-        from_address=$(ssh "$VALIDATOR_USER@$VALIDATOR_HOST" \
-            "pokerchaind keys list --output json 2>/dev/null | jq -r '.[0].address' 2>/dev/null" || echo "")
+        if [ "$local_mode" = "true" ]; then
+            # Get local keys
+            local keys_cmd="pokerchaind keys list --output json 2>/dev/null"
+            if [ -n "$home_dir" ]; then
+                keys_cmd="$keys_cmd --home '$home_dir'"
+            fi
+            from_address=$(eval $keys_cmd | jq -r '.[0].address' 2>/dev/null || echo "")
+        else
+            # Try to get the first key from the remote validator
+            from_address=$(ssh "$VALIDATOR_USER@$VALIDATOR_HOST" \
+                "pokerchaind keys list --output json 2>/dev/null | jq -r '.[0].address' 2>/dev/null" || echo "")
+        fi
         
         if [ -z "$from_address" ] || [ "$from_address" = "null" ]; then
             echo -e "${YELLOW}⚠️  Could not auto-detect validator address${NC}"
@@ -542,11 +788,8 @@ main() {
     
     echo ""
     
-    # Process all deposits from the block
-    process_deposits_from_block "$block_number" "$from_address" "$dry_run" "$debug"
-    
-    # Cleanup
-    rm -f /tmp/block_deposit_events.json /tmp/deposit_event_*.json
+    # Process the deposit by index
+    process_deposit_by_index "$deposit_index" "$from_address" "$dry_run" "$debug" "$local_mode" "$home_dir"
     
     echo ""
     echo -e "${GREEN}✅ Done!${NC}"
