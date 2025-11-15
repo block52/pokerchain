@@ -379,9 +379,6 @@ print_success() {
     echo "   Restart: ssh $remote_user@$remote_host 'systemctl restart poker-vm'"
     echo "   Stop:    ssh $remote_user@$remote_host 'systemctl stop poker-vm'"
     echo ""
-    echo "🌐 Access PVM:"
-    echo "   http://$remote_host:$pvm_port"
-    echo ""
 }
 
 # Main execution
