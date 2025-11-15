@@ -9,9 +9,9 @@ set -e
 # Configuration
 CHAIN_BINARY="pokerchaind"
 CHAIN_ID="pokerchain"
-NODE_HOME="/root/.pokerchain"
+NODE_HOME="$HOME/.pokerchain"
 SYNC_NODE="node1.block52.xyz"
-SYNC_NODE_RPC="http://node1.block52.xyz:26657"
+SYNC_NODE_RPC="https://node1.block52.xyz/rpc"
 
 # Colors
 RED='\033[0;31m'

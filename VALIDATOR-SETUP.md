@@ -10,8 +10,8 @@
 
 ## Network Configuration
 
--   **RPC**: http://node1.block52.xyz:26657
--   **API**: http://node1.block52.xyz:1317
+-   **RPC**: https://node1.block52.xyz/rpc
+-   **API**: https://node1.block52.xyz
 -   **P2P**: node1.block52.xyz:26656
 
 ## Validator Mnemonic (KEEP SECURE!)

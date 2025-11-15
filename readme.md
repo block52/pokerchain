@@ -275,7 +275,7 @@ lsof -i :26657
 cat ~/.pokerchain/config/config.toml | grep persistent_peers
 
 # Verify remote node is accessible
-curl http://node1.block52.xyz:26657/status
+curl https://node1.block52.xyz/rpc/status
 
 # Re-run setup to fix config
 ./setup-sync-node.sh
@@ -314,8 +314,8 @@ chmod 644 ~/.pokerchain/config/genesis.json
 
 ### Genesis Node (node1.block52.xyz)
 
--   **RPC**: http://node1.block52.xyz:26657
--   **API**: http://node1.block52.xyz:1317
+-   **RPC**: https://node1.block52.xyz/rpc
+-   **API**: https://node1.block52.xyz
 -   **Chain ID**: pokerchain
 -   **Role**: Primary validator
 
@@ -354,7 +354,7 @@ ls ~/.pokerchain/config/genesis.json
 ./start-node.sh  # Will tell you current status
 
 # 4. Can we reach the network?
-curl http://node1.block52.xyz:26657/status
+curl https://node1.block52.xyz/rpc/status
 ```
 
 ### Still stuck?
