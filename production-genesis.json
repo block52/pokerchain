@@ -46,7 +46,7 @@
           "address": "b5212txy5le90veh4uhgde006hffarz6449pshnyp6",
           "coins": [
             {
-              "denom": "stake",
+              "denom": "b52usdc",
               "amount": "1000000000000"
             }
           ]
@@ -55,7 +55,7 @@
           "address": "b521hhkp8de2ghf2jnufpxs6v24hwczy5smckp44qn",
           "coins": [
             {
-              "denom": "stake",
+              "denom": "b52usdc",
               "amount": "1000000000000"
             }
           ]
@@ -63,7 +63,7 @@
       ],
       "supply": [
         {
-          "denom": "stake",
+          "denom": "b52usdc",
           "amount": "2000000000000"
         }
       ],
@@ -167,7 +167,7 @@
                   "key": "ZBFXlUY2gyPqjtYf9DBe98x433jLXXtY14f0qn4kklI="
                 },
                 "value": {
-                  "denom": "stake",
+                  "denom": "b52usdc",
                   "amount": "100000000000"
                 }
               }
@@ -231,7 +231,7 @@
                   "key": "YZ520lDJ18K+wIjyrCAIAz/ae3GDk0g0+oKKagy38pg="
                 },
                 "value": {
-                  "denom": "stake",
+                  "denom": "b52usdc",
                   "amount": "100000000000"
                 }
               }
@@ -283,7 +283,7 @@
       "params": {
         "min_deposit": [
           {
-            "denom": "stake",
+            "denom": "b52usdc",
             "amount": "10000000"
           }
         ],
@@ -299,7 +299,7 @@
         "expedited_threshold": "0.667000000000000000",
         "expedited_min_deposit": [
           {
-            "denom": "stake",
+            "denom": "b52usdc",
             "amount": "50000000"
           }
         ],
@@ -389,7 +389,7 @@
         "annual_provisions": "0.000000000000000000"
       },
       "params": {
-        "mint_denom": "stake",
+        "mint_denom": "b52usdc",
         "inflation_rate_change": "0.130000000000000000",
         "inflation_max": "0.200000000000000000",
         "inflation_min": "0.070000000000000000",
@@ -423,7 +423,7 @@
         "max_validators": 100,
         "max_entries": 7,
         "historical_entries": 10000,
-        "bond_denom": "stake",
+        "bond_denom": "b52usdc",
         "min_commission_rate": "0.000000000000000000"
       },
       "last_total_power": "0",

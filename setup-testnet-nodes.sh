@@ -11,8 +11,8 @@ CHAIN_BINARY=${2:-"pokerchaind"}
 CHAIN_ID=${3:-"pokerchain-testnet-1"}
 OUTPUT_DIR="./test"
 KEYRING_BACKEND="test"
-STAKE_AMOUNT="1000000stake"
-INITIAL_BALANCE="100000000000stake"
+STAKE_AMOUNT="1000000b52usdc"
+INITIAL_BALANCE="100000000000b52usdc"
 AUTO_BUILD=false
 
 # Check for --build flag
@@ -291,13 +291,13 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
         
         # Set minimum gas prices
         if grep -q 'minimum-gas-prices = ""' $APP_CONFIG_FILE; then
-            sed -i.bak 's/minimum-gas-prices = ""/minimum-gas-prices = "0stake"/g' $APP_CONFIG_FILE
+            sed -i.bak 's/minimum-gas-prices = ""/minimum-gas-prices = "0b52usdc"/g' $APP_CONFIG_FILE
         elif grep -q "minimum-gas-prices = ''" $APP_CONFIG_FILE; then
             sed -i.bak "s/minimum-gas-prices = ''/minimum-gas-prices = \"0stake\"/g" $APP_CONFIG_FILE
         elif grep -q 'minimum-gas-prices =' $APP_CONFIG_FILE; then
-            sed -i.bak 's/minimum-gas-prices = .*/minimum-gas-prices = "0stake"/g' $APP_CONFIG_FILE
+            sed -i.bak 's/minimum-gas-prices = .*/minimum-gas-prices = "0b52usdc"/g' $APP_CONFIG_FILE
         else
-            echo 'minimum-gas-prices = "0stake"' >> $APP_CONFIG_FILE
+            echo 'minimum-gas-prices = "0b52usdc"' >> $APP_CONFIG_FILE
         fi
     fi
     

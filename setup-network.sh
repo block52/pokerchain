@@ -1004,7 +1004,7 @@ reset_chain() {
                         return
                     fi
                 else
-                    echo "Balance: $balance stake"
+                    echo "Balance: $balance b52usdc"
                 fi
                 
                 echo ""
@@ -1016,8 +1016,8 @@ reset_chain() {
                 read -p "Validator moniker (default: validator): " moniker
                 moniker=${moniker:-validator}
                 
-                read -p "Amount to stake (default: 100000000000stake): " stake_amount
-                stake_amount=${stake_amount:-100000000000stake}
+                read -p "Amount to stake (default: 100000000000b52usdc): " stake_amount
+                stake_amount=${stake_amount:-100000000000b52usdc}
                 
                 read -p "Commission rate (default: 0.10): " commission_rate
                 commission_rate=${commission_rate:-0.10}

@@ -494,9 +494,9 @@ configure_node() {
     
     # Set minimum gas prices
     if grep -q 'minimum-gas-prices = ""' "$NODE_HOME/config/app.toml"; then
-        sed -i.bak 's|minimum-gas-prices = ""|minimum-gas-prices = "0.001stake"|g' "$NODE_HOME/config/app.toml"
+        sed -i.bak 's|minimum-gas-prices = ""|minimum-gas-prices = "0.001b52usdc"|g' "$NODE_HOME/config/app.toml"
     elif grep -q "minimum-gas-prices = ''" "$NODE_HOME/config/app.toml"; then
-        sed -i.bak "s|minimum-gas-prices = ''|minimum-gas-prices = \"0.001stake\"|g" "$NODE_HOME/config/app.toml"
+        sed -i.bak "s|minimum-gas-prices = ''|minimum-gas-prices = \"0.001b52usdc\"|g" "$NODE_HOME/config/app.toml"
     fi
     
     # Development-friendly settings
@@ -579,7 +579,7 @@ start_node() {
     echo ""
     
     # Start the node
-    $CHAIN_BINARY start --home "$NODE_HOME" --minimum-gas-prices="0.001stake"
+    $CHAIN_BINARY start --home "$NODE_HOME" --minimum-gas-prices="0.001b52usdc"
 }
 
 # Check if user wants to run PVM

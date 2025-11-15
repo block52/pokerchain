@@ -102,7 +102,7 @@
           "address": "b5212txy5le90veh4uhgde006hffarz6449pshnyp6",
           "coins": [
             {
-              "denom": "stake",
+              "denom": "b52usdc",
               "amount": "1000000000000"
             }
           ]
@@ -111,7 +111,7 @@
           "address": "b521hg93rsm2f5v3zlepf20ru88uweajt3nf492s2p",
           "coins": [
             {
-              "denom": "stake",
+              "denom": "b52usdc",
               "amount": "1000000000000"
             }
           ]
@@ -120,7 +120,7 @@
           "address": "b521xkh7eznh50km2lxh783sqqyml8fjwl0tqjsc0c",
           "coins": [
             {
-              "denom": "stake",
+              "denom": "b52usdc",
               "amount": "1000000000000"
             }
           ]
@@ -129,7 +129,7 @@
           "address": "b521n25h4eg6uhtdvs26988k9ye497sylum8lz5vns",
           "coins": [
             {
-              "denom": "stake",
+              "denom": "b52usdc",
               "amount": "1000000000000"
             }
           ]
@@ -138,7 +138,7 @@
           "address": "b521pscx3n8gygnm7pf3vxcyvxlwvcxa3ug2vzaxah",
           "coins": [
             {
-              "denom": "stake",
+              "denom": "b52usdc",
               "amount": "1000000000000"
             }
           ]
@@ -147,7 +147,7 @@
           "address": "b521pejd682h20grq0em8jwhmnclggf2hqaq7xh8tk",
           "coins": [
             {
-              "denom": "stake",
+              "denom": "b52usdc",
               "amount": "1000000000000"
             }
           ]
@@ -156,7 +156,7 @@
           "address": "b521r4ysrlg7cqgfx4nh48t234g6hl3lxap9dddede",
           "coins": [
             {
-              "denom": "stake",
+              "denom": "b52usdc",
               "amount": "1000000000000"
             }
           ]
@@ -165,7 +165,7 @@
           "address": "b521xe9xv26qtdern5k84csy2c6jxxfa33vxn6s0aw",
           "coins": [
             {
-              "denom": "stake",
+              "denom": "b52usdc",
               "amount": "1000000000000"
             }
           ]
@@ -174,7 +174,7 @@
           "address": "b52102v4aqqm8pxtl5k2kv5229xx7vfwlu66ev0p3h",
           "coins": [
             {
-              "denom": "stake",
+              "denom": "b52usdc",
               "amount": "1000000000000"
             }
           ]
@@ -183,7 +183,7 @@
           "address": "b521dyqcaeuhwp6ryzc58gpyqaz8rxrt95sdcltdsq",
           "coins": [
             {
-              "denom": "stake",
+              "denom": "b52usdc",
               "amount": "1000000000000"
             }
           ]
@@ -191,7 +191,7 @@
       ],
       "supply": [
         {
-          "denom": "stake",
+          "denom": "b52usdc",
           "amount": "10000000000000"
         }
       ],
@@ -283,7 +283,7 @@
       "params": {
         "min_deposit": [
           {
-            "denom": "stake",
+            "denom": "b52usdc",
             "amount": "10000000"
           }
         ],
@@ -299,7 +299,7 @@
         "expedited_threshold": "0.667000000000000000",
         "expedited_min_deposit": [
           {
-            "denom": "stake",
+            "denom": "b52usdc",
             "amount": "50000000"
           }
         ],
@@ -389,7 +389,7 @@
         "annual_provisions": "0.000000000000000000"
       },
       "params": {
-        "mint_denom": "stake",
+        "mint_denom": "b52usdc",
         "inflation_rate_change": "0.130000000000000000",
         "inflation_max": "0.200000000000000000",
         "inflation_min": "0.070000000000000000",
@@ -423,7 +423,7 @@
         "max_validators": 100,
         "max_entries": 7,
         "historical_entries": 10000,
-        "bond_denom": "stake",
+        "bond_denom": "b52usdc",
         "min_commission_rate": "0.000000000000000000"
       },
       "last_total_power": "0",
