@@ -241,4 +241,3 @@ func (bv *BridgeVerifier) Close() {
 		bv.ethClient.Close()
 	}
 }
-

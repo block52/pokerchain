@@ -33,12 +33,17 @@ func (k msgServer) ProcessDeposit(ctx context.Context, msg *types.MsgProcessDepo
 	defer verifier.Close()
 
 	// Query Ethereum contract for deposit data by index
+	// NOTE: The contract has an off-by-one bug where it returns (index + 1) in the event
+	// but stores the deposit at the original index. So we subtract 1 to get the actual storage index.
+	contractStorageIndex := msg.DepositIndex - 1
+
 	logger.Info("🔍 Querying Ethereum contract for deposit",
 		"contract", k.depositContractAddr,
-		"index", msg.DepositIndex,
+		"event_index", msg.DepositIndex,
+		"storage_index", contractStorageIndex,
 	)
 
-	depositData, err := verifier.GetDepositByIndex(ctx, msg.DepositIndex)
+	depositData, err := verifier.GetDepositByIndex(ctx, contractStorageIndex)
 	if err != nil {
 		logger.Error("❌ Failed to query deposit from Ethereum", "error", err)
 		return nil, errorsmod.Wrap(err, "failed to query deposit from ethereum")

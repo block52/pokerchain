@@ -21,7 +21,7 @@ VALIDATOR_HOST="${VALIDATOR_HOST:-node1.block52.xyz}"
 VALIDATOR_USER="${VALIDATOR_USER:-root}"
 CHAIN_ID="pokerchain"
 GAS="300000"
-GAS_PRICES="0.001b52usdc"
+GAS_PRICES="0.001stake"
 
 # Event signature for Deposited(string indexed account, uint256 amount, uint256 index)
 # keccak256("Deposited(string,uint256,uint256)") = 0x46008385c8bcecb546cb0a96e5b409f34ac1a8ece8f3ea98488282519372bdf2

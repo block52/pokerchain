@@ -11,8 +11,8 @@ CHAIN_BINARY=${2:-"pokerchaind"}
 CHAIN_ID=${3:-"pokerchain"}
 OUTPUT_DIR="./test"
 KEYRING_BACKEND="test"
-STAKE_AMOUNT="1000000b52usdc"
-INITIAL_BALANCE="100000000000b52usdc"
+STAKE_AMOUNT="1000000stake"
+INITIAL_BALANCE="100000000000stake"
 AUTO_BUILD=false
 
 # Check for --build flag
@@ -173,7 +173,14 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
 done
 
 echo ""
-echo -e "${GREEN}Step 2: Adding genesis accounts...${NC}"
+echo -e "${GREEN}Step 2: Fixing bond denomination in genesis...${NC}"
+# Update bond_denom to "stake" in node0's genesis
+GENESIS_FILE="$OUTPUT_DIR/node0/config/genesis.json"
+jq '.app_state.staking.params.bond_denom = "stake"' $GENESIS_FILE > $GENESIS_FILE.tmp && mv $GENESIS_FILE.tmp $GENESIS_FILE
+echo -e "  ${GREEN}✓${NC} Set bond_denom to stake"
+
+echo ""
+echo -e "${GREEN}Step 3: Adding genesis accounts...${NC}"
 # Add all validator accounts to node0's genesis first
 for i in $(seq 0 $((NUM_NODES - 1))); do
     echo "  Adding validator$i to genesis..."
@@ -184,7 +191,7 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
 done
 
 echo ""
-echo -e "${GREEN}Step 3: Creating genesis transactions...${NC}"
+echo -e "${GREEN}Step 4: Creating genesis transactions...${NC}"
 for i in $(seq 0 $((NUM_NODES - 1))); do
     NODE_HOME="$OUTPUT_DIR/node$i"
     NODE_MONIKER="validator$i"
@@ -210,12 +217,12 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
 done
 
 echo ""
-echo -e "${GREEN}Step 4: Collecting genesis transactions...${NC}"
+echo -e "${GREEN}Step 5: Collecting genesis transactions...${NC}"
 $CHAIN_BINARY genesis collect-gentxs --home $OUTPUT_DIR/node0 &> /dev/null
 echo -e "  ${GREEN}✓${NC} Collected all genesis transactions"
 
 echo ""
-echo -e "${GREEN}Step 5: Distributing final genesis to all nodes...${NC}"
+echo -e "${GREEN}Step 6: Distributing final genesis to all nodes...${NC}"
 if [ $NUM_NODES -gt 1 ]; then
     for i in $(seq 1 $((NUM_NODES - 1))); do
         cp $OUTPUT_DIR/node0/config/genesis.json $OUTPUT_DIR/node$i/config/genesis.json
@@ -226,7 +233,7 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}Step 6: Configuring persistent peers...${NC}"
+echo -e "${GREEN}Step 7: Configuring persistent peers...${NC}"
 
 # Check if template-app.toml exists
 TEMPLATE_APP_TOML="./template-app.toml"
@@ -310,7 +317,7 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
 done
 
 echo ""
-echo -e "${GREEN}Step 7: Saving local network configuration...${NC}"
+echo -e "${GREEN}Step 8: Saving local network configuration...${NC}"
 # Save the binary path for scripts to use
 echo "$CHAIN_BINARY" > $OUTPUT_DIR/.chain_binary
 echo -e "  ${GREEN}✓${NC} Saved chain binary path: $CHAIN_BINARY"
