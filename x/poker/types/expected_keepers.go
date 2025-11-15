@@ -19,7 +19,9 @@ type StakingKeeper interface {
 // AuthKeeper defines the expected interface for the Auth module.
 type AuthKeeper interface {
 	AddressCodec() address.Codec
-	GetAccount(context.Context, sdk.AccAddress) sdk.AccountI // only used for simulation
+	GetAccount(context.Context, sdk.AccAddress) sdk.AccountI
+	SetAccount(context.Context, sdk.AccountI)
+	NewAccountWithAddress(context.Context, sdk.AccAddress) sdk.AccountI
 	// Methods imported from account should be defined here
 }
 

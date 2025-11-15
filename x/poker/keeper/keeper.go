@@ -28,13 +28,14 @@ type Keeper struct {
 	// GameStates stores game state data for frontend compatibility
 	GameStates collections.Map[string, types.TexasHoldemStateDTO]
 
+	authKeeper    types.AuthKeeper
 	bankKeeper    types.BankKeeper
 	stakingKeeper types.StakingKeeper
 	bridgeService *BridgeService
-	
+
 	// Bridge configuration for Ethereum verification
-	ethRPCURL            string
-	depositContractAddr  string
+	ethRPCURL           string
+	depositContractAddr string
 }
 
 func NewKeeper(
@@ -43,9 +44,10 @@ func NewKeeper(
 	addressCodec address.Codec,
 	authority []byte,
 
+	authKeeper types.AuthKeeper,
 	bankKeeper types.BankKeeper,
 	stakingKeeper types.StakingKeeper,
-	
+
 	ethRPCURL string,
 	depositContractAddr string,
 ) *Keeper {
@@ -61,14 +63,15 @@ func NewKeeper(
 		addressCodec: addressCodec,
 		authority:    authority,
 
-		bankKeeper:           bankKeeper,
-		stakingKeeper:        stakingKeeper,
-		ethRPCURL:            ethRPCURL,
-		depositContractAddr:  depositContractAddr,
-		Params:               collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
-		ProcessedEthTxs:      collections.NewKeySet(sb, types.ProcessedEthTxsKey, "processed_eth_txs", collections.StringKey),
-		Games:                collections.NewMap(sb, types.GamesKey, "games", collections.StringKey, codec.CollValue[types.Game](cdc)),
-		GameStates:           collections.NewMap(sb, types.GameStatesKey, "game_states", collections.StringKey, codec.CollValue[types.TexasHoldemStateDTO](cdc)),
+		authKeeper:          authKeeper,
+		bankKeeper:          bankKeeper,
+		stakingKeeper:       stakingKeeper,
+		ethRPCURL:           ethRPCURL,
+		depositContractAddr: depositContractAddr,
+		Params:              collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
+		ProcessedEthTxs:     collections.NewKeySet(sb, types.ProcessedEthTxsKey, "processed_eth_txs", collections.StringKey),
+		Games:               collections.NewMap(sb, types.GamesKey, "games", collections.StringKey, codec.CollValue[types.Game](cdc)),
+		GameStates:          collections.NewMap(sb, types.GameStatesKey, "game_states", collections.StringKey, codec.CollValue[types.TexasHoldemStateDTO](cdc)),
 	}
 
 	schema, err := sb.Build()
