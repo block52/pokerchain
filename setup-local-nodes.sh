@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Cosmos SDK Multi-Node Testnet Setup Script
-# Usage: ./setup-testnet.sh [num_nodes] [chain_binary] [chain_id] [--build]
+# Cosmos SDK Multi-Node Local Network Setup Script
+# Usage: ./setup-local-nodes.sh [num_nodes] [chain_binary] [chain_id] [--build]
 
 set -e
 
@@ -49,7 +49,7 @@ detect_architecture() {
 DETECTED_ARCH=$(detect_architecture)
 
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Cosmos SDK Multi-Node Testnet Setup${NC}"
+echo -e "${GREEN}Cosmos SDK Multi-Node Local Network Setup${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo -e "Number of nodes: ${YELLOW}${NUM_NODES}${NC}"
 echo -e "Chain binary: ${YELLOW}${CHAIN_BINARY}${NC}"
@@ -135,9 +135,9 @@ check_and_build_binary() {
 check_and_build_binary
 echo ""
 
-# Clean up old testnet data
+# Clean up old local network data
 if [ -d "$OUTPUT_DIR" ]; then
-    echo -e "${YELLOW}Removing existing testnet directory...${NC}"
+    echo -e "${YELLOW}Removing existing local network directory...${NC}"
     rm -rf $OUTPUT_DIR
 fi
 
@@ -306,17 +306,17 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
 done
 
 echo ""
-echo -e "${GREEN}Step 7: Saving testnet configuration...${NC}"
-# Save the binary path for manage-testnet.sh to use
+echo -e "${GREEN}Step 7: Saving local network configuration...${NC}"
+# Save the binary path for scripts to use
 echo "$CHAIN_BINARY" > $OUTPUT_DIR/.chain_binary
 echo -e "  ${GREEN}✓${NC} Saved chain binary path: $CHAIN_BINARY"
 
 echo ""
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Testnet setup complete!${NC}"
+echo -e "${GREEN}Local network setup complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo -e "${YELLOW}To start the testnet, run the following commands in separate terminals:${NC}"
+echo -e "${YELLOW}To start the local network, run the following commands in separate terminals:${NC}"
 echo ""
 
 for i in $(seq 0 $((NUM_NODES - 1))); do
@@ -359,7 +359,7 @@ echo "# Stop all nodes:"
 echo "pkill -f $CHAIN_BINARY"
 echo ""
 echo -e "${BLUE}Script options:${NC}"
-echo "./setup-testnet.sh [num_nodes] [chain_binary] [chain_id] [--build]"
+echo "./setup-local-nodes.sh [num_nodes] [chain_binary] [chain_id] [--build]"
 echo "  --build: Automatically build the binary if not found"
 echo ""
 echo -e "${GREEN}Happy testing!${NC}"
