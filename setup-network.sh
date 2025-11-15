@@ -38,7 +38,7 @@ show_menu() {
     echo "   - Does NOT participate in consensus"
     echo "   - Perfect for development and testing"
     echo ""
-    echo -e "${GREEN}2)${NC} Remote Sync Node (deploy to remote server)"
+    echo -e "${GREEN}2)${NC} Remote Sync Node (deploy light client to remote server)"
     echo "   Deploy a read-only sync node to a remote Linux server"
     echo "   - Builds and uploads binary"
     echo "   - Configures systemd service"

@@ -14,8 +14,14 @@ NC='\033[0m'
 
 # Configuration
 REMOTE_NODE="${1:-node1.block52.xyz}"
-RPC_PORT="${2:-26657}"
+# Default to HTTPS RPC endpoint via NGINX
+RPC_URL="${2:-https://node1.block52.xyz/rpc}"
 WAIT_TIME="${3:-10}"
+
+# If second argument looks like a port number, construct old-style URL for backward compatibility
+if [[ "$2" =~ ^[0-9]+$ ]]; then
+    RPC_URL="http://$REMOTE_NODE:$2"
+fi
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BLUE}          Block Production Test for $REMOTE_NODE${NC}"
@@ -24,14 +30,14 @@ echo ""
 
 # Check if node is accessible
 echo -n "Checking RPC accessibility... "
-if ! curl -s --max-time 5 "http://$REMOTE_NODE:$RPC_PORT/status" > /dev/null 2>&1; then
+if ! curl -s --max-time 5 "$RPC_URL/status" > /dev/null 2>&1; then
     echo -e "${RED}❌ FAILED${NC}"
     echo ""
-    echo "Cannot connect to http://$REMOTE_NODE:$RPC_PORT"
+    echo "Cannot connect to $RPC_URL"
     echo ""
     echo "Please ensure:"
     echo "  1. Node is running"
-    echo "  2. RPC port ($RPC_PORT) is accessible"
+    echo "  2. RPC endpoint is accessible"
     echo "  3. Firewall allows connections"
     exit 1
 fi
@@ -40,7 +46,7 @@ echo ""
 
 # Get initial status
 echo "Fetching initial block height..."
-STATUS1=$(curl -s "http://$REMOTE_NODE:$RPC_PORT/status")
+STATUS1=$(curl -s "$RPC_URL/status")
 
 if ! command -v jq &> /dev/null; then
     echo -e "${YELLOW}⚠️  jq not installed - using grep method${NC}"
@@ -77,7 +83,7 @@ echo ""
 
 # Get new status
 echo "Fetching new block height..."
-STATUS2=$(curl -s "http://$REMOTE_NODE:$RPC_PORT/status")
+STATUS2=$(curl -s "$RPC_URL/status")
 
 if ! command -v jq &> /dev/null; then
     BLOCK2=$(echo "$STATUS2" | grep -o '"latest_block_height":"[0-9]*"' | cut -d'"' -f4)

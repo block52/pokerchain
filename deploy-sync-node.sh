@@ -3,6 +3,13 @@
 # Deploy Sync Node to Remote Server
 # Sets up a read-only sync node on a remote Linux server
 # Syncs from the production network (node1.block52.xyz)
+#
+# Key features:
+# - Automatically removes any existing installations for clean deployment
+# - Downloads and verifies genesis file from RPC endpoint
+# - Configures correct peer ID from live node
+# - Uses block sync (state sync disabled as snapshots not available)
+# - Verifies binary hash before uploading to avoid unnecessary transfers
 
 set -e
 
@@ -11,7 +18,7 @@ CHAIN_BINARY="pokerchaind"
 CHAIN_ID="pokerchain"
 NODE_HOME="$HOME/.pokerchain"
 SYNC_NODE="node1.block52.xyz"
-SYNC_NODE_RPC="https://node1.block52.xyz/rpc"
+SYNC_NODE_RPC="http://node1.block52.xyz:26657"
 
 # Colors
 RED='\033[0;31m'
@@ -158,10 +165,71 @@ build_binary() {
 upload_binary() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}Uploading Binary${NC}"
+    echo -e "${CYAN}Checking Binary${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
+    # First, check if we have a local binary
+    if [ ! -f "$LOCAL_BINARY" ]; then
+        echo -e "${RED}❌ Local binary not found: $LOCAL_BINARY${NC}"
+        exit 1
+    fi
+    
+    # Get local binary hash
+    echo "Calculating local binary hash..."
+    LOCAL_HASH=$(sha256sum "$LOCAL_BINARY" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$LOCAL_BINARY" 2>/dev/null | awk '{print $1}')
+    
+    if [ -z "$LOCAL_HASH" ]; then
+        echo -e "${RED}❌ Failed to calculate local binary hash${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✓${NC} Local binary hash: $LOCAL_HASH"
+    
+    # Check if remote binary exists
+    echo ""
+    echo "Checking for existing binary on remote server..."
+    if ssh "$REMOTE_USER@$REMOTE_HOST" "[ -f /usr/local/bin/pokerchaind ]" 2>/dev/null; then
+        echo -e "${GREEN}✓${NC} Binary exists on remote server"
+        
+        # Get remote binary hash
+        echo ""
+        echo "Calculating remote binary hash..."
+        REMOTE_HASH=$(ssh "$REMOTE_USER@$REMOTE_HOST" "sha256sum /usr/local/bin/pokerchaind 2>/dev/null | awk '{print \$1}'")
+        
+        if [ -z "$REMOTE_HASH" ]; then
+            echo -e "${YELLOW}⚠ Failed to calculate remote binary hash${NC}"
+            echo -e "${YELLOW}⚠ Will upload binary to be safe${NC}"
+        else
+            echo -e "${GREEN}✓${NC} Remote binary hash: $REMOTE_HASH"
+            
+            # Compare hashes
+            echo ""
+            echo "Comparing hashes..."
+            echo "  Local:  $LOCAL_HASH"
+            echo "  Remote: $REMOTE_HASH"
+            
+            if [ "$LOCAL_HASH" = "$REMOTE_HASH" ]; then
+                echo ""
+                echo -e "${GREEN}✓${NC} Hashes match - binary is already up to date!"
+                echo -e "${GREEN}✓${NC} Skipping upload"
+                
+                # Verify binary works
+                echo ""
+                echo "Verifying binary version..."
+                ssh "$REMOTE_USER@$REMOTE_HOST" "pokerchaind version" || echo "Version: unknown"
+                return 0
+            else
+                echo ""
+                echo -e "${YELLOW}⚠ Hashes don't match - binary needs to be updated${NC}"
+            fi
+        fi
+    else
+        echo -e "${YELLOW}⚠ Binary not found on remote server${NC}"
+    fi
+    
+    # Upload the binary
+    echo ""
     echo "Uploading $LOCAL_BINARY to remote server..."
     
     scp "$LOCAL_BINARY" "$REMOTE_USER@$REMOTE_HOST:/tmp/pokerchaind"
@@ -174,9 +242,19 @@ upload_binary() {
     
     echo -e "${GREEN}✓${NC} Binary installed to /usr/local/bin/pokerchaind"
     
-    # Verify binary works
+    # Verify the uploaded binary hash matches
     echo ""
-    echo "Verifying binary..."
+    echo "Verifying uploaded binary..."
+    NEW_REMOTE_HASH=$(ssh "$REMOTE_USER@$REMOTE_HOST" "sha256sum /usr/local/bin/pokerchaind 2>/dev/null | awk '{print \$1}'")
+    
+    if [ "$LOCAL_HASH" = "$NEW_REMOTE_HASH" ]; then
+        echo -e "${GREEN}✓${NC} Upload verified - hashes match!"
+    else
+        echo -e "${YELLOW}⚠ Warning: Uploaded binary hash doesn't match local hash${NC}"
+        echo "  Expected: $LOCAL_HASH"
+        echo "  Got:      $NEW_REMOTE_HASH"
+    fi
+    
     ssh "$REMOTE_USER@$REMOTE_HOST" "pokerchaind version" || echo "Version: unknown"
 }
 
@@ -188,25 +266,21 @@ initialize_node() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
+    # Always reset for clean deployment
+    echo "Stopping any existing node services..."
+    ssh "$REMOTE_USER@$REMOTE_HOST" "
+        sudo systemctl stop pokerchaind 2>/dev/null || true
+        pkill -9 pokerchaind 2>/dev/null || true
+        sleep 2
+    "
+    
     # Check if node already exists
     local exists=$(ssh "$REMOTE_USER@$REMOTE_HOST" "[ -d $NODE_HOME ] && echo 'yes' || echo 'no'")
     
     if [ "$exists" = "yes" ]; then
         echo -e "${YELLOW}⚠ Node directory already exists on remote server${NC}"
-        echo ""
-        read -p "Reset node data? (y/n): " reset_node
-        
-        if [[ $reset_node =~ ^[Yy]$ ]]; then
-            echo "Removing existing node data..."
-            ssh "$REMOTE_USER@$REMOTE_HOST" "
-                sudo systemctl stop pokerchaind 2>/dev/null || true
-                pkill -9 pokerchaind 2>/dev/null || true
-                rm -rf $NODE_HOME
-            "
-        else
-            echo "Using existing node data"
-            return 0
-        fi
+        echo "Removing existing node data for clean installation..."
+        ssh "$REMOTE_USER@$REMOTE_HOST" "rm -rf $NODE_HOME"
     fi
     
     local moniker="sync-node-$REMOTE_HOST"
@@ -233,17 +307,27 @@ download_genesis() {
     echo "Downloading genesis from $SYNC_NODE_RPC..."
     
     ssh "$REMOTE_USER@$REMOTE_HOST" "
+        # Download genesis and extract the actual genesis object (not the RPC wrapper)
         curl -s '$SYNC_NODE_RPC/genesis' | jq -r .result.genesis > $NODE_HOME/config/genesis.json
         
+        # Verify the genesis file
         if [ -f $NODE_HOME/config/genesis.json ] && [ -s $NODE_HOME/config/genesis.json ]; then
-            echo 'Genesis downloaded successfully'
+            # Check that chain_id is present
+            CHAIN_ID_CHECK=\$(cat $NODE_HOME/config/genesis.json | jq -r .chain_id 2>/dev/null)
+            if [ \"\$CHAIN_ID_CHECK\" = \"$CHAIN_ID\" ]; then
+                echo 'Genesis downloaded and verified successfully'
+                echo \"Chain ID: \$CHAIN_ID_CHECK\"
+            else
+                echo 'ERROR: Genesis file missing chain_id or invalid'
+                exit 1
+            fi
         else
-            echo 'Failed to download genesis'
+            echo 'ERROR: Failed to download genesis'
             exit 1
         fi
     "
     
-    echo -e "${GREEN}✓${NC} Genesis downloaded"
+    echo -e "${GREEN}✓${NC} Genesis downloaded and verified"
 }
 
 # Configure node
@@ -263,18 +347,28 @@ configure_node() {
         "
     fi
     
-    # Get sync node ID
-    echo "Getting sync node ID from $SYNC_NODE..."
+    # Get the ACTUAL sync node ID from the status endpoint
+    echo "Getting sync node ID from $SYNC_NODE_RPC..."
     local sync_node_id=$(curl -s "$SYNC_NODE_RPC/status" | jq -r .result.node_info.id 2>/dev/null)
     
     if [ -n "$sync_node_id" ] && [ "$sync_node_id" != "null" ]; then
         echo -e "${GREEN}✓${NC} Sync node ID: $sync_node_id"
-        local persistent_peer="${sync_node_id}@${SYNC_NODE}:26656"
+        
+        # Get the IP address for the persistent peer
+        local sync_node_ip=$(dig +short $SYNC_NODE | head -n1)
+        if [ -z "$sync_node_ip" ]; then
+            sync_node_ip="170.64.205.169"  # Fallback to known IP
+        fi
+        
+        local persistent_peer="${sync_node_id}@${sync_node_ip}:26656"
         
         echo "Configuring node settings..."
         ssh "$REMOTE_USER@$REMOTE_HOST" << EOF
-            # Set persistent peer
+            # Set persistent peer with correct node ID
             sed -i.bak "s/persistent_peers = \"\"/persistent_peers = \"$persistent_peer\"/g" $NODE_HOME/config/config.toml
+            
+            # Disable state sync (not available on sync node)
+            sed -i.bak "s/^enable = true/enable = false/" $NODE_HOME/config/config.toml
             
             # Enable API
             sed -i.bak 's/enable = false/enable = true/g' $NODE_HOME/config/app.toml
@@ -298,17 +392,24 @@ configure_node() {
             
             # Clean up backup files
             rm -f $NODE_HOME/config/*.bak
+            
+            echo ""
+            echo "Configuration applied:"
+            echo "  Persistent Peer: $persistent_peer"
+            echo "  State Sync: disabled (using block sync)"
 EOF
         
         echo -e "${GREEN}✓${NC} Node configured"
         echo ""
         echo "Configuration:"
         echo "  Sync Peer: $persistent_peer"
+        echo "  Sync Method: Block sync from genesis"
         echo "  RPC: http://$REMOTE_HOST:26657"
         echo "  API: http://$REMOTE_HOST:1317"
     else
-        echo -e "${YELLOW}⚠ Could not get sync node ID${NC}"
-        echo "You may need to manually configure persistent_peers"
+        echo -e "${RED}❌ Could not get sync node ID from $SYNC_NODE_RPC${NC}"
+        echo "Please check that the sync node is accessible"
+        exit 1
     fi
 }
 
@@ -384,49 +485,14 @@ setup_firewall() {
         return 0
     fi
     
-    echo "Configuring UFW firewall..."
+    echo "Using setup-firewall.sh to configure firewall..."
     
-    ssh "$REMOTE_USER@$REMOTE_HOST" << 'EOF'
-        # Install UFW if not present
-        if ! command -v ufw &> /dev/null; then
-            echo "Installing UFW..."
-            apt-get update -qq
-            apt-get install -y ufw
-        fi
-        
-        # Reset UFW to default state
-        ufw --force reset
-        
-        # Set default policies
-        ufw default deny incoming
-        ufw default allow outgoing
-        
-        # Allow SSH (critical!)
-        ufw allow 22/tcp comment 'SSH'
-        
-        # Allow P2P port for Tendermint
-        ufw allow 26656/tcp comment 'Tendermint P2P'
-        
-        # Allow RPC port for Tendermint
-        ufw allow 26657/tcp comment 'Tendermint RPC'
-        
-        # Allow API port for Cosmos SDK REST API
-        ufw allow 1317/tcp comment 'Cosmos REST API'
-        
-        # Allow gRPC port
-        ufw allow 9090/tcp comment 'gRPC'
-        
-        # Allow gRPC-web port
-        ufw allow 9091/tcp comment 'gRPC-web'
-        
-        # Enable UFW
-        ufw --force enable
-        
-        # Show status
-        echo ""
-        echo "Firewall Status:"
-        ufw status numbered
-EOF
+    if [ ! -f "./setup-firewall.sh" ]; then
+        echo -e "${RED}❌ setup-firewall.sh not found${NC}"
+        return 1
+    fi
+    
+    ./setup-firewall.sh "$REMOTE_HOST" "$REMOTE_USER"
     
     echo -e "${GREEN}✓${NC} Firewall configured"
 }
@@ -439,24 +505,36 @@ start_node() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
-    read -p "Start node now? (y/n): " start_now
+    echo "Starting pokerchaind service..."
+    ssh "$REMOTE_USER@$REMOTE_HOST" "systemctl start pokerchaind"
     
-    if [[ $start_now =~ ^[Yy]$ ]]; then
-        echo "Starting pokerchaind service..."
-        ssh "$REMOTE_USER@$REMOTE_HOST" "systemctl start pokerchaind"
-        
+    echo ""
+    echo "Waiting for node to start..."
+    sleep 10
+    
+    # Check status
+    echo ""
+    echo "Service status:"
+    ssh "$REMOTE_USER@$REMOTE_HOST" "systemctl status pokerchaind --no-pager -l" || true
+    
+    echo ""
+    echo "Checking sync status..."
+    sleep 5
+    
+    # Check if node is syncing
+    local sync_status=$(ssh "$REMOTE_USER@$REMOTE_HOST" "curl -s localhost:26657/status 2>/dev/null | jq -r '.result.sync_info | {catching_up, latest_block_height, latest_block_time}' 2>/dev/null")
+    
+    if [ -n "$sync_status" ]; then
         echo ""
-        echo "Waiting for node to start..."
-        sleep 5
-        
-        # Check status
-        ssh "$REMOTE_USER@$REMOTE_HOST" "systemctl status pokerchaind --no-pager -l" || true
-        
+        echo "Node sync status:"
+        echo "$sync_status" | jq .
         echo ""
-        echo -e "${GREEN}✓${NC} Node started"
+        echo -e "${GREEN}✓${NC} Node started and syncing!"
     else
-        echo "Node not started. Start manually with:"
-        echo "  ssh $REMOTE_USER@$REMOTE_HOST 'systemctl start pokerchaind'"
+        echo -e "${YELLOW}⚠ Could not get sync status. Check logs for details.${NC}"
+        echo ""
+        echo "Recent logs:"
+        ssh "$REMOTE_USER@$REMOTE_HOST" "journalctl -u pokerchaind -n 20 --no-pager"
     fi
 }
 
@@ -473,6 +551,7 @@ show_summary() {
     echo "  Host: $REMOTE_HOST"
     echo "  Type: Read-only sync node"
     echo "  Syncing from: $SYNC_NODE"
+    echo "  Sync Method: Block sync from genesis"
     echo ""
     echo -e "${YELLOW}Endpoints:${NC}"
     echo "  RPC:  http://$REMOTE_HOST:26657"
@@ -487,7 +566,7 @@ show_summary() {
     echo "  ssh $REMOTE_USER@$REMOTE_HOST 'journalctl -u pokerchaind -f'"
     echo ""
     echo "  # Check sync status"
-    echo "  curl http://$REMOTE_HOST:26657/status | jq .result.sync_info"
+    echo "  ssh $REMOTE_USER@$REMOTE_HOST 'curl -s localhost:26657/status | jq .result.sync_info'"
     echo ""
     echo "  # Stop node"
     echo "  ssh $REMOTE_USER@$REMOTE_HOST 'systemctl stop pokerchaind'"
@@ -495,8 +574,10 @@ show_summary() {
     echo "  # Restart node"
     echo "  ssh $REMOTE_USER@$REMOTE_HOST 'systemctl restart pokerchaind'"
     echo ""
-    echo -e "${YELLOW}Note: Initial sync may take some time.${NC}"
-    echo -e "${YELLOW}Watch for 'catching_up: false' in the sync status.${NC}"
+    echo -e "${YELLOW}Important Notes:${NC}"
+    echo -e "${YELLOW}• Initial sync will take time - syncing from block 1${NC}"
+    echo -e "${YELLOW}• Watch for 'catching_up: false' in the sync status${NC}"
+    echo -e "${YELLOW}• Monitor with: journalctl -u pokerchaind -f${NC}"
     echo ""
 }
 

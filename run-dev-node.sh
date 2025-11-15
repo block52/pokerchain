@@ -12,7 +12,7 @@ CHAIN_ID="pokerchain"
 NODE_HOME="${HOME}/.pokerchain-dev"
 MONIKER="dev-node-$(hostname)"
 SYNC_NODE="node1.block52.xyz"
-SYNC_NODE_RPC="https://node1.block52.xyz/rpc"
+SYNC_NODE_RPC="http://node1.block52.xyz:26657"
 REBUILD=false
 RUN_PVM=false
 PVM_TEMP_DIR="/tmp/poker-vm-dev"
@@ -585,22 +585,25 @@ start_node() {
 # Check if user wants to run PVM
 prompt_pvm() {
     echo ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}Execution Layer (PVM) Setup${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}Execution Layer (PVM) Setup${NC}"
     echo ""
     echo "Do you want to run the PVM (Poker Virtual Machine) execution layer?"
     echo ""
     echo "  1) Chain only (default)"
-    echo "  2) Chain + PVM (requires Docker)"
+    echo "  2) Chain + PVM Execution Layer (requires Docker)"
+    echo "  3) Cancel and exit"
     echo ""
-    read -p "Choose option [1-2, default: 1]: " PVM_CHOICE
+    read -p "Choose option [1-3, default: 1]: " PVM_CHOICE
     PVM_CHOICE=${PVM_CHOICE:-1}
     
     if [ "$PVM_CHOICE" = "2" ]; then
         RUN_PVM=true
         echo ""
         echo -e "${GREEN}✓${NC} Will run chain + PVM"
+    elif [ "$PVM_CHOICE" = "3" ]; then
+        echo ""
+        echo "Setup cancelled."
+        exit 0
     else
         echo ""
         echo -e "${GREEN}✓${NC} Will run chain only"
