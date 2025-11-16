@@ -125,19 +125,23 @@ echo "Cleaned $BUILD_DIR and $RELEASE_DIR directories"
 echo ""
 
 # Build all binaries
-echo -e "${GREEN}Step 2: Building binaries for all platforms${NC}"
-if ! make build-all; then
-    echo -e "${RED}Error: Build failed${NC}"
-    exit 1
-fi
+echo -e "${GREEN}Step 2: Building binaries (Linux AMD64 and macOS ARM64)${NC}"
+
+# Build Linux AMD64
+echo "Building Linux AMD64..."
+GOOS=linux GOARCH=amd64 go build -o "$BUILD_DIR/${APPNAME}d-linux-amd64" ./cmd/${APPNAME}d
+
+# Build macOS ARM64
+echo "Building macOS ARM64..."
+GOOS=darwin GOARCH=arm64 go build -o "$BUILD_DIR/${APPNAME}d-darwin-arm64" ./cmd/${APPNAME}d
+
+echo "Build complete"
 echo ""
 
 # Verify binaries were created
 echo -e "${GREEN}Step 3: Verifying binaries${NC}"
 BINARIES=(
     "${APPNAME}d-linux-amd64"
-    "${APPNAME}d-linux-arm64"
-    "${APPNAME}d-darwin-amd64"
     "${APPNAME}d-darwin-arm64"
 )
 
