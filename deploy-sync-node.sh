@@ -574,6 +574,83 @@ EOF
     fi
 }
 
+# Configure bridge settings in app.toml
+configure_bridge() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}Configuring Bridge Settings${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    local alchemy_url=""
+    local contract_addr="0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"
+    local usdc_addr="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    
+    # Check for .env file
+    if [ -f ".env" ]; then
+        echo "Found .env file, reading ALCHEMY_URL..."
+        alchemy_url=$(grep "^ALCHEMY_URL=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        if [ -n "$alchemy_url" ]; then
+            echo -e "${GREEN}✓${NC} Using ALCHEMY_URL from .env: ${alchemy_url:0:50}..."
+        fi
+    fi
+    
+    # Prompt if not found
+    if [ -z "$alchemy_url" ]; then
+        echo -e "${YELLOW}⚠ No ALCHEMY_URL found in .env file${NC}"
+        echo ""
+        echo "Enter Base/Ethereum RPC URL (Alchemy recommended):"
+        echo "Example: https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+        echo ""
+        read -p "RPC URL (or press Enter to skip bridge configuration): " alchemy_url
+        
+        if [ -z "$alchemy_url" ]; then
+            echo -e "${YELLOW}⚠${NC} Skipping bridge configuration"
+            echo "You can configure it later by editing ~/.pokerchain/config/app.toml on the remote node"
+            return 0
+        fi
+    fi
+    
+    echo ""
+    echo "Bridge Configuration:"
+    echo "  RPC URL: ${alchemy_url:0:60}..."
+    echo "  Deposit Contract: $contract_addr"
+    echo "  USDC Contract: $usdc_addr"
+    echo ""
+    
+    read -p "Apply this bridge configuration? (y/n): " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Skipping bridge configuration"
+        return 0
+    fi
+    
+    echo "Updating bridge configuration in app.toml..."
+    
+    # Escape special characters for sed
+    local escaped_url=$(echo "$alchemy_url" | sed 's/[&/\]/\\&/g')
+    
+    ssh "$REMOTE_USER@$REMOTE_HOST" "
+        # Update ethereum_rpc_url in app.toml
+        if grep -q 'ethereum_rpc_url' $NODE_HOME/config/app.toml; then
+            sed -i.bak 's|ethereum_rpc_url = .*|ethereum_rpc_url = \"$escaped_url\"|' $NODE_HOME/config/app.toml
+            echo 'Updated ethereum_rpc_url in app.toml'
+        else
+            echo 'Warning: ethereum_rpc_url not found in app.toml'
+        fi
+        
+        # Ensure bridge is enabled
+        if grep -q 'enabled = false' $NODE_HOME/config/app.toml; then
+            sed -i 's/enabled = false/enabled = true/' $NODE_HOME/config/app.toml
+        fi
+        
+        # Clean up backup
+        rm -f $NODE_HOME/config/app.toml.bak
+    "
+    
+    echo -e "${GREEN}✓${NC} Bridge configuration updated"
+}
+
 # Setup systemd service
 setup_systemd() {
     echo ""
@@ -781,6 +858,7 @@ main() {
     initialize_node
     download_genesis
     configure_node
+    configure_bridge
     
     # Setup infrastructure
     setup_systemd
