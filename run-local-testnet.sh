@@ -96,10 +96,92 @@ check_binary() {
 # Initialize testnet
 init_testnet() {
     print_header
-    echo -e "${BLUE}Initializing single-node testnet...${NC}"
+    echo -e "${BLUE}Local Testnet Initialization${NC}"
     echo ""
-    echo -e "${YELLOW}Note: This sets up 1 validator node (Node 1)${NC}"
-    echo -e "${YELLOW}Node 2 and 3 slots are reserved but not initialized${NC}"
+
+    # Ask how many nodes
+    echo "How many nodes do you want to run?"
+    echo ""
+    echo -e "${GREEN}1)${NC} Single Node (fast, perfect for most testing including withdrawals)"
+    echo -e "${GREEN}2)${NC} 3 Nodes (multi-validator consensus testing)"
+    echo ""
+    read -p "Enter choice [1-2]: " node_count_choice
+
+    local num_nodes=1
+    if [ "$node_count_choice" = "2" ]; then
+        num_nodes=3
+    fi
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Ask which genesis method
+    echo "Which genesis method do you want to use?"
+    echo ""
+    echo -e "${GREEN}1)${NC} config.yml Method (Ignite - fast, easy, development)"
+    echo "   • Uses config.yml for genesis accounts"
+    echo "   • Faster setup (~5 seconds)"
+    echo "   • Good for rapid iteration"
+    echo ""
+    echo -e "${GREEN}2)${NC} CLI Commands Method (Production-like - catches production bugs)"
+    echo "   • Uses 'pokerchaind genesis' commands"
+    echo "   • Same as production deployment"
+    echo "   • Better for pre-production testing"
+    echo "   • Recommended for withdrawal testing"
+    echo ""
+    read -p "Enter choice [1-2]: " genesis_method_choice
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    if [ "$genesis_method_choice" = "1" ]; then
+        echo -e "${BLUE}Using config.yml (Ignite) method...${NC}"
+        init_testnet_with_config_yml $num_nodes
+    else
+        echo -e "${BLUE}Using production CLI commands method...${NC}"
+        init_testnet_with_cli $num_nodes
+    fi
+}
+
+# Initialize using config.yml (ignite method)
+init_testnet_with_config_yml() {
+    local num_nodes=$1
+
+    echo ""
+    echo -e "${YELLOW}⚠️  Note: This method uses Ignite CLI with config.yml${NC}"
+    echo -e "${YELLOW}   Make sure config.yml has your bridge validator key configured!${NC}"
+    echo ""
+    read -p "Press Enter to continue..."
+
+    # Clean old data
+    if [ -d "$BASE_DIR" ]; then
+        echo -e "${YELLOW}⚠️  Existing testnet data found at $BASE_DIR${NC}"
+        read -p "Delete and recreate? (y/n): " confirm
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+            echo "Removing old data..."
+            rm -rf "$BASE_DIR"
+        else
+            echo "Cancelled."
+            return
+        fi
+    fi
+
+    echo ""
+    echo -e "${RED}❌ Sorry, config.yml method not yet fully implemented for local testnet${NC}"
+    echo -e "${YELLOW}   For now, please use CLI method (option 2)${NC}"
+    echo -e "${YELLOW}   OR run: ignite chain serve --reset-once${NC}"
+    echo ""
+    read -p "Press Enter to continue..."
+}
+
+# Initialize using CLI commands (production method)
+init_testnet_with_cli() {
+    local num_nodes=$1
+
+    echo ""
+    echo -e "${YELLOW}Setting up $num_nodes node(s) using production CLI commands...${NC}"
     echo ""
 
     # Clean old data
@@ -111,7 +193,7 @@ init_testnet() {
             rm -rf "$BASE_DIR"
         else
             echo "Cancelled."
-            exit 0
+            return
         fi
     fi
 
@@ -132,10 +214,10 @@ init_testnet() {
     # Get the validator address
     local validator_addr=$(pokerchaind keys show validator -a --keyring-backend test --home "$node1_dir")
 
-    # Add genesis account with funds
+    # Add genesis account with funds (including USDC for withdrawal testing!)
     echo ""
-    echo "Adding genesis account with 1000000000000stake..."
-    pokerchaind genesis add-genesis-account "$validator_addr" 1000000000000stake --home "$node1_dir"
+    echo "Adding genesis account with funds..."
+    pokerchaind genesis add-genesis-account "$validator_addr" 1000000000000stake,1000000000usdc --home "$node1_dir"
 
     # Generate genesis transaction
     echo "Creating genesis transaction..."
@@ -153,8 +235,69 @@ init_testnet() {
     pokerchaind genesis validate --home "$node1_dir"
 
     echo ""
-    echo -e "${GREEN}✅ Node 1 initialized!${NC}"
+    echo -e "${GREEN}✅ Node 1 initialized with production-style genesis!${NC}"
     echo ""
+
+    # Ask if user wants to import bridge state
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo -e "${YELLOW}🌉 Import Bridge State from Previous Chain?${NC}"
+    echo ""
+    echo "If you have withdrawal records from a previous chain that you want to preserve,"
+    echo "you can paste the bridge state JSON here (from http://localhost:5173/genesis)."
+    echo ""
+    read -p "Import bridge state? (y/n): " import_bridge
+
+    if [[ "$import_bridge" =~ ^[Yy]$ ]]; then
+        echo ""
+        echo -e "${BLUE}📋 Paste your bridge state JSON below, then press Ctrl+D:${NC}"
+        echo ""
+
+        # Read multi-line JSON input
+        bridge_state_json=$(cat)
+
+        if [ -n "$bridge_state_json" ]; then
+            local genesis_file="$node1_dir/config/genesis.json"
+            local genesis_backup="$node1_dir/config/genesis.json.backup"
+
+            # Backup genesis
+            cp "$genesis_file" "$genesis_backup"
+
+            echo ""
+            echo "Injecting bridge state into genesis..."
+
+            # Use jq to merge bridge state into poker module
+            jq --argjson bridge "$bridge_state_json" \
+                '.app_state.poker.withdrawal_requests = $bridge.withdrawal_requests' \
+                "$genesis_file" > "$genesis_file.tmp"
+
+            if [ $? -eq 0 ]; then
+                mv "$genesis_file.tmp" "$genesis_file"
+
+                # Validate genesis again
+                echo "Validating genesis with bridge state..."
+                if pokerchaind genesis validate --home "$node1_dir" 2>&1 | grep -q "successfully"; then
+                    echo -e "${GREEN}✅ Bridge state imported successfully!${NC}"
+                    echo ""
+                    echo "Imported withdrawals: $(echo "$bridge_state_json" | jq '.withdrawal_requests | length')"
+                    rm -f "$genesis_backup"
+                else
+                    echo -e "${RED}❌ Genesis validation failed after import!${NC}"
+                    echo "Restoring original genesis..."
+                    mv "$genesis_backup" "$genesis_file"
+                fi
+            else
+                echo -e "${RED}❌ Failed to parse JSON. Keeping original genesis.${NC}"
+                rm -f "$genesis_file.tmp"
+            fi
+        else
+            echo -e "${YELLOW}⚠️  No JSON provided, skipping bridge state import${NC}"
+        fi
+
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+    fi
 
     # Configure Node 1 settings
     local node_dir="$(get_node_dir 1)"

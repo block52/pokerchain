@@ -65,3 +65,13 @@ default_denom: b52Token
 validators:
     - name: alice
       bonded: 5000000000000b52Token
+bridge:
+    enabled: true
+    ethereum_rpc_url: "https://mainnet.base.org"  # Base Chain RPC URL
+    deposit_contract_address: "0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"  # Your CosmosBridge contract on Base
+    usdc_contract_address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"  # USDC on Base Chain
+    polling_interval_seconds: 15
+    starting_block: 0
+    validator_eth_private_key: "bd78d63f1c1441e73e8b3e33263a0357b2673daf43eb52a75431da6ca413aae8"  # PASTE YOUR BRIDGE OWNER PRIVATE KEY HERE (64 hex chars, NO 0x prefix)
+                                   # Example: "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+                                   # ⚠️ KEEP THIS SECRET! This key signs withdrawals on Base Chain

@@ -228,12 +228,17 @@ func New(
 		"deposit_contract", bridgeConfig.DepositContractAddress,
 	)
 
-	// Set bridge config on poker keeper for MsgMint verification
+	// Set bridge config on poker keeper for MsgMint verification and withdrawal signing
 	app.PokerKeeper.SetBridgeConfig(
 		bridgeConfig.EthereumRPCURL,
 		bridgeConfig.DepositContractAddress,
+		bridgeConfig.ValidatorEthPrivateKey,
 	)
-	logger.Info("✅ Bridge config set on poker keeper for deposit verification")
+	if bridgeConfig.ValidatorEthPrivateKey != "" {
+		logger.Info("✅ Bridge config set with validator signing key - automatic withdrawal signing ENABLED")
+	} else {
+		logger.Info("✅ Bridge config set for deposit verification - automatic withdrawal signing DISABLED (use MsgSignWithdrawal)")
+	}
 
 	// NOTE: Auto-sync bridge service removed (migrated to manual index-based processing)
 	// Deposits are now processed via MsgProcessDeposit transactions submitted by users/relayers
@@ -281,6 +286,11 @@ func loadBridgeConfig(appOpts servertypes.AppOptions) BridgeConfig {
 			bridgeConfig.StartingBlock = uint64(val)
 		} else if val, ok := startBlock.(float64); ok {
 			bridgeConfig.StartingBlock = uint64(val)
+		}
+	}
+	if validatorKey := appOpts.Get("bridge.validator_eth_private_key"); validatorKey != nil {
+		if val, ok := validatorKey.(string); ok {
+			bridgeConfig.ValidatorEthPrivateKey = val
 		}
 	}
 

@@ -7,6 +7,18 @@ import "pokerchain/poker/v1/params.proto";
 
 option go_package = "github.com/block52/pokerchain/x/poker/types";
 
+// WithdrawalRequest represents a pending withdrawal from Cosmos to Base chain.
+message WithdrawalRequest {
+  string nonce = 1;              // Unique withdrawal nonce (used as ID and for Base contract)
+  string cosmos_address = 2;     // Cosmos address of the user who initiated withdrawal
+  string base_address = 3;       // Base/Ethereum address to receive USDC
+  uint64 amount = 4;             // Amount in USDC microunits (6 decimals)
+  string status = 5;             // Status: "pending", "signed", "completed"
+  bytes signature = 6;           // Validator signature (empty until signed in EndBlocker)
+  int64 created_at = 7;          // Block time when withdrawal was created
+  int64 completed_at = 8;        // Block time when withdrawal was completed on Base (0 if not completed)
+}
+
 // GenesisState defines the poker module's genesis state.
 message GenesisState {
   // params defines all the parameters of the module.
@@ -14,4 +26,13 @@ message GenesisState {
     (gogoproto.nullable) = false,
     (amino.dont_omitempty) = true
   ];
+
+  // Bridge state - processed Ethereum transaction hashes (prevents double-minting)
+  repeated string processed_eth_txs = 2;
+
+  // Withdrawal requests - pending and completed withdrawals
+  repeated WithdrawalRequest withdrawal_requests = 3;
+
+  // Withdrawal nonce counter - increments for each new withdrawal
+  uint64 withdrawal_nonce = 4;
 }
