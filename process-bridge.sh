@@ -2,6 +2,28 @@
 
 # Bridge Deposit Processor
 # Fetches deposit data from Base CosmosBridge contract by index and submits mint transaction to Pokerchain
+#
+# IMPORTANT NOTES:
+# ================
+# 1. This script connects to the remote validator (node1.block52.xyz) via SSH to submit transactions
+# 2. The validator must have the 'b52' key in its keyring-test with funds to pay for gas
+# 3. The b52 key corresponds to the validator operator account: b521hu5fcly62xa5g0lsftwu5fetugjt0lk2cjy4at
+# 4. Keyring files are located in production/node0/keyring-test/ and should be synced to the validator
+# 5. The script queries Base blockchain via Alchemy RPC (requires ALCHEMY_URL in .env)
+# 6. The on-chain keeper must be configured with Base RPC access to verify deposits
+#
+# SETUP REQUIREMENTS:
+# ===================
+# - .env file with ALCHEMY_URL for Base blockchain queries
+# - SSH access to validator node (root@node1.block52.xyz)
+# - b52 key installed in validator's keyring-test with sufficient stake for gas
+# - On-chain bridge keeper configured with Ethereum RPC endpoint
+#
+# USAGE:
+# ======
+# ./process-bridge.sh <deposit_index> [--from b52]
+# 
+# The --from flag defaults to 'b52' if not specified
 
 set -e
 
@@ -22,6 +44,7 @@ VALIDATOR_USER="${VALIDATOR_USER:-root}"
 CHAIN_ID="pokerchain"
 GAS="300000"
 GAS_PRICES="0.001stake"
+DEFAULT_FROM_KEY="b52"  # Default key to use for transactions (has funds on validator)
 
 # Event signature for Deposited(string indexed account, uint256 amount, uint256 index)
 # keccak256("Deposited(string,uint256,uint256)") = 0x46008385c8bcecb546cb0a96e5b409f34ac1a8ece8f3ea98488282519372bdf2
@@ -103,7 +126,7 @@ query_deposit_by_index() {
     local deposit_index="$1"
     local debug="${2:-false}"
     
-    echo -e "${BLUE}Querying deposit index ${deposit_index} from contract...${NC}"
+    echo -e "${BLUE}Querying deposit index ${deposit_index} from contract...${NC}" >&2
     
     # Function signature for deposits(uint256): keccak256("deposits(uint256)") = 0xb02c43d0
     local function_sig="0xb02c43d0"
@@ -116,14 +139,14 @@ query_deposit_by_index() {
     local call_data="${function_sig}${padded_index}"
     
     if [ "$debug" = "true" ]; then
-        echo ""
-        echo "Debug Info:"
-        echo "  RPC URL: $ALCHEMY_URL"
-        echo "  Contract: $CONTRACT_ADDRESS"
-        echo "  Function: deposits(uint256)"
-        echo "  Deposit Index: $deposit_index"
-        echo "  Call Data: $call_data"
-        echo ""
+        echo "" >&2
+        echo "Debug Info:" >&2
+        echo "  RPC URL: $ALCHEMY_URL" >&2
+        echo "  Contract: $CONTRACT_ADDRESS" >&2
+        echo "  Function: deposits(uint256)" >&2
+        echo "  Deposit Index: $deposit_index" >&2
+        echo "  Call Data: $call_data" >&2
+        echo "" >&2
     fi
     
     # Query the contract
@@ -141,35 +164,35 @@ EOF
 )
     
     if [ "$debug" = "true" ]; then
-        echo "Request payload:"
-        echo "$payload" | jq '.'
-        echo ""
+        echo "Request payload:" >&2
+        echo "$payload" | jq '.' >&2
+        echo "" >&2
     fi
     
-    echo "Fetching deposit data from Base..."
+    echo "Fetching deposit data from Base..." >&2
     local response=$(curl -s -X POST "$ALCHEMY_URL" \
         -H "Content-Type: application/json" \
         -d "$payload")
     
     if [ "$debug" = "true" ]; then
-        echo ""
-        echo "Raw response:"
-        echo "$response" | jq '.' 2>/dev/null || echo "$response"
-        echo ""
+        echo "" >&2
+        echo "Raw response:" >&2
+        echo "$response" | jq '.' 2>/dev/null >&2 || echo "$response" >&2
+        echo "" >&2
     fi
     
     # Check if response is valid
     if [ -z "$response" ]; then
-        echo -e "${RED}❌ No response from Alchemy RPC${NC}"
+        echo -e "${RED}❌ No response from Alchemy RPC${NC}" >&2
         return 1
     fi
     
     # Check for JSON-RPC error
     local error=$(echo "$response" | jq -r '.error.message // empty' 2>/dev/null)
     if [ -n "$error" ]; then
-        echo -e "${RED}❌ RPC Error: $error${NC}"
+        echo -e "${RED}❌ RPC Error: $error${NC}" >&2
         if [ "$debug" = "true" ]; then
-            echo "$response" | jq '.error'
+            echo "$response" | jq '.error' >&2
         fi
         return 1
     fi
@@ -177,7 +200,7 @@ EOF
     # Get the result
     local result=$(echo "$response" | jq -r '.result' 2>/dev/null)
     if [ "$result" = "null" ] || [ -z "$result" ] || [ "$result" = "0x" ]; then
-        echo -e "${RED}❌ Deposit index $deposit_index not found${NC}"
+        echo -e "${RED}❌ Deposit index $deposit_index not found${NC}" >&2
         return 1
     fi
     
@@ -512,7 +535,7 @@ set -e
 
 echo "Submitting mint transaction..."
 
-$cmd
+$cmd --keyring-backend=test
 
 echo ""
 echo "Transaction submitted!"
@@ -768,9 +791,9 @@ main() {
             fi
             from_address=$(eval $keys_cmd | jq -r '.[0].address' 2>/dev/null || echo "")
         else
-            # Try to get the first key from the remote validator
+            # Try to get the first key from the remote validator (using test keyring backend)
             from_address=$(ssh "$VALIDATOR_USER@$VALIDATOR_HOST" \
-                "pokerchaind keys list --output json 2>/dev/null | jq -r '.[0].address' 2>/dev/null" || echo "")
+                "pokerchaind keys list --keyring-backend=test --output json 2>/dev/null | jq -r '.[0].address' 2>/dev/null" || echo "")
         fi
         
         if [ -z "$from_address" ] || [ "$from_address" = "null" ]; then

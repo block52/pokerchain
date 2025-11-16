@@ -82,8 +82,8 @@ show_menu() {
     echo "   - Ready for SSH deployment"
     echo "   - Connects to existing network"
     echo ""
-    echo -e "${GREEN}9)${NC} Push New Binary Version"
-    echo "   Check remote version/hash, push new binary from ./build via SSH"
+    echo -e "${GREEN}9)${NC} Update Node Binary"
+    echo "   Update binary on remote server (from local build or GitHub release)"
     echo "   - Compare local and remote binary versions"
     echo "   - Safely replace binary on remote server"
     echo "   - Option to restart service if needed"
@@ -471,7 +471,7 @@ setup_production_nodes() {
 push_new_binary_version() {
     print_header
     echo ""
-    echo "📦 Push New Binary Version to Remote Node"
+    echo "📦 Update Node Binary"
     echo ""
     
     read -p "Remote host (e.g., node1.block52.xyz or 192.168.1.100): " remote_host
@@ -498,88 +498,268 @@ push_new_binary_version() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Checking Local Binary...${NC}"
+    echo -e "${BLUE}Choose Update Method${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
-    local_bin_path="./build/pokerchaind"
-    if [ ! -f "$local_bin_path" ]; then
-        echo -e "${YELLOW}❌ Local binary not found in ./build${NC}"
-        echo ""
-        echo "Please build the binary first:"
-        echo "  make build"
-        read -p "Press Enter to continue..."
-        return
-    fi
-    
-    local_version=$("$local_bin_path" version 2>/dev/null)
-    local_hash=$(sha256sum "$local_bin_path" | awk '{print $1}')
-    
-    echo "Local binary version: $local_version"
-    echo "Local binary sha256:  $local_hash"
-    
     echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
-    if [ "$local_hash" = "$remote_hash" ]; then
-        echo -e "${GREEN}✅ Remote binary is up to date (hashes match)${NC}"
-        read -p "Press Enter to continue..."
-        return
-    fi
-    
-    echo -e "${YELLOW}⚠️  Remote binary differs from local version${NC}"
-    echo ""
-    echo "Would you like to:"
-    echo "  1) Push local binary to remote and replace"
-    echo "  2) Push and restart pokerchaind service"
+    echo "  1) Push from local build (./build directory)"
+    echo "  2) Download directly on remote from GitHub release"
     echo "  3) Cancel"
     echo ""
-    read -p "Enter choice [1-3]: " push_choice
+    read -p "Enter choice [1-3]: " binary_source_choice
     
-    case $push_choice in
+    local_bin_path=""
+    new_hash=""
+    
+    case $binary_source_choice in
         1)
+            # Use local build
             echo ""
-            echo "Pushing binary to remote..."
-            scp "$local_bin_path" "$remote_user@$remote_host:/tmp/pokerchaind.new" || {
+            echo "Using local binary..."
+            local_bin_path="./build/pokerchaind"
+            
+            if [ ! -f "$local_bin_path" ]; then
+                echo -e "${YELLOW}❌ Local binary not found in ./build${NC}"
+                echo ""
+                echo "Please build the binary first:"
+                echo "  make build"
+                read -p "Press Enter to continue..."
+                return
+            fi
+            
+            local_version=$("$local_bin_path" version 2>/dev/null)
+            local_hash=$(sha256sum "$local_bin_path" | awk '{print $1}')
+            
+            echo "Local binary version: $local_version"
+            echo "Local binary sha256:  $local_hash"
+            
+            if [ "$local_hash" = "$remote_hash" ]; then
+                echo ""
+                echo -e "${GREEN}✅ Remote binary is already up to date (hashes match)${NC}"
+                read -p "Press Enter to continue..."
+                return
+            fi
+            
+            echo ""
+            echo "Uploading binary to remote..."
+            if ! scp "$local_bin_path" "$remote_user@$remote_host:/tmp/pokerchaind.new"; then
                 echo -e "${YELLOW}❌ Failed to copy binary${NC}"
                 read -p "Press Enter to continue..."
                 return
-            }
+            fi
             
-            ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind.new $remote_bin_path && sudo chmod +x $remote_bin_path" || {
+            echo -e "${GREEN}✓${NC} Binary uploaded"
+            new_hash="$local_hash"
+            ;;
+            
+        2)
+            # Download on remote from GitHub
+            echo ""
+            read -p "Enter release tag (e.g., v0.1.4) or press Enter for latest: " release_tag
+            if [ -z "$release_tag" ]; then
+                release_tag="latest"
+                echo "Using latest release"
+            else
+                echo "Using release: $release_tag"
+            fi
+            
+            echo ""
+            echo "Detecting remote architecture..."
+            remote_arch=$(ssh "$remote_user@$remote_host" 'uname -m')
+            remote_os=$(ssh "$remote_user@$remote_host" 'uname -s' | tr '[:upper:]' '[:lower:]')
+            
+            case "$remote_arch" in
+                x86_64)
+                    remote_arch="amd64"
+                    ;;
+                aarch64|arm64)
+                    remote_arch="arm64"
+                    ;;
+                *)
+                    echo -e "${YELLOW}❌ Unsupported architecture: $remote_arch${NC}"
+                    read -p "Press Enter to continue..."
+                    return
+                    ;;
+            esac
+            
+            echo "Remote: ${remote_os}/${remote_arch}"
+            
+            # Get actual release tag if using latest
+            if [ "$release_tag" = "latest" ]; then
+                echo ""
+                echo "Getting latest release information..."
+                release_tag=$(curl -s "https://api.github.com/repos/block52/pokerchain/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+                
+                if [ -z "$release_tag" ]; then
+                    echo -e "${YELLOW}❌ Could not determine latest release${NC}"
+                    read -p "Press Enter to continue..."
+                    return
+                fi
+                
+                echo "Latest release: $release_tag"
+            fi
+            
+            local binary_name="pokerchaind-${remote_os}-${remote_arch}"
+            local archive_name="${binary_name}-${release_tag}.tar.gz"
+            local download_url="https://github.com/block52/pokerchain/releases/download/${release_tag}/${archive_name}"
+            local checksum_url="https://github.com/block52/pokerchain/releases/download/${release_tag}/${archive_name}.sha256"
+            
+            echo ""
+            echo "Downloading on remote server..."
+            echo "URL: $download_url"
+            
+            # Download and extract on remote
+            ssh "$remote_user@$remote_host" bash <<EOF
+set -e
+
+# Create temp directory
+TEMP_DIR=\$(mktemp -d)
+cd "\$TEMP_DIR"
+
+# Download archive
+echo "Downloading binary archive..."
+if ! curl -L -f -o "$archive_name" "$download_url"; then
+    echo "Failed to download binary"
+    rm -rf "\$TEMP_DIR"
+    exit 1
+fi
+
+echo "Downloaded $archive_name"
+
+# Download checksum if available
+echo "Downloading checksum..."
+if curl -L -f -o "${archive_name}.sha256" "$checksum_url" 2>/dev/null; then
+    echo "Downloaded checksum"
+    
+    # Verify checksum
+    echo "Verifying checksum..."
+    expected_hash=\$(cat "${archive_name}.sha256")
+    actual_hash=\$(sha256sum "$archive_name" | awk '{print \$1}')
+    
+    if [ "\$expected_hash" = "\$actual_hash" ]; then
+        echo "✓ Checksum verified"
+    else
+        echo "❌ Checksum mismatch!"
+        echo "  Expected: \$expected_hash"
+        echo "  Actual:   \$actual_hash"
+        rm -rf "\$TEMP_DIR"
+        exit 1
+    fi
+else
+    echo "⚠ Checksum not available, skipping verification"
+fi
+
+# Extract binary
+echo "Extracting binary..."
+if ! tar -xzf "$archive_name"; then
+    echo "Failed to extract archive"
+    rm -rf "\$TEMP_DIR"
+    exit 1
+fi
+
+if [ ! -f "$binary_name" ]; then
+    echo "Binary not found in archive"
+    ls -la
+    rm -rf "\$TEMP_DIR"
+    exit 1
+fi
+
+echo "✓ Extracted binary"
+
+# Move to /tmp for installation
+mv "$binary_name" /tmp/pokerchaind.new
+chmod +x /tmp/pokerchaind.new
+
+# Calculate hash
+NEW_HASH=\$(sha256sum /tmp/pokerchaind.new | awk '{print \$1}')
+echo "NEW_HASH:\$NEW_HASH"
+
+# Cleanup
+cd /
+rm -rf "\$TEMP_DIR"
+EOF
+            
+            if [ $? -ne 0 ]; then
+                echo -e "${YELLOW}❌ Failed to download on remote${NC}"
+                read -p "Press Enter to continue..."
+                return
+            fi
+            
+            # Extract the new hash from the output
+            new_hash=$(ssh "$remote_user@$remote_host" "sha256sum /tmp/pokerchaind.new 2>/dev/null | awk '{print \$1}'")
+            
+            if [ -z "$new_hash" ]; then
+                echo -e "${YELLOW}❌ Failed to get new binary hash${NC}"
+                read -p "Press Enter to continue..."
+                return
+            fi
+            
+            echo ""
+            echo "Downloaded binary sha256: $new_hash"
+            
+            if [ "$new_hash" = "$remote_hash" ]; then
+                echo ""
+                echo -e "${GREEN}✅ Remote binary is already up to date (hashes match)${NC}"
+                ssh "$remote_user@$remote_host" "rm -f /tmp/pokerchaind.new"
+                read -p "Press Enter to continue..."
+                return
+            fi
+            ;;
+            
+        *)
+            echo "Update cancelled."
+            read -p "Press Enter to continue..."
+            return
+            ;;
+    esac
+    
+    # Now ask what to do with the new binary
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}After Download - Choose Action${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "  1) Replace binary only"
+    echo "  2) Replace binary and restart service"
+    echo "  3) Cancel"
+    echo ""
+    read -p "Enter choice [1-3]: " action_choice
+    
+    case $action_choice in
+        1)
+            echo ""
+            echo "Replacing binary on remote..."
+            
+            if ! ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind.new $remote_bin_path && sudo chmod +x $remote_bin_path"; then
                 echo -e "${YELLOW}❌ Failed to replace binary${NC}"
                 read -p "Press Enter to continue..."
                 return
-            }
+            fi
             
             echo -e "${GREEN}✅ Binary updated on remote${NC}"
             echo ""
             echo "⚠️  Remember to restart pokerchaind service manually:"
             echo "  ssh $remote_user@$remote_host 'sudo systemctl restart pokerchaind'"
             ;;
+            
         2)
             echo ""
-            echo "Pushing binary to remote..."
-            scp "$local_bin_path" "$remote_user@$remote_host:/tmp/pokerchaind.new" || {
-                echo -e "${YELLOW}❌ Failed to copy binary${NC}"
-                read -p "Press Enter to continue..."
-                return
-            }
+            echo "Replacing binary on remote..."
             
-            ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind.new $remote_bin_path && sudo chmod +x $remote_bin_path" || {
+            if ! ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind.new $remote_bin_path && sudo chmod +x $remote_bin_path"; then
                 echo -e "${YELLOW}❌ Failed to replace binary${NC}"
                 read -p "Press Enter to continue..."
                 return
-            }
+            fi
             
             echo -e "${GREEN}✅ Binary updated on remote${NC}"
             echo ""
             echo "Restarting pokerchaind service..."
             
-            ssh "$remote_user@$remote_host" "sudo systemctl restart pokerchaind" || {
+            if ! ssh "$remote_user@$remote_host" "sudo systemctl restart pokerchaind"; then
                 echo -e "${YELLOW}❌ Failed to restart service${NC}"
                 read -p "Press Enter to continue..."
                 return
-            }
+            fi
             
             echo -e "${GREEN}✅ Service restarted${NC}"
             echo ""
@@ -587,8 +767,12 @@ push_new_binary_version() {
             sleep 2
             ssh "$remote_user@$remote_host" "sudo systemctl status pokerchaind --no-pager | head -20"
             ;;
+            
         *)
-            echo "Push cancelled."
+            echo "Update cancelled."
+            echo ""
+            echo "Cleaning up temporary files on remote..."
+            ssh "$remote_user@$remote_host" "rm -f /tmp/pokerchaind.new"
             ;;
     esac
     

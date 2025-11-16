@@ -10,6 +10,7 @@
 # - Configures correct peer ID from live node
 # - Uses block sync (state sync disabled as snapshots not available)
 # - Verifies binary hash before uploading to avoid unnecessary transfers
+# - Option to use local binary or download from GitHub releases
 
 set -e
 
@@ -19,6 +20,8 @@ CHAIN_ID="pokerchain"
 NODE_HOME="$HOME/.pokerchain"
 SYNC_NODE="node1.block52.xyz"
 SYNC_NODE_RPC="http://node1.block52.xyz:26657"
+GITHUB_REPO="block52/pokerchain"
+BINARY_SOURCE=""  # Will be set to "local" or "github"
 
 # Colors
 RED='\033[0;31m'
@@ -40,6 +43,36 @@ fi
 
 REMOTE_HOST="$1"
 REMOTE_USER="${2:-root}"
+
+# Ask user for binary source
+echo ""
+echo -e "${CYAN}Binary Source Options:${NC}"
+echo "  1) Use local build (from ./build directory)"
+echo "  2) Download from GitHub release"
+echo ""
+read -p "Choose binary source (1 or 2): " -n 1 -r
+echo ""
+
+if [[ $REPLY =~ ^[1]$ ]]; then
+    BINARY_SOURCE="local"
+    echo -e "${GREEN}✓${NC} Will use local binary"
+elif [[ $REPLY =~ ^[2]$ ]]; then
+    BINARY_SOURCE="github"
+    echo -e "${GREEN}✓${NC} Will download from GitHub release"
+    
+    # Ask for version/tag
+    echo ""
+    read -p "Enter release tag (e.g., v0.1.4) or press Enter for latest: " RELEASE_TAG
+    if [ -z "$RELEASE_TAG" ]; then
+        RELEASE_TAG="latest"
+        echo "Using latest release"
+    else
+        echo "Using release: $RELEASE_TAG"
+    fi
+else
+    echo -e "${RED}Invalid choice. Please select 1 or 2.${NC}"
+    exit 1
+fi
 
 # Print header
 print_header() {
@@ -99,10 +132,14 @@ detect_remote_arch() {
         x86_64)
             TARGET_ARCH="amd64"
             BUILD_TARGET="linux-amd64"
+            REMOTE_OS="linux"
+            REMOTE_ARCH="amd64"
             ;;
         aarch64|arm64)
             TARGET_ARCH="arm64"
             BUILD_TARGET="linux-arm64"
+            REMOTE_OS="linux"
+            REMOTE_ARCH="arm64"
             ;;
         *)
             echo -e "${RED}❌ Unsupported architecture: $arch${NC}"
@@ -110,11 +147,113 @@ detect_remote_arch() {
             ;;
     esac
     
-    echo -e "${GREEN}✓${NC} Target: linux/$TARGET_ARCH"
+    echo -e "${GREEN}✓${NC} Target: ${REMOTE_OS}/${REMOTE_ARCH} (build: $BUILD_TARGET)"
 }
 
-# Build binary for target architecture
-build_binary() {
+# Download binary from GitHub releases
+download_from_github() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}Downloading Binary from GitHub${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    # Determine the binary name based on remote architecture
+    local BINARY_NAME="${CHAIN_BINARY}d-${REMOTE_OS}-${REMOTE_ARCH}"
+    local ARCHIVE_NAME="${BINARY_NAME}-${RELEASE_TAG}.tar.gz"
+    
+    if [ "$RELEASE_TAG" = "latest" ]; then
+        echo "Getting latest release information..."
+        
+        # Get latest release tag
+        RELEASE_TAG=$(curl -s "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        
+        if [ -z "$RELEASE_TAG" ]; then
+            echo -e "${RED}❌ Could not determine latest release${NC}"
+            exit 1
+        fi
+        
+        echo -e "${GREEN}✓${NC} Latest release: $RELEASE_TAG"
+        ARCHIVE_NAME="${BINARY_NAME}-${RELEASE_TAG}.tar.gz"
+    fi
+    
+    local DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${RELEASE_TAG}/${ARCHIVE_NAME}"
+    local CHECKSUM_URL="https://github.com/${GITHUB_REPO}/releases/download/${RELEASE_TAG}/${ARCHIVE_NAME}.sha256"
+    local TEMP_DIR="/tmp/pokerchain-download-$$"
+    
+    echo "Downloading from: $DOWNLOAD_URL"
+    
+    # Create temp directory
+    mkdir -p "$TEMP_DIR"
+    cd "$TEMP_DIR"
+    
+    # Download archive
+    echo ""
+    echo "Downloading binary archive..."
+    if ! curl -L -f -o "$ARCHIVE_NAME" "$DOWNLOAD_URL"; then
+        echo -e "${RED}❌ Failed to download binary${NC}"
+        echo "URL: $DOWNLOAD_URL"
+        rm -rf "$TEMP_DIR"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✓${NC} Downloaded $ARCHIVE_NAME"
+    
+    # Download checksum
+    echo ""
+    echo "Downloading checksum..."
+    if curl -L -f -o "${ARCHIVE_NAME}.sha256" "$CHECKSUM_URL" 2>/dev/null; then
+        echo -e "${GREEN}✓${NC} Downloaded checksum"
+        
+        # Verify checksum
+        echo ""
+        echo "Verifying checksum..."
+        EXPECTED_HASH=$(cat "${ARCHIVE_NAME}.sha256")
+        ACTUAL_HASH=$(sha256sum "$ARCHIVE_NAME" | awk '{print $1}')
+        
+        if [ "$EXPECTED_HASH" = "$ACTUAL_HASH" ]; then
+            echo -e "${GREEN}✓${NC} Checksum verified"
+        else
+            echo -e "${RED}❌ Checksum mismatch!${NC}"
+            echo "  Expected: $EXPECTED_HASH"
+            echo "  Actual:   $ACTUAL_HASH"
+            rm -rf "$TEMP_DIR"
+            exit 1
+        fi
+    else
+        echo -e "${YELLOW}⚠ Checksum not available, skipping verification${NC}"
+    fi
+    
+    # Extract binary
+    echo ""
+    echo "Extracting binary..."
+    if ! tar -xzf "$ARCHIVE_NAME"; then
+        echo -e "${RED}❌ Failed to extract archive${NC}"
+        rm -rf "$TEMP_DIR"
+        exit 1
+    fi
+    
+    if [ ! -f "$BINARY_NAME" ]; then
+        echo -e "${RED}❌ Binary not found in archive${NC}"
+        ls -la
+        rm -rf "$TEMP_DIR"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✓${NC} Extracted binary: $BINARY_NAME"
+    
+    # Set the local binary path to the downloaded file
+    LOCAL_BINARY="$TEMP_DIR/$BINARY_NAME"
+    
+    # Make executable
+    chmod +x "$LOCAL_BINARY"
+    
+    echo ""
+    echo -e "${GREEN}✓${NC} Binary ready: $LOCAL_BINARY"
+}
+
+# Build local binary
+build_local_binary() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}Building Binary for $BUILD_TARGET${NC}"
@@ -603,6 +742,23 @@ show_summary() {
     echo ""
 }
 
+# Cleanup function
+cleanup() {
+    # Clean up temp directory if it was created for GitHub download
+    if [ "$BINARY_SOURCE" = "github" ] && [ -n "$LOCAL_BINARY" ] && [[ "$LOCAL_BINARY" == /tmp/pokerchain-download-* ]]; then
+        local TEMP_DIR=$(dirname "$LOCAL_BINARY")
+        if [ -d "$TEMP_DIR" ]; then
+            echo ""
+            echo "Cleaning up temporary files..."
+            rm -rf "$TEMP_DIR"
+            echo -e "${GREEN}✓${NC} Cleaned up $TEMP_DIR"
+        fi
+    fi
+}
+
+# Set trap for cleanup
+trap cleanup EXIT
+
 # Main function
 main() {
     print_header
@@ -611,8 +767,14 @@ main() {
     check_ssh
     detect_remote_arch
     
-    # Build and deploy
-    build_binary
+    # Get binary (either build locally or download from GitHub)
+    if [ "$BINARY_SOURCE" = "local" ]; then
+        build_local_binary
+    else
+        download_from_github
+    fi
+    
+    # Deploy binary
     upload_binary
     
     # Initialize and configure

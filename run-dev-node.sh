@@ -92,259 +92,82 @@ check_binary() {
         return 0
     fi
 
-    # Detect system architecture
-    # macOS: uname -s returns "Darwin", uname -m returns "arm64" or "x86_64"
-    # Linux: uname -s returns "Linux", uname -m returns "aarch64", "x86_64", etc.
-    local OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-    local ARCH=$(uname -m)
-    
-    # Normalize architecture names
-    case $ARCH in
-        x86_64|amd64)
-            ARCH="amd64"
-            ;;
-        aarch64|arm64)
-            ARCH="arm64"
-            ;;
-    esac
-    
-    echo "Local system: $OS/$ARCH"
-    
-    # Get remote system info
-    echo "Checking remote node architecture..."
-    local REMOTE_ARCH=$(ssh root@node1.block52.xyz 'uname -m' 2>/dev/null || echo "unknown")
-    local REMOTE_OS=$(ssh root@node1.block52.xyz 'uname -s | tr "[:upper:]" "[:lower:]"' 2>/dev/null || echo "unknown")
-    
-    # Normalize remote architecture
-    case $REMOTE_ARCH in
-        x86_64|amd64)
-            REMOTE_ARCH="amd64"
-            ;;
-        aarch64|arm64)
-            REMOTE_ARCH="arm64"
-            ;;
-    esac
-    
-    if [ "$REMOTE_OS" != "unknown" ]; then
-        echo "Remote system: $REMOTE_OS/$REMOTE_ARCH"
-    else
-        echo -e "${YELLOW}⚠ Could not detect remote system (continuing anyway)${NC}"
-    fi
-    
-    # Check if architectures match
-    local ARCH_MATCH=false
-    if [ "$OS" = "$REMOTE_OS" ] && [ "$ARCH" = "$REMOTE_ARCH" ]; then
-        ARCH_MATCH=true
-        echo -e "${GREEN}✓${NC} Local and remote architectures match!"
-    elif [ "$REMOTE_OS" != "unknown" ]; then
-        echo -e "${YELLOW}⚠ Architecture mismatch detected!${NC}"
-        echo "  Local:  $OS/$ARCH"
-        echo "  Remote: $REMOTE_OS/$REMOTE_ARCH"
-        echo ""
-        echo -e "${YELLOW}  Remote binary will NOT work on your system${NC}"
-    fi
-    echo ""
-
-    # Check for binary in build directory
-    if [ -f "build/pokerchaind" ]; then
-        CHAIN_BINARY="./build/pokerchaind"
-        echo -e "${GREEN}✓${NC} Found binary: $CHAIN_BINARY"
-        
-        # Show binary info
-        local version=$($CHAIN_BINARY version 2>/dev/null || echo "unknown")
-        echo "  Version: $version"
-        
-        if command -v file &> /dev/null; then
-            local file_info=$(file $CHAIN_BINARY)
-            echo "  Type: $file_info"
-        fi
-        
-        # Compare hash to remote binary if architectures match
-        if [ "$ARCH_MATCH" = true ]; then
-            echo ""
-            echo "Comparing with remote binary..."
-            LOCAL_HASH=$(shasum -a 256 build/pokerchaind 2>/dev/null | awk '{print $1}' || sha256sum build/pokerchaind 2>/dev/null | awk '{print $1}')
-            REMOTE_HASH=$(ssh root@node1.block52.xyz 'sha256sum /usr/local/bin/pokerchaind' 2>/dev/null | awk '{print $1}')
-            
-            echo "  Local:  $LOCAL_HASH"
-            echo "  Remote: $REMOTE_HASH"
-            
-            if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
-                echo ""
-                echo -e "${YELLOW}⚠ Binary hashes don't match!${NC}"
-                echo ""
-                echo "Options:"
-                echo "  1) Download remote binary (recommended - ensures compatibility)"
-                echo "  2) Keep local binary (may cause sync issues if different version)"
-                echo "  3) Build new binary locally"
-                echo "  4) Cancel"
-                echo ""
-                read -p "Choose option [1-4]: " BINARY_CHOICE
-                
-                case $BINARY_CHOICE in
-                    1)
-                        echo ""
-                        echo "Downloading remote binary..."
-                        mkdir -p build
-                        scp root@node1.block52.xyz:/usr/local/bin/pokerchaind ./build/pokerchaind
-                        chmod +x ./build/pokerchaind
-                        echo -e "${GREEN}✓${NC} Downloaded remote binary to ./build/pokerchaind"
-                        ;;
-                    2)
-                        echo ""
-                        echo -e "${YELLOW}Keeping local binary (this may cause AppHash mismatches)${NC}"
-                        ;;
-                    3)
-                        build_binary
-                        ;;
-                    4)
-                        echo "Cancelled"
-                        exit 0
-                        ;;
-                    *)
-                        echo "Invalid choice. Keeping local binary."
-                        ;;
-                esac
-            else
-                echo -e "${GREEN}✓${NC} Hashes match - binary is up to date!"
-                echo ""
-                echo "Options:"
-                echo "  1) Use existing binary (recommended - already up to date)"
-                echo "  2) Rebuild anyway"
-                echo "  3) Cancel"
-                echo ""
-                read -p "Choose option [1-3, default: 1]: " MATCH_BINARY_CHOICE
-                MATCH_BINARY_CHOICE=${MATCH_BINARY_CHOICE:-1}
-                
-                case $MATCH_BINARY_CHOICE in
-                    1)
-                        echo -e "${GREEN}✓${NC} Using existing binary"
-                        ;;
-                    2)
-                        build_binary
-                        ;;
-                    3)
-                        echo "Cancelled"
-                        exit 0
-                        ;;
-                    *)
-                        echo "Invalid choice. Using existing binary."
-                        ;;
-                esac
-            fi
-        else
-            # Architecture mismatch - only offer to use local or rebuild
-            echo ""
-            echo -e "${YELLOW}⚠ Cannot compare with remote (architecture mismatch)${NC}"
-            echo ""
-            echo "Options:"
-            echo "  1) Use existing local binary (built for $OS/$ARCH)"
-            echo "  2) Rebuild for your system ($OS/$ARCH)"
-            echo "  3) Cancel"
-            echo ""
-            read -p "Choose option [1-3]: " LOCAL_BINARY_CHOICE
-            
-            case $LOCAL_BINARY_CHOICE in
-                1)
-                    echo ""
-                    echo -e "${GREEN}✓${NC} Using existing binary: $CHAIN_BINARY"
-                    ;;
-                2)
-                    build_binary
-                    ;;
-                3)
-                    echo "Cancelled"
-                    exit 0
-                    ;;
-                *)
-                    echo "Invalid choice. Using existing binary."
-                    ;;
-            esac
-        fi
-        
+    # Check if binary exists locally
+    if [ ! -f "build/pokerchaind" ]; then
+        echo "No binary found in ./build directory"
+        echo "Building binary with make..."
+        build_binary
         return 0
     fi
 
-    # Check if in PATH
-    if command -v pokerchaind &> /dev/null; then
-        CHAIN_BINARY="pokerchaind"
-        echo -e "${GREEN}✓${NC} Found binary in PATH: $(which pokerchaind)"
-        $CHAIN_BINARY version 2>/dev/null || echo "Version: unknown"
-        echo ""
-        echo -e "${YELLOW}Note: Using system binary. For best results, use ./build/pokerchaind${NC}"
-        echo ""
-        echo "Options:"
-        echo "  1) Use system binary"
-        echo "  2) Build local binary for your system ($OS/$ARCH)"
-        echo "  3) Cancel"
-        echo ""
-        read -p "Choose option [1-3]: " PATH_BINARY_CHOICE
-        
-        case $PATH_BINARY_CHOICE in
-            1)
-                echo -e "${GREEN}✓${NC} Using system binary"
-                return 0
-                ;;
-            2)
-                build_binary
-                return 0
-                ;;
-            3)
-                echo "Cancelled"
-                exit 0
-                ;;
-            *)
-                echo "Using system binary"
-                return 0
-                ;;
-        esac
+    # Binary exists - show local info
+    CHAIN_BINARY="./build/pokerchaind"
+    echo -e "${GREEN}✓${NC} Found local binary: $CHAIN_BINARY"
+    
+    local_version=$($CHAIN_BINARY version 2>/dev/null || echo "unknown")
+    local_hash=$(shasum -a 256 build/pokerchaind 2>/dev/null | awk '{print $1}' || sha256sum build/pokerchaind 2>/dev/null | awk '{print $1}')
+    
+    echo "  Local Version: $local_version"
+    echo "  Local Hash:    $local_hash"
+    
+    # Get remote node info
+    echo ""
+    echo "Checking node1.block52.xyz..."
+    
+    remote_version=$(ssh root@node1.block52.xyz '/usr/local/bin/pokerchaind version' 2>/dev/null || echo "unknown")
+    remote_hash=$(ssh root@node1.block52.xyz 'sha256sum /usr/local/bin/pokerchaind' 2>/dev/null | awk '{print $1}')
+    
+    if [ -z "$remote_hash" ] || [ "$remote_hash" = "" ]; then
+        echo -e "${YELLOW}⚠ Could not get remote binary info${NC}"
+        echo "Using local binary"
+        return 0
     fi
-
-    # Binary not found - offer options
-    echo -e "${YELLOW}⚠ No pokerchaind binary found${NC}"
+    
+    echo "  Remote Version: $remote_version"
+    echo "  Remote Hash:    $remote_hash"
+    
+    # Compare hashes
+    if [ "$local_hash" = "$remote_hash" ]; then
+        echo ""
+        echo -e "${GREEN}✓${NC} Local binary matches node1.block52.xyz - good to go!"
+        return 0
+    fi
+    
+    # Hashes don't match - ask user
+    echo ""
+    echo -e "${YELLOW}⚠ Local binary differs from node1.block52.xyz${NC}"
     echo ""
     echo "Options:"
-    echo "  1) Download from remote node (only works if architectures match)"
-    echo "  2) Build locally for your system ($OS/$ARCH)"
-    echo "  3) Cancel"
+    echo "  1) Download binary from node1.block52.xyz (recommended for compatibility)"
+    echo "  2) Use local binary (may cause sync issues if incompatible)"
     echo ""
-    read -p "Choose option [1-3]: " BINARY_OPTION
-
-    case $BINARY_OPTION in
+    read -p "Choose option [1-2]: " BINARY_CHOICE
+    
+    case $BINARY_CHOICE in
         1)
-            if [ "$ARCH_MATCH" = false ] && [ "$REMOTE_OS" != "unknown" ]; then
-                echo ""
-                echo -e "${RED}❌ Cannot download: Architecture mismatch!${NC}"
-                echo "  Your system: $OS/$ARCH"
-                echo "  Remote:      $REMOTE_OS/$REMOTE_ARCH"
-                echo ""
-                echo "You must build locally. Try option 2."
-                sleep 3
-                check_binary  # Recurse to show menu again
-                return
-            fi
-            
             echo ""
-            echo "Downloading binary from remote node..."
+            echo "Downloading binary from node1.block52.xyz..."
             mkdir -p build
-            scp root@node1.block52.xyz:/usr/local/bin/pokerchaind ./build/pokerchaind || {
-                echo -e "${RED}❌ Download failed${NC}"
-                exit 1
-            }
-            chmod +x ./build/pokerchaind
-            CHAIN_BINARY="./build/pokerchaind"
-            echo -e "${GREEN}✓${NC} Downloaded binary successfully"
+            if scp root@node1.block52.xyz:/usr/local/bin/pokerchaind ./build/pokerchaind; then
+                chmod +x ./build/pokerchaind
+                echo -e "${GREEN}✓${NC} Downloaded binary to ./build/pokerchaind"
+                
+                # Verify
+                new_version=$(./build/pokerchaind version 2>/dev/null || echo "unknown")
+                echo "  Version: $new_version"
+            else
+                echo -e "${RED}❌ Failed to download binary${NC}"
+                echo "Using local binary"
+            fi
             ;;
         2)
-            build_binary
-            ;;
-        3)
-            echo "Cancelled"
-            exit 0
+            echo ""
+            echo -e "${YELLOW}Using local binary${NC}"
+            echo -e "${YELLOW}Note: This may cause AppHash mismatches if versions are incompatible${NC}"
             ;;
         *)
-            echo "Invalid option"
-            exit 1
+            echo ""
+            echo -e "${YELLOW}Invalid choice, using local binary${NC}"
             ;;
     esac
 }
