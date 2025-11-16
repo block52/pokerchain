@@ -53,9 +53,9 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 	}
 
 	// Bridge configuration - these will be set from app.toml via app.go
-	// Default values provided here, actual values set in app.go after depinject
-	ethRPCURL := "https://base.llamarpc.com"
-	depositContractAddr := "0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"
+	// Empty defaults - MUST be configured in app.toml for bridge to work
+	ethRPCURL := ""
+	depositContractAddr := ""
 
 	k := keeper.NewKeeper(
 		in.StoreService,

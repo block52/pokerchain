@@ -240,6 +240,90 @@ deploy_config() {
     echo -e "${GREEN}✅ Configuration deployed successfully${NC}"
 }
 
+# Configure bridge settings in app.toml
+configure_bridge() {
+    local remote_host=$1
+    local remote_user=$2
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 5: Configuring Bridge Settings${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    local alchemy_url=""
+    local contract_addr="0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"
+    local usdc_addr="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    
+    # Check for .env file
+    if [ -f ".env" ]; then
+        echo "Found .env file, reading ALCHEMY_URL..."
+        alchemy_url=$(grep "^ALCHEMY_URL=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        if [ -n "$alchemy_url" ]; then
+            echo -e "${GREEN}✓ Using ALCHEMY_URL from .env: ${alchemy_url:0:50}...${NC}"
+        fi
+    fi
+    
+    # Prompt if not found
+    if [ -z "$alchemy_url" ]; then
+        echo -e "${YELLOW}⚠️  No ALCHEMY_URL found in .env file${NC}"
+        echo ""
+        echo "Enter Base/Ethereum RPC URL (Alchemy recommended):"
+        echo "Example: https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+        echo ""
+        read -p "RPC URL (or press Enter to skip bridge configuration): " alchemy_url
+        
+        if [ -z "$alchemy_url" ]; then
+            echo -e "${YELLOW}⚠️  Skipping bridge configuration${NC}"
+            echo "You can configure it later by editing ~/.pokerchain/config/app.toml on the remote node"
+            return 0
+        fi
+    fi
+    
+    echo ""
+    echo "Bridge Configuration:"
+    echo "  RPC URL: ${alchemy_url:0:60}..."
+    echo "  Deposit Contract: $contract_addr"
+    echo "  USDC Contract: $usdc_addr"
+    echo ""
+    
+    read -p "Apply this bridge configuration? (y/n): " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo "Skipping bridge configuration"
+        return 0
+    fi
+    
+    echo "Adding bridge configuration to app.toml..."
+    ssh "$remote_user@$remote_host" "cat >> ~/.pokerchain/config/app.toml << 'EOFBRIDGE'
+
+###############################################################################
+###                          Bridge Configuration                           ###
+###############################################################################
+
+[bridge]
+# Enable the bridge deposit verification
+enabled = true
+
+# Ethereum/Base RPC URL for verifying deposits
+ethereum_rpc_url = \"$alchemy_url\"
+
+# CosmosBridge deposit contract address on Base
+deposit_contract_address = \"$contract_addr\"
+
+# USDC contract address (Base mainnet)
+usdc_contract_address = \"$usdc_addr\"
+
+# Polling interval in seconds
+polling_interval_seconds = 60
+
+# Starting block number (0 = use recent blocks)
+starting_block = 0
+EOFBRIDGE
+"
+    
+    echo -e "${GREEN}✅ Bridge configuration added to app.toml${NC}"
+}
+
 # Setup firewall
 setup_firewall() {
     local remote_host=$1
@@ -549,6 +633,7 @@ main() {
     build_binary
     deploy_binary "$remote_host" "$remote_user"
     deploy_config "$node_num" "$remote_host" "$remote_user"
+    configure_bridge "$remote_host" "$remote_user"
     verify_file_hashes "$node_num" "$remote_host" "$remote_user"
     setup_firewall "$remote_host" "$remote_user"
     setup_systemd "$remote_host" "$remote_user"

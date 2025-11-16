@@ -783,30 +783,10 @@ main() {
         echo ""
         echo -e "${BLUE}Getting validator address...${NC}"
         
-        if [ "$local_mode" = "true" ]; then
-            # Get local keys
-            local keys_cmd="pokerchaind keys list --output json 2>/dev/null"
-            if [ -n "$home_dir" ]; then
-                keys_cmd="$keys_cmd --home '$home_dir'"
-            fi
-            from_address=$(eval $keys_cmd | jq -r '.[0].address' 2>/dev/null || echo "")
-        else
-            # Try to get the first key from the remote validator (using test keyring backend)
-            from_address=$(ssh "$VALIDATOR_USER@$VALIDATOR_HOST" \
-                "pokerchaind keys list --keyring-backend=test --output json 2>/dev/null | jq -r '.[0].address' 2>/dev/null" || echo "")
-        fi
+        # Default to b52 key first
+        from_address="$DEFAULT_FROM_KEY"
+        echo -e "${GREEN}✓ Using default key: $from_address (b521hu5fcly62xa5g0lsftwu5fetugjt0lk2cjy4at)${NC}"
         
-        if [ -z "$from_address" ] || [ "$from_address" = "null" ]; then
-            echo -e "${YELLOW}⚠️  Could not auto-detect validator address${NC}"
-            echo ""
-            read -p "Enter Cosmos address to submit from: " from_address
-            if [ -z "$from_address" ]; then
-                echo -e "${RED}❌ From address required${NC}"
-                exit 1
-            fi
-        else
-            echo -e "${GREEN}✓ Using validator address: $from_address${NC}"
-        fi
     fi
     
     echo ""

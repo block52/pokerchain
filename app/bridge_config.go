@@ -25,10 +25,10 @@ type BridgeConfig struct {
 func DefaultBridgeConfig() BridgeConfig {
 	return BridgeConfig{
 		Enabled:                false,                                        // Disabled by default
-		EthereumRPCURL:         "https://eth.llamarpc.com",                   // Free public RPC
-		DepositContractAddress: "",                                           // Must be set in config
-		USDCContractAddress:    "0xA0b86a33E6d3D24fDbCBFe003eDa2E26A6E73a60", // Mainnet USDC
-		PollingIntervalSeconds: 15,
+		EthereumRPCURL:         "",                                           // MUST be set in app.toml
+		DepositContractAddress: "0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B", // Base mainnet deposit contract
+		USDCContractAddress:    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base mainnet USDC
+		PollingIntervalSeconds: 60,
 		StartingBlock:          0, // Will use latest block - 10 if 0
 	}
 }
