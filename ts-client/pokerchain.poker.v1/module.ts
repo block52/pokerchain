@@ -15,10 +15,13 @@ import { MsgPerformAction } from "./types/pokerchain/poker/v1/tx";
 import { MsgMint } from "./types/pokerchain/poker/v1/tx";
 import { MsgBurn } from "./types/pokerchain/poker/v1/tx";
 import { MsgProcessDeposit } from "./types/pokerchain/poker/v1/tx";
+import { MsgInitiateWithdrawal } from "./types/pokerchain/poker/v1/tx";
+import { MsgSignWithdrawal } from "./types/pokerchain/poker/v1/tx";
 
+import { WithdrawalRequest as typeWithdrawalRequest} from "./types"
 import { Params as typeParams} from "./types"
 
-export { MsgUpdateParams, MsgCreateGame, MsgJoinGame, MsgLeaveGame, MsgDealCards, MsgPerformAction, MsgMint, MsgBurn, MsgProcessDeposit };
+export { MsgUpdateParams, MsgCreateGame, MsgJoinGame, MsgLeaveGame, MsgDealCards, MsgPerformAction, MsgMint, MsgBurn, MsgProcessDeposit, MsgInitiateWithdrawal, MsgSignWithdrawal };
 
 type sendMsgUpdateParamsParams = {
   value: MsgUpdateParams,
@@ -74,6 +77,18 @@ type sendMsgProcessDepositParams = {
   memo?: string
 };
 
+type sendMsgInitiateWithdrawalParams = {
+  value: MsgInitiateWithdrawal,
+  fee?: StdFee,
+  memo?: string
+};
+
+type sendMsgSignWithdrawalParams = {
+  value: MsgSignWithdrawal,
+  fee?: StdFee,
+  memo?: string
+};
+
 
 type msgUpdateParamsParams = {
   value: MsgUpdateParams,
@@ -109,6 +124,14 @@ type msgBurnParams = {
 
 type msgProcessDepositParams = {
   value: MsgProcessDeposit,
+};
+
+type msgInitiateWithdrawalParams = {
+  value: MsgInitiateWithdrawal,
+};
+
+type msgSignWithdrawalParams = {
+  value: MsgSignWithdrawal,
 };
 
 
@@ -267,6 +290,34 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 			}
 		},
 		
+		async sendMsgInitiateWithdrawal({ value, fee, memo }: sendMsgInitiateWithdrawalParams): Promise<DeliverTxResponse> {
+			if (!signer) {
+					throw new Error('TxClient:sendMsgInitiateWithdrawal: Unable to sign Tx. Signer is not present.')
+			}
+			try {			
+				const { address } = (await signer.getAccounts())[0]; 
+				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry});
+				let msg = this.msgInitiateWithdrawal({ value: MsgInitiateWithdrawal.fromPartial(value) })
+				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
+			} catch (e: any) {
+				throw new Error('TxClient:sendMsgInitiateWithdrawal: Could not broadcast Tx: '+ e.message)
+			}
+		},
+		
+		async sendMsgSignWithdrawal({ value, fee, memo }: sendMsgSignWithdrawalParams): Promise<DeliverTxResponse> {
+			if (!signer) {
+					throw new Error('TxClient:sendMsgSignWithdrawal: Unable to sign Tx. Signer is not present.')
+			}
+			try {			
+				const { address } = (await signer.getAccounts())[0]; 
+				const signingClient = await SigningStargateClient.connectWithSigner(addr,signer,{registry});
+				let msg = this.msgSignWithdrawal({ value: MsgSignWithdrawal.fromPartial(value) })
+				return await signingClient.signAndBroadcast(address, [msg], fee ? fee : defaultFee, memo)
+			} catch (e: any) {
+				throw new Error('TxClient:sendMsgSignWithdrawal: Could not broadcast Tx: '+ e.message)
+			}
+		},
+		
 		
 		msgUpdateParams({ value }: msgUpdateParamsParams): EncodeObject {
 			try {
@@ -340,6 +391,22 @@ export const txClient = ({ signer, prefix, addr }: TxClientOptions = { addr: "ht
 			}
 		},
 		
+		msgInitiateWithdrawal({ value }: msgInitiateWithdrawalParams): EncodeObject {
+			try {
+				return { typeUrl: "/pokerchain.poker.v1.MsgInitiateWithdrawal", value: MsgInitiateWithdrawal.fromPartial( value ) }  
+			} catch (e: any) {
+				throw new Error('TxClient:MsgInitiateWithdrawal: Could not create message: ' + e.message)
+			}
+		},
+		
+		msgSignWithdrawal({ value }: msgSignWithdrawalParams): EncodeObject {
+			try {
+				return { typeUrl: "/pokerchain.poker.v1.MsgSignWithdrawal", value: MsgSignWithdrawal.fromPartial( value ) }  
+			} catch (e: any) {
+				throw new Error('TxClient:MsgSignWithdrawal: Could not create message: ' + e.message)
+			}
+		},
+		
 	}
 };
 
@@ -362,6 +429,7 @@ class SDKModule {
 		this.query = queryClient({ addr: client.env.apiURL });		
 		this.updateTX(client);
 		this.structure =  {
+						WithdrawalRequest: getStructure(typeWithdrawalRequest.fromPartial({})),
 						Params: getStructure(typeParams.fromPartial({})),
 						
 		};

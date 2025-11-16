@@ -127,6 +127,45 @@ export interface MsgProcessDepositResponse {
   depositIndex: Long;
 }
 
+/**
+ * MsgInitiateWithdrawal defines the MsgInitiateWithdrawal message.
+ * Initiates a withdrawal by burning USDC on Cosmos and creating a withdrawal request
+ * that can be completed on Base chain with a validator signature.
+ */
+export interface MsgInitiateWithdrawal {
+  creator: string;
+  /** Amount of USDC to withdraw (in microunits, 6 decimals) */
+  amount: Long;
+  /** Ethereum/Base address to receive USDC (0x...) */
+  baseAddress: string;
+}
+
+/** MsgInitiateWithdrawalResponse defines the MsgInitiateWithdrawalResponse message. */
+export interface MsgInitiateWithdrawalResponse {
+  /** Unique withdrawal nonce for tracking and completing on Base */
+  nonce: string;
+}
+
+/**
+ * MsgSignWithdrawal defines the MsgSignWithdrawal message.
+ * Allows validators to manually sign pending withdrawal requests.
+ * The signer must provide their Ethereum private key to generate the signature.
+ */
+export interface MsgSignWithdrawal {
+  /** Validator address */
+  signer: string;
+  /** Withdrawal nonce to sign */
+  nonce: string;
+  /** Validator's Ethereum private key (hex format, 64 chars without 0x prefix) */
+  validatorEthKeyHex: string;
+}
+
+/** MsgSignWithdrawalResponse defines the MsgSignWithdrawalResponse message. */
+export interface MsgSignWithdrawalResponse {
+  /** The generated Ethereum signature (65 bytes) */
+  signature: Uint8Array;
+}
+
 function createBaseMsgUpdateParams(): MsgUpdateParams {
   return { authority: "", params: undefined };
 }
@@ -1525,6 +1564,310 @@ export const MsgProcessDepositResponse: MessageFns<MsgProcessDepositResponse> = 
   },
 };
 
+function createBaseMsgInitiateWithdrawal(): MsgInitiateWithdrawal {
+  return { creator: "", amount: Long.UZERO, baseAddress: "" };
+}
+
+export const MsgInitiateWithdrawal: MessageFns<MsgInitiateWithdrawal> = {
+  encode(message: MsgInitiateWithdrawal, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.creator !== "") {
+      writer.uint32(10).string(message.creator);
+    }
+    if (!message.amount.equals(Long.UZERO)) {
+      writer.uint32(16).uint64(message.amount.toString());
+    }
+    if (message.baseAddress !== "") {
+      writer.uint32(26).string(message.baseAddress);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MsgInitiateWithdrawal {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMsgInitiateWithdrawal();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.creator = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.amount = Long.fromString(reader.uint64().toString(), true);
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.baseAddress = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): MsgInitiateWithdrawal {
+    return {
+      creator: isSet(object.creator) ? globalThis.String(object.creator) : "",
+      amount: isSet(object.amount) ? Long.fromValue(object.amount) : Long.UZERO,
+      baseAddress: isSet(object.baseAddress) ? globalThis.String(object.baseAddress) : "",
+    };
+  },
+
+  toJSON(message: MsgInitiateWithdrawal): unknown {
+    const obj: any = {};
+    if (message.creator !== "") {
+      obj.creator = message.creator;
+    }
+    if (!message.amount.equals(Long.UZERO)) {
+      obj.amount = (message.amount || Long.UZERO).toString();
+    }
+    if (message.baseAddress !== "") {
+      obj.baseAddress = message.baseAddress;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<MsgInitiateWithdrawal>, I>>(base?: I): MsgInitiateWithdrawal {
+    return MsgInitiateWithdrawal.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MsgInitiateWithdrawal>, I>>(object: I): MsgInitiateWithdrawal {
+    const message = createBaseMsgInitiateWithdrawal();
+    message.creator = object.creator ?? "";
+    message.amount = (object.amount !== undefined && object.amount !== null)
+      ? Long.fromValue(object.amount)
+      : Long.UZERO;
+    message.baseAddress = object.baseAddress ?? "";
+    return message;
+  },
+};
+
+function createBaseMsgInitiateWithdrawalResponse(): MsgInitiateWithdrawalResponse {
+  return { nonce: "" };
+}
+
+export const MsgInitiateWithdrawalResponse: MessageFns<MsgInitiateWithdrawalResponse> = {
+  encode(message: MsgInitiateWithdrawalResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.nonce !== "") {
+      writer.uint32(10).string(message.nonce);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MsgInitiateWithdrawalResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMsgInitiateWithdrawalResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.nonce = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): MsgInitiateWithdrawalResponse {
+    return { nonce: isSet(object.nonce) ? globalThis.String(object.nonce) : "" };
+  },
+
+  toJSON(message: MsgInitiateWithdrawalResponse): unknown {
+    const obj: any = {};
+    if (message.nonce !== "") {
+      obj.nonce = message.nonce;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<MsgInitiateWithdrawalResponse>, I>>(base?: I): MsgInitiateWithdrawalResponse {
+    return MsgInitiateWithdrawalResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MsgInitiateWithdrawalResponse>, I>>(
+    object: I,
+  ): MsgInitiateWithdrawalResponse {
+    const message = createBaseMsgInitiateWithdrawalResponse();
+    message.nonce = object.nonce ?? "";
+    return message;
+  },
+};
+
+function createBaseMsgSignWithdrawal(): MsgSignWithdrawal {
+  return { signer: "", nonce: "", validatorEthKeyHex: "" };
+}
+
+export const MsgSignWithdrawal: MessageFns<MsgSignWithdrawal> = {
+  encode(message: MsgSignWithdrawal, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.signer !== "") {
+      writer.uint32(10).string(message.signer);
+    }
+    if (message.nonce !== "") {
+      writer.uint32(18).string(message.nonce);
+    }
+    if (message.validatorEthKeyHex !== "") {
+      writer.uint32(26).string(message.validatorEthKeyHex);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MsgSignWithdrawal {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMsgSignWithdrawal();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.signer = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.nonce = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.validatorEthKeyHex = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): MsgSignWithdrawal {
+    return {
+      signer: isSet(object.signer) ? globalThis.String(object.signer) : "",
+      nonce: isSet(object.nonce) ? globalThis.String(object.nonce) : "",
+      validatorEthKeyHex: isSet(object.validatorEthKeyHex) ? globalThis.String(object.validatorEthKeyHex) : "",
+    };
+  },
+
+  toJSON(message: MsgSignWithdrawal): unknown {
+    const obj: any = {};
+    if (message.signer !== "") {
+      obj.signer = message.signer;
+    }
+    if (message.nonce !== "") {
+      obj.nonce = message.nonce;
+    }
+    if (message.validatorEthKeyHex !== "") {
+      obj.validatorEthKeyHex = message.validatorEthKeyHex;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<MsgSignWithdrawal>, I>>(base?: I): MsgSignWithdrawal {
+    return MsgSignWithdrawal.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MsgSignWithdrawal>, I>>(object: I): MsgSignWithdrawal {
+    const message = createBaseMsgSignWithdrawal();
+    message.signer = object.signer ?? "";
+    message.nonce = object.nonce ?? "";
+    message.validatorEthKeyHex = object.validatorEthKeyHex ?? "";
+    return message;
+  },
+};
+
+function createBaseMsgSignWithdrawalResponse(): MsgSignWithdrawalResponse {
+  return { signature: new Uint8Array(0) };
+}
+
+export const MsgSignWithdrawalResponse: MessageFns<MsgSignWithdrawalResponse> = {
+  encode(message: MsgSignWithdrawalResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.signature.length !== 0) {
+      writer.uint32(10).bytes(message.signature);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): MsgSignWithdrawalResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseMsgSignWithdrawalResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.signature = reader.bytes();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): MsgSignWithdrawalResponse {
+    return { signature: isSet(object.signature) ? bytesFromBase64(object.signature) : new Uint8Array(0) };
+  },
+
+  toJSON(message: MsgSignWithdrawalResponse): unknown {
+    const obj: any = {};
+    if (message.signature.length !== 0) {
+      obj.signature = base64FromBytes(message.signature);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<MsgSignWithdrawalResponse>, I>>(base?: I): MsgSignWithdrawalResponse {
+    return MsgSignWithdrawalResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<MsgSignWithdrawalResponse>, I>>(object: I): MsgSignWithdrawalResponse {
+    const message = createBaseMsgSignWithdrawalResponse();
+    message.signature = object.signature ?? new Uint8Array(0);
+    return message;
+  },
+};
+
 /** Msg defines the Msg service. */
 export interface Msg {
   /**
@@ -1551,6 +1894,16 @@ export interface Msg {
    * Processes an Ethereum deposit by querying the deposit index from the bridge contract.
    */
   ProcessDeposit(request: MsgProcessDeposit): Promise<MsgProcessDepositResponse>;
+  /**
+   * InitiateWithdrawal defines the InitiateWithdrawal RPC.
+   * Initiates a USDC withdrawal from Cosmos to Base chain.
+   */
+  InitiateWithdrawal(request: MsgInitiateWithdrawal): Promise<MsgInitiateWithdrawalResponse>;
+  /**
+   * SignWithdrawal defines the SignWithdrawal RPC.
+   * Manually signs a pending withdrawal request (for validators only).
+   */
+  SignWithdrawal(request: MsgSignWithdrawal): Promise<MsgSignWithdrawalResponse>;
 }
 
 export const MsgServiceName = "pokerchain.poker.v1.Msg";
@@ -1569,6 +1922,8 @@ export class MsgClientImpl implements Msg {
     this.Mint = this.Mint.bind(this);
     this.Burn = this.Burn.bind(this);
     this.ProcessDeposit = this.ProcessDeposit.bind(this);
+    this.InitiateWithdrawal = this.InitiateWithdrawal.bind(this);
+    this.SignWithdrawal = this.SignWithdrawal.bind(this);
   }
   UpdateParams(request: MsgUpdateParams): Promise<MsgUpdateParamsResponse> {
     const data = MsgUpdateParams.encode(request).finish();
@@ -1623,10 +1978,47 @@ export class MsgClientImpl implements Msg {
     const promise = this.rpc.request(this.service, "ProcessDeposit", data);
     return promise.then((data) => MsgProcessDepositResponse.decode(new BinaryReader(data)));
   }
+
+  InitiateWithdrawal(request: MsgInitiateWithdrawal): Promise<MsgInitiateWithdrawalResponse> {
+    const data = MsgInitiateWithdrawal.encode(request).finish();
+    const promise = this.rpc.request(this.service, "InitiateWithdrawal", data);
+    return promise.then((data) => MsgInitiateWithdrawalResponse.decode(new BinaryReader(data)));
+  }
+
+  SignWithdrawal(request: MsgSignWithdrawal): Promise<MsgSignWithdrawalResponse> {
+    const data = MsgSignWithdrawal.encode(request).finish();
+    const promise = this.rpc.request(this.service, "SignWithdrawal", data);
+    return promise.then((data) => MsgSignWithdrawalResponse.decode(new BinaryReader(data)));
+  }
 }
 
 interface Rpc {
   request(service: string, method: string, data: Uint8Array): Promise<Uint8Array>;
+}
+
+function bytesFromBase64(b64: string): Uint8Array {
+  if ((globalThis as any).Buffer) {
+    return Uint8Array.from(globalThis.Buffer.from(b64, "base64"));
+  } else {
+    const bin = globalThis.atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; ++i) {
+      arr[i] = bin.charCodeAt(i);
+    }
+    return arr;
+  }
+}
+
+function base64FromBytes(arr: Uint8Array): string {
+  if ((globalThis as any).Buffer) {
+    return globalThis.Buffer.from(arr).toString("base64");
+  } else {
+    const bin: string[] = [];
+    arr.forEach((byte) => {
+      bin.push(globalThis.String.fromCharCode(byte));
+    });
+    return globalThis.btoa(bin.join(""));
+  }
 }
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;

@@ -27,6 +27,10 @@ type Keeper struct {
 	Games collections.Map[string, types.Game]
 	// GameStates stores game state data for frontend compatibility
 	GameStates collections.Map[string, types.TexasHoldemStateDTO]
+	// WithdrawalRequests stores pending and completed withdrawal requests
+	WithdrawalRequests collections.Map[string, types.WithdrawalRequest]
+	// WithdrawalNonce is a sequence for generating unique withdrawal IDs
+	WithdrawalNonce collections.Sequence
 
 	authKeeper    types.AuthKeeper
 	bankKeeper    types.BankKeeper
@@ -34,8 +38,9 @@ type Keeper struct {
 	bridgeService *BridgeService
 
 	// Bridge configuration for Ethereum verification
-	ethRPCURL           string
-	depositContractAddr string
+	ethRPCURL              string
+	depositContractAddr    string
+	validatorEthPrivateKey string // Hex-encoded Ethereum private key for withdrawal signing (without 0x prefix)
 }
 
 func NewKeeper(
@@ -68,10 +73,12 @@ func NewKeeper(
 		stakingKeeper:       stakingKeeper,
 		ethRPCURL:           ethRPCURL,
 		depositContractAddr: depositContractAddr,
-		Params:              collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
-		ProcessedEthTxs:     collections.NewKeySet(sb, types.ProcessedEthTxsKey, "processed_eth_txs", collections.StringKey),
-		Games:               collections.NewMap(sb, types.GamesKey, "games", collections.StringKey, codec.CollValue[types.Game](cdc)),
-		GameStates:          collections.NewMap(sb, types.GameStatesKey, "game_states", collections.StringKey, codec.CollValue[types.TexasHoldemStateDTO](cdc)),
+		Params:             collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
+		ProcessedEthTxs:    collections.NewKeySet(sb, types.ProcessedEthTxsKey, "processed_eth_txs", collections.StringKey),
+		Games:              collections.NewMap(sb, types.GamesKey, "games", collections.StringKey, codec.CollValue[types.Game](cdc)),
+		GameStates:         collections.NewMap(sb, types.GameStatesKey, "game_states", collections.StringKey, codec.CollValue[types.TexasHoldemStateDTO](cdc)),
+		WithdrawalRequests: collections.NewMap(sb, types.WithdrawalRequestsKey, "withdrawal_requests", collections.StringKey, codec.CollValue[types.WithdrawalRequest](cdc)),
+		WithdrawalNonce:    collections.NewSequence(sb, types.WithdrawalNonceKey, "withdrawal_nonce"),
 	}
 
 	schema, err := sb.Build()
@@ -99,7 +106,13 @@ func (k *Keeper) GetBridgeService() *BridgeService {
 }
 
 // SetBridgeConfig updates the bridge configuration for Ethereum verification
-func (k *Keeper) SetBridgeConfig(ethRPCURL string, depositContractAddr string) {
+func (k *Keeper) SetBridgeConfig(ethRPCURL string, depositContractAddr string, validatorEthPrivateKey string) {
 	k.ethRPCURL = ethRPCURL
 	k.depositContractAddr = depositContractAddr
+	k.validatorEthPrivateKey = validatorEthPrivateKey
+}
+
+// GetValidatorEthPrivateKey returns the configured validator Ethereum private key
+func (k *Keeper) GetValidatorEthPrivateKey() string {
+	return k.validatorEthPrivateKey
 }

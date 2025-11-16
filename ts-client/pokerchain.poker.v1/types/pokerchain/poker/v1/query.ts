@@ -7,6 +7,8 @@
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import Long from "long";
+import { PageRequest, PageResponse } from "../../../cosmos/base/query/v1beta1/pagination";
+import { WithdrawalRequest } from "./genesis";
 import { Params } from "./params";
 
 export const protobufPackage = "pokerchain.poker.v1";
@@ -79,6 +81,29 @@ export interface QueryIsTxProcessedRequest {
 /** QueryIsTxProcessedResponse defines the response for checking if a tx has been processed */
 export interface QueryIsTxProcessedResponse {
   processed: boolean;
+}
+
+/** QueryGetWithdrawalRequestRequest defines the request for getting a withdrawal request */
+export interface QueryGetWithdrawalRequestRequest {
+  nonce: string;
+}
+
+/** QueryGetWithdrawalRequestResponse defines the response for getting a withdrawal request */
+export interface QueryGetWithdrawalRequestResponse {
+  withdrawalRequest?: WithdrawalRequest | undefined;
+}
+
+/** QueryListWithdrawalRequestsRequest defines the request for listing withdrawal requests */
+export interface QueryListWithdrawalRequestsRequest {
+  /** Optional: filter by cosmos address (empty = all withdrawals) */
+  cosmosAddress: string;
+  pagination?: PageRequest | undefined;
+}
+
+/** QueryListWithdrawalRequestsResponse defines the response for listing withdrawal requests */
+export interface QueryListWithdrawalRequestsResponse {
+  withdrawalRequests: WithdrawalRequest[];
+  pagination?: PageResponse | undefined;
 }
 
 function createBaseQueryParamsRequest(): QueryParamsRequest {
@@ -883,6 +908,302 @@ export const QueryIsTxProcessedResponse: MessageFns<QueryIsTxProcessedResponse> 
   },
 };
 
+function createBaseQueryGetWithdrawalRequestRequest(): QueryGetWithdrawalRequestRequest {
+  return { nonce: "" };
+}
+
+export const QueryGetWithdrawalRequestRequest: MessageFns<QueryGetWithdrawalRequestRequest> = {
+  encode(message: QueryGetWithdrawalRequestRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.nonce !== "") {
+      writer.uint32(10).string(message.nonce);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QueryGetWithdrawalRequestRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseQueryGetWithdrawalRequestRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.nonce = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryGetWithdrawalRequestRequest {
+    return { nonce: isSet(object.nonce) ? globalThis.String(object.nonce) : "" };
+  },
+
+  toJSON(message: QueryGetWithdrawalRequestRequest): unknown {
+    const obj: any = {};
+    if (message.nonce !== "") {
+      obj.nonce = message.nonce;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<QueryGetWithdrawalRequestRequest>, I>>(
+    base?: I,
+  ): QueryGetWithdrawalRequestRequest {
+    return QueryGetWithdrawalRequestRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<QueryGetWithdrawalRequestRequest>, I>>(
+    object: I,
+  ): QueryGetWithdrawalRequestRequest {
+    const message = createBaseQueryGetWithdrawalRequestRequest();
+    message.nonce = object.nonce ?? "";
+    return message;
+  },
+};
+
+function createBaseQueryGetWithdrawalRequestResponse(): QueryGetWithdrawalRequestResponse {
+  return { withdrawalRequest: undefined };
+}
+
+export const QueryGetWithdrawalRequestResponse: MessageFns<QueryGetWithdrawalRequestResponse> = {
+  encode(message: QueryGetWithdrawalRequestResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.withdrawalRequest !== undefined) {
+      WithdrawalRequest.encode(message.withdrawalRequest, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QueryGetWithdrawalRequestResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseQueryGetWithdrawalRequestResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.withdrawalRequest = WithdrawalRequest.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryGetWithdrawalRequestResponse {
+    return {
+      withdrawalRequest: isSet(object.withdrawalRequest)
+        ? WithdrawalRequest.fromJSON(object.withdrawalRequest)
+        : undefined,
+    };
+  },
+
+  toJSON(message: QueryGetWithdrawalRequestResponse): unknown {
+    const obj: any = {};
+    if (message.withdrawalRequest !== undefined) {
+      obj.withdrawalRequest = WithdrawalRequest.toJSON(message.withdrawalRequest);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<QueryGetWithdrawalRequestResponse>, I>>(
+    base?: I,
+  ): QueryGetWithdrawalRequestResponse {
+    return QueryGetWithdrawalRequestResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<QueryGetWithdrawalRequestResponse>, I>>(
+    object: I,
+  ): QueryGetWithdrawalRequestResponse {
+    const message = createBaseQueryGetWithdrawalRequestResponse();
+    message.withdrawalRequest = (object.withdrawalRequest !== undefined && object.withdrawalRequest !== null)
+      ? WithdrawalRequest.fromPartial(object.withdrawalRequest)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseQueryListWithdrawalRequestsRequest(): QueryListWithdrawalRequestsRequest {
+  return { cosmosAddress: "", pagination: undefined };
+}
+
+export const QueryListWithdrawalRequestsRequest: MessageFns<QueryListWithdrawalRequestsRequest> = {
+  encode(message: QueryListWithdrawalRequestsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.cosmosAddress !== "") {
+      writer.uint32(10).string(message.cosmosAddress);
+    }
+    if (message.pagination !== undefined) {
+      PageRequest.encode(message.pagination, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QueryListWithdrawalRequestsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseQueryListWithdrawalRequestsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.cosmosAddress = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.pagination = PageRequest.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryListWithdrawalRequestsRequest {
+    return {
+      cosmosAddress: isSet(object.cosmosAddress) ? globalThis.String(object.cosmosAddress) : "",
+      pagination: isSet(object.pagination) ? PageRequest.fromJSON(object.pagination) : undefined,
+    };
+  },
+
+  toJSON(message: QueryListWithdrawalRequestsRequest): unknown {
+    const obj: any = {};
+    if (message.cosmosAddress !== "") {
+      obj.cosmosAddress = message.cosmosAddress;
+    }
+    if (message.pagination !== undefined) {
+      obj.pagination = PageRequest.toJSON(message.pagination);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<QueryListWithdrawalRequestsRequest>, I>>(
+    base?: I,
+  ): QueryListWithdrawalRequestsRequest {
+    return QueryListWithdrawalRequestsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<QueryListWithdrawalRequestsRequest>, I>>(
+    object: I,
+  ): QueryListWithdrawalRequestsRequest {
+    const message = createBaseQueryListWithdrawalRequestsRequest();
+    message.cosmosAddress = object.cosmosAddress ?? "";
+    message.pagination = (object.pagination !== undefined && object.pagination !== null)
+      ? PageRequest.fromPartial(object.pagination)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseQueryListWithdrawalRequestsResponse(): QueryListWithdrawalRequestsResponse {
+  return { withdrawalRequests: [], pagination: undefined };
+}
+
+export const QueryListWithdrawalRequestsResponse: MessageFns<QueryListWithdrawalRequestsResponse> = {
+  encode(message: QueryListWithdrawalRequestsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.withdrawalRequests) {
+      WithdrawalRequest.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.pagination !== undefined) {
+      PageResponse.encode(message.pagination, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QueryListWithdrawalRequestsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseQueryListWithdrawalRequestsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.withdrawalRequests.push(WithdrawalRequest.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.pagination = PageResponse.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryListWithdrawalRequestsResponse {
+    return {
+      withdrawalRequests: globalThis.Array.isArray(object?.withdrawalRequests)
+        ? object.withdrawalRequests.map((e: any) => WithdrawalRequest.fromJSON(e))
+        : [],
+      pagination: isSet(object.pagination) ? PageResponse.fromJSON(object.pagination) : undefined,
+    };
+  },
+
+  toJSON(message: QueryListWithdrawalRequestsResponse): unknown {
+    const obj: any = {};
+    if (message.withdrawalRequests?.length) {
+      obj.withdrawalRequests = message.withdrawalRequests.map((e) => WithdrawalRequest.toJSON(e));
+    }
+    if (message.pagination !== undefined) {
+      obj.pagination = PageResponse.toJSON(message.pagination);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<QueryListWithdrawalRequestsResponse>, I>>(
+    base?: I,
+  ): QueryListWithdrawalRequestsResponse {
+    return QueryListWithdrawalRequestsResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<QueryListWithdrawalRequestsResponse>, I>>(
+    object: I,
+  ): QueryListWithdrawalRequestsResponse {
+    const message = createBaseQueryListWithdrawalRequestsResponse();
+    message.withdrawalRequests = object.withdrawalRequests?.map((e) => WithdrawalRequest.fromPartial(e)) || [];
+    message.pagination = (object.pagination !== undefined && object.pagination !== null)
+      ? PageResponse.fromPartial(object.pagination)
+      : undefined;
+    return message;
+  },
+};
+
 /** Query defines the gRPC querier service. */
 export interface Query {
   /** Parameters queries the parameters of the module. */
@@ -899,6 +1220,10 @@ export interface Query {
   GameState(request: QueryGameStateRequest): Promise<QueryGameStateResponse>;
   /** IsTxProcessed checks if an Ethereum transaction hash has been processed */
   IsTxProcessed(request: QueryIsTxProcessedRequest): Promise<QueryIsTxProcessedResponse>;
+  /** GetWithdrawalRequest queries a specific withdrawal request by nonce */
+  GetWithdrawalRequest(request: QueryGetWithdrawalRequestRequest): Promise<QueryGetWithdrawalRequestResponse>;
+  /** ListWithdrawalRequests queries all withdrawal requests (optionally filtered by cosmos_address) */
+  ListWithdrawalRequests(request: QueryListWithdrawalRequestsRequest): Promise<QueryListWithdrawalRequestsResponse>;
 }
 
 export const QueryServiceName = "pokerchain.poker.v1.Query";
@@ -915,6 +1240,8 @@ export class QueryClientImpl implements Query {
     this.LegalActions = this.LegalActions.bind(this);
     this.GameState = this.GameState.bind(this);
     this.IsTxProcessed = this.IsTxProcessed.bind(this);
+    this.GetWithdrawalRequest = this.GetWithdrawalRequest.bind(this);
+    this.ListWithdrawalRequests = this.ListWithdrawalRequests.bind(this);
   }
   Params(request: QueryParamsRequest): Promise<QueryParamsResponse> {
     const data = QueryParamsRequest.encode(request).finish();
@@ -956,6 +1283,18 @@ export class QueryClientImpl implements Query {
     const data = QueryIsTxProcessedRequest.encode(request).finish();
     const promise = this.rpc.request(this.service, "IsTxProcessed", data);
     return promise.then((data) => QueryIsTxProcessedResponse.decode(new BinaryReader(data)));
+  }
+
+  GetWithdrawalRequest(request: QueryGetWithdrawalRequestRequest): Promise<QueryGetWithdrawalRequestResponse> {
+    const data = QueryGetWithdrawalRequestRequest.encode(request).finish();
+    const promise = this.rpc.request(this.service, "GetWithdrawalRequest", data);
+    return promise.then((data) => QueryGetWithdrawalRequestResponse.decode(new BinaryReader(data)));
+  }
+
+  ListWithdrawalRequests(request: QueryListWithdrawalRequestsRequest): Promise<QueryListWithdrawalRequestsResponse> {
+    const data = QueryListWithdrawalRequestsRequest.encode(request).finish();
+    const promise = this.rpc.request(this.service, "ListWithdrawalRequests", data);
+    return promise.then((data) => QueryListWithdrawalRequestsResponse.decode(new BinaryReader(data)));
   }
 }
 

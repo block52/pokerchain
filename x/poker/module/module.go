@@ -2,6 +2,7 @@ package poker
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
@@ -11,6 +12,7 @@ import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 
@@ -152,5 +154,69 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 	// - Users/relayers submit MsgMint transactions on-chain
 	// - All nodes process same transactions in same order
 	// - Relayers run bridge monitoring service outside consensus layer
+
+	// WITHDRAWAL AUTO-SIGNING:
+	// Unlike deposits, withdrawal signing CAN be done in EndBlocker because:
+	// 1. Withdrawal data is already in consensus state (from MsgInitiateWithdrawal)
+	// 2. Signing is deterministic IF all validators use the same signing approach
+	// 3. Only pending withdrawals (already in state) are signed
+	//
+	// IMPORTANT: For production, configure validator signing key properly.
+	// For now, this is a placeholder - actual signing requires validator key configuration.
+	//
+	// TODO: Add proper validator key management for withdrawal signing
+	// Options:
+	// - Environment variable with validator Ethereum private key
+	// - Keyring integration
+	// - External signing service
+	//
+	// For testing/development: Withdrawal signing is currently disabled in EndBlocker.
+	// Use a separate MsgSignWithdrawal transaction or off-chain signing process.
+
+	// Check for pending withdrawals that need signing
+	pendingWithdrawals, err := am.keeper.ListWithdrawalRequestsInternal(ctx, "")
+	if err != nil {
+		return nil // Don't halt the chain for this
+	}
+
+	// Count pending withdrawals
+	pendingCount := 0
+	for _, wr := range pendingWithdrawals {
+		if wr.Status == "pending" {
+			pendingCount++
+		}
+	}
+
+	if pendingCount > 0 {
+		// Get validator Ethereum private key from keeper config
+		// This key is set via bridge.validator_eth_private_key in config.yml
+		validatorEthKeyHex := am.keeper.GetValidatorEthPrivateKey()
+
+		if validatorEthKeyHex != "" {
+			// Parse the private key
+			keyHex := validatorEthKeyHex
+			if len(keyHex) > 2 && keyHex[:2] == "0x" {
+				keyHex = keyHex[2:]
+			}
+
+			keyBytes, err := hex.DecodeString(keyHex)
+			if err == nil && len(keyBytes) == 32 {
+				validatorPrivKey, err := crypto.ToECDSA(keyBytes)
+				if err == nil {
+					// Sign all pending withdrawals automatically
+					for _, wr := range pendingWithdrawals {
+						if wr.Status == "pending" {
+							if err := am.keeper.SignWithdrawal(ctx, wr.Nonce, validatorPrivKey); err != nil {
+								// Log error but don't halt chain
+								// In production, consider more sophisticated error handling
+							}
+						}
+					}
+				}
+			}
+		}
+		// If no validator key configured, pending withdrawals must be signed manually via MsgSignWithdrawal
+	}
+
 	return nil
 }

@@ -6,6 +6,8 @@ import { QueryPlayerGamesResponse } from "./types/pokerchain/poker/v1/query";
 import { QueryLegalActionsResponse } from "./types/pokerchain/poker/v1/query";
 import { QueryGameStateResponse } from "./types/pokerchain/poker/v1/query";
 import { QueryIsTxProcessedResponse } from "./types/pokerchain/poker/v1/query";
+import { QueryGetWithdrawalRequestResponse } from "./types/pokerchain/poker/v1/query";
+import { QueryListWithdrawalRequestsResponse } from "./types/pokerchain/poker/v1/query";
 
 import { QueryParamsRequest } from "./types/pokerchain/poker/v1/query";
 import { QueryGameRequest } from "./types/pokerchain/poker/v1/query";
@@ -14,6 +16,8 @@ import { QueryPlayerGamesRequest } from "./types/pokerchain/poker/v1/query";
 import { QueryLegalActionsRequest } from "./types/pokerchain/poker/v1/query";
 import { QueryGameStateRequest } from "./types/pokerchain/poker/v1/query";
 import { QueryIsTxProcessedRequest } from "./types/pokerchain/poker/v1/query";
+import { QueryGetWithdrawalRequestRequest } from "./types/pokerchain/poker/v1/query";
+import { QueryListWithdrawalRequestsRequest } from "./types/pokerchain/poker/v1/query";
 
 
 import type {SnakeCasedPropertiesDeep} from 'type-fest';
@@ -331,6 +335,44 @@ export class Api<SecurityDataType extends unknown> extends HttpClient<SecurityDa
   ) =>
     this.request<SnakeCasedPropertiesDeep<ChangeProtoToJSPrimitives<QueryIsTxProcessedResponse>>>({
       path: `/block52/pokerchain/poker/v1/is_tx_processed/${eth_tx_hash}`,
+      method: "GET",
+      query: query,
+      format: "json",
+      ...params,
+    });
+  
+  /**
+   * QueryGetWithdrawalRequest
+   *
+   * @tags Query
+   * @name queryGetWithdrawalRequest
+   * @request GET:/block52/pokerchain/poker/v1/withdrawal_request/{nonce}
+   */
+  queryGetWithdrawalRequest = (nonce: string,
+    query?: Record<string, any>,
+    params: RequestParams = {},
+  ) =>
+    this.request<SnakeCasedPropertiesDeep<ChangeProtoToJSPrimitives<QueryGetWithdrawalRequestResponse>>>({
+      path: `/block52/pokerchain/poker/v1/withdrawal_request/${nonce}`,
+      method: "GET",
+      query: query,
+      format: "json",
+      ...params,
+    });
+  
+  /**
+   * QueryListWithdrawalRequests
+   *
+   * @tags Query
+   * @name queryListWithdrawalRequests
+   * @request GET:/block52/pokerchain/poker/v1/withdrawal_requests
+   */
+  queryListWithdrawalRequests = (
+    query?: Omit<FlattenObject<SnakeCasedPropertiesDeep<ChangeProtoToJSPrimitives<QueryListWithdrawalRequestsRequest>>>,"">,
+    params: RequestParams = {},
+  ) =>
+    this.request<SnakeCasedPropertiesDeep<ChangeProtoToJSPrimitives<QueryListWithdrawalRequestsResponse>>>({
+      path: `/block52/pokerchain/poker/v1/withdrawal_requests`,
       method: "GET",
       query: query,
       format: "json",

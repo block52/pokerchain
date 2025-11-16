@@ -19,6 +19,10 @@ type BridgeConfig struct {
 
 	// StartingBlock is the Ethereum block number to start monitoring from
 	StartingBlock uint64 `mapstructure:"starting_block"`
+
+	// ValidatorEthPrivateKey is the validator's Ethereum private key for signing withdrawals (hex without 0x)
+	// This key must match the validator address trusted by the Base CosmosBridge contract
+	ValidatorEthPrivateKey string `mapstructure:"validator_eth_private_key"`
 }
 
 // DefaultBridgeConfig returns default configuration for the bridge
@@ -29,6 +33,7 @@ func DefaultBridgeConfig() BridgeConfig {
 		DepositContractAddress: "0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B", // Base mainnet deposit contract
 		USDCContractAddress:    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base mainnet USDC
 		PollingIntervalSeconds: 60,
-		StartingBlock:          0, // Will use latest block - 10 if 0
+		StartingBlock:          0,  // Will use latest block - 10 if 0
+		ValidatorEthPrivateKey: "", // Must be set in config for auto-signing
 	}
 }
