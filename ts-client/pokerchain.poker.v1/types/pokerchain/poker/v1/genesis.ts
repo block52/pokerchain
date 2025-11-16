@@ -11,20 +11,244 @@ import { Params } from "./params";
 
 export const protobufPackage = "pokerchain.poker.v1";
 
+/** WithdrawalRequest represents a pending withdrawal from Cosmos to Base chain. */
+export interface WithdrawalRequest {
+  /** Unique withdrawal nonce (used as ID and for Base contract) */
+  nonce: string;
+  /** Cosmos address of the user who initiated withdrawal */
+  cosmosAddress: string;
+  /** Base/Ethereum address to receive USDC */
+  baseAddress: string;
+  /** Amount in USDC microunits (6 decimals) */
+  amount: Long;
+  /** Status: "pending", "signed", "completed" */
+  status: string;
+  /** Validator signature (empty until signed in EndBlocker) */
+  signature: Uint8Array;
+  /** Block time when withdrawal was created */
+  createdAt: Long;
+  /** Block time when withdrawal was completed on Base (0 if not completed) */
+  completedAt: Long;
+}
+
 /** GenesisState defines the poker module's genesis state. */
 export interface GenesisState {
   /** params defines all the parameters of the module. */
-  params?: Params | undefined;
+  params?:
+    | Params
+    | undefined;
+  /** Bridge state - processed Ethereum transaction hashes (prevents double-minting) */
+  processedEthTxs: string[];
+  /** Withdrawal requests - pending and completed withdrawals */
+  withdrawalRequests: WithdrawalRequest[];
+  /** Withdrawal nonce counter - increments for each new withdrawal */
+  withdrawalNonce: Long;
 }
 
+function createBaseWithdrawalRequest(): WithdrawalRequest {
+  return {
+    nonce: "",
+    cosmosAddress: "",
+    baseAddress: "",
+    amount: Long.UZERO,
+    status: "",
+    signature: new Uint8Array(0),
+    createdAt: Long.ZERO,
+    completedAt: Long.ZERO,
+  };
+}
+
+export const WithdrawalRequest: MessageFns<WithdrawalRequest> = {
+  encode(message: WithdrawalRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.nonce !== "") {
+      writer.uint32(10).string(message.nonce);
+    }
+    if (message.cosmosAddress !== "") {
+      writer.uint32(18).string(message.cosmosAddress);
+    }
+    if (message.baseAddress !== "") {
+      writer.uint32(26).string(message.baseAddress);
+    }
+    if (!message.amount.equals(Long.UZERO)) {
+      writer.uint32(32).uint64(message.amount.toString());
+    }
+    if (message.status !== "") {
+      writer.uint32(42).string(message.status);
+    }
+    if (message.signature.length !== 0) {
+      writer.uint32(50).bytes(message.signature);
+    }
+    if (!message.createdAt.equals(Long.ZERO)) {
+      writer.uint32(56).int64(message.createdAt.toString());
+    }
+    if (!message.completedAt.equals(Long.ZERO)) {
+      writer.uint32(64).int64(message.completedAt.toString());
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WithdrawalRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseWithdrawalRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.nonce = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.cosmosAddress = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.baseAddress = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.amount = Long.fromString(reader.uint64().toString(), true);
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.status = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.signature = reader.bytes();
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.createdAt = Long.fromString(reader.int64().toString());
+          continue;
+        }
+        case 8: {
+          if (tag !== 64) {
+            break;
+          }
+
+          message.completedAt = Long.fromString(reader.int64().toString());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): WithdrawalRequest {
+    return {
+      nonce: isSet(object.nonce) ? globalThis.String(object.nonce) : "",
+      cosmosAddress: isSet(object.cosmosAddress) ? globalThis.String(object.cosmosAddress) : "",
+      baseAddress: isSet(object.baseAddress) ? globalThis.String(object.baseAddress) : "",
+      amount: isSet(object.amount) ? Long.fromValue(object.amount) : Long.UZERO,
+      status: isSet(object.status) ? globalThis.String(object.status) : "",
+      signature: isSet(object.signature) ? bytesFromBase64(object.signature) : new Uint8Array(0),
+      createdAt: isSet(object.createdAt) ? Long.fromValue(object.createdAt) : Long.ZERO,
+      completedAt: isSet(object.completedAt) ? Long.fromValue(object.completedAt) : Long.ZERO,
+    };
+  },
+
+  toJSON(message: WithdrawalRequest): unknown {
+    const obj: any = {};
+    if (message.nonce !== "") {
+      obj.nonce = message.nonce;
+    }
+    if (message.cosmosAddress !== "") {
+      obj.cosmosAddress = message.cosmosAddress;
+    }
+    if (message.baseAddress !== "") {
+      obj.baseAddress = message.baseAddress;
+    }
+    if (!message.amount.equals(Long.UZERO)) {
+      obj.amount = (message.amount || Long.UZERO).toString();
+    }
+    if (message.status !== "") {
+      obj.status = message.status;
+    }
+    if (message.signature.length !== 0) {
+      obj.signature = base64FromBytes(message.signature);
+    }
+    if (!message.createdAt.equals(Long.ZERO)) {
+      obj.createdAt = (message.createdAt || Long.ZERO).toString();
+    }
+    if (!message.completedAt.equals(Long.ZERO)) {
+      obj.completedAt = (message.completedAt || Long.ZERO).toString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<WithdrawalRequest>, I>>(base?: I): WithdrawalRequest {
+    return WithdrawalRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<WithdrawalRequest>, I>>(object: I): WithdrawalRequest {
+    const message = createBaseWithdrawalRequest();
+    message.nonce = object.nonce ?? "";
+    message.cosmosAddress = object.cosmosAddress ?? "";
+    message.baseAddress = object.baseAddress ?? "";
+    message.amount = (object.amount !== undefined && object.amount !== null)
+      ? Long.fromValue(object.amount)
+      : Long.UZERO;
+    message.status = object.status ?? "";
+    message.signature = object.signature ?? new Uint8Array(0);
+    message.createdAt = (object.createdAt !== undefined && object.createdAt !== null)
+      ? Long.fromValue(object.createdAt)
+      : Long.ZERO;
+    message.completedAt = (object.completedAt !== undefined && object.completedAt !== null)
+      ? Long.fromValue(object.completedAt)
+      : Long.ZERO;
+    return message;
+  },
+};
+
 function createBaseGenesisState(): GenesisState {
-  return { params: undefined };
+  return { params: undefined, processedEthTxs: [], withdrawalRequests: [], withdrawalNonce: Long.UZERO };
 }
 
 export const GenesisState: MessageFns<GenesisState> = {
   encode(message: GenesisState, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.params !== undefined) {
       Params.encode(message.params, writer.uint32(10).fork()).join();
+    }
+    for (const v of message.processedEthTxs) {
+      writer.uint32(18).string(v!);
+    }
+    for (const v of message.withdrawalRequests) {
+      WithdrawalRequest.encode(v!, writer.uint32(26).fork()).join();
+    }
+    if (!message.withdrawalNonce.equals(Long.UZERO)) {
+      writer.uint32(32).uint64(message.withdrawalNonce.toString());
     }
     return writer;
   },
@@ -44,6 +268,30 @@ export const GenesisState: MessageFns<GenesisState> = {
           message.params = Params.decode(reader, reader.uint32());
           continue;
         }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.processedEthTxs.push(reader.string());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.withdrawalRequests.push(WithdrawalRequest.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.withdrawalNonce = Long.fromString(reader.uint64().toString(), true);
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -54,13 +302,31 @@ export const GenesisState: MessageFns<GenesisState> = {
   },
 
   fromJSON(object: any): GenesisState {
-    return { params: isSet(object.params) ? Params.fromJSON(object.params) : undefined };
+    return {
+      params: isSet(object.params) ? Params.fromJSON(object.params) : undefined,
+      processedEthTxs: globalThis.Array.isArray(object?.processedEthTxs)
+        ? object.processedEthTxs.map((e: any) => globalThis.String(e))
+        : [],
+      withdrawalRequests: globalThis.Array.isArray(object?.withdrawalRequests)
+        ? object.withdrawalRequests.map((e: any) => WithdrawalRequest.fromJSON(e))
+        : [],
+      withdrawalNonce: isSet(object.withdrawalNonce) ? Long.fromValue(object.withdrawalNonce) : Long.UZERO,
+    };
   },
 
   toJSON(message: GenesisState): unknown {
     const obj: any = {};
     if (message.params !== undefined) {
       obj.params = Params.toJSON(message.params);
+    }
+    if (message.processedEthTxs?.length) {
+      obj.processedEthTxs = message.processedEthTxs;
+    }
+    if (message.withdrawalRequests?.length) {
+      obj.withdrawalRequests = message.withdrawalRequests.map((e) => WithdrawalRequest.toJSON(e));
+    }
+    if (!message.withdrawalNonce.equals(Long.UZERO)) {
+      obj.withdrawalNonce = (message.withdrawalNonce || Long.UZERO).toString();
     }
     return obj;
   },
@@ -73,9 +339,39 @@ export const GenesisState: MessageFns<GenesisState> = {
     message.params = (object.params !== undefined && object.params !== null)
       ? Params.fromPartial(object.params)
       : undefined;
+    message.processedEthTxs = object.processedEthTxs?.map((e) => e) || [];
+    message.withdrawalRequests = object.withdrawalRequests?.map((e) => WithdrawalRequest.fromPartial(e)) || [];
+    message.withdrawalNonce = (object.withdrawalNonce !== undefined && object.withdrawalNonce !== null)
+      ? Long.fromValue(object.withdrawalNonce)
+      : Long.UZERO;
     return message;
   },
 };
+
+function bytesFromBase64(b64: string): Uint8Array {
+  if ((globalThis as any).Buffer) {
+    return Uint8Array.from(globalThis.Buffer.from(b64, "base64"));
+  } else {
+    const bin = globalThis.atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; ++i) {
+      arr[i] = bin.charCodeAt(i);
+    }
+    return arr;
+  }
+}
+
+function base64FromBytes(arr: Uint8Array): string {
+  if ((globalThis as any).Buffer) {
+    return globalThis.Buffer.from(arr).toString("base64");
+  } else {
+    const bin: string[] = [];
+    arr.forEach((byte) => {
+      bin.push(globalThis.String.fromCharCode(byte));
+    });
+    return globalThis.btoa(bin.join(""));
+  }
+}
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 

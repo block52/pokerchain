@@ -7,6 +7,7 @@ import "cosmos/base/query/v1beta1/pagination.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "pokerchain/poker/v1/params.proto";
+import "pokerchain/poker/v1/genesis.proto";
 
 option go_package = "github.com/block52/pokerchain/x/poker/types";
 
@@ -45,6 +46,16 @@ service Query {
   // IsTxProcessed checks if an Ethereum transaction hash has been processed
   rpc IsTxProcessed(QueryIsTxProcessedRequest) returns (QueryIsTxProcessedResponse) {
     option (google.api.http).get = "/block52/pokerchain/poker/v1/is_tx_processed/{eth_tx_hash}";
+  }
+
+  // GetWithdrawalRequest queries a specific withdrawal request by nonce
+  rpc GetWithdrawalRequest(QueryGetWithdrawalRequestRequest) returns (QueryGetWithdrawalRequestResponse) {
+    option (google.api.http).get = "/block52/pokerchain/poker/v1/withdrawal_request/{nonce}";
+  }
+
+  // ListWithdrawalRequests queries all withdrawal requests (optionally filtered by cosmos_address)
+  rpc ListWithdrawalRequests(QueryListWithdrawalRequestsRequest) returns (QueryListWithdrawalRequestsResponse) {
+    option (google.api.http).get = "/block52/pokerchain/poker/v1/withdrawal_requests";
   }
 }
 
@@ -117,4 +128,26 @@ message QueryIsTxProcessedRequest {
 // QueryIsTxProcessedResponse defines the response for checking if a tx has been processed
 message QueryIsTxProcessedResponse {
   bool processed = 1;
+}
+
+// QueryGetWithdrawalRequestRequest defines the request for getting a withdrawal request
+message QueryGetWithdrawalRequestRequest {
+  string nonce = 1;
+}
+
+// QueryGetWithdrawalRequestResponse defines the response for getting a withdrawal request
+message QueryGetWithdrawalRequestResponse {
+  WithdrawalRequest withdrawal_request = 1;
+}
+
+// QueryListWithdrawalRequestsRequest defines the request for listing withdrawal requests
+message QueryListWithdrawalRequestsRequest {
+  string cosmos_address = 1;  // Optional: filter by cosmos address (empty = all withdrawals)
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+// QueryListWithdrawalRequestsResponse defines the response for listing withdrawal requests
+message QueryListWithdrawalRequestsResponse {
+  repeated WithdrawalRequest withdrawal_requests = 1;
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }

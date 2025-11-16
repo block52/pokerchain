@@ -42,27 +42,7 @@ echo -e "${BLUE}╔════════════════════�
 echo -e "${BLUE}║        NGINX & SSL Setup for Pokerchaind                         ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${YELLOW}Configuration:${NC}"
-echo "  Domain:       $DOMAIN"
-echo "  Remote Host:  $REMOTE_HOST"
-echo "  Remote User:  $REMOTE_USER"
-echo "  Admin Email:  $ADMIN_EMAIL"
-echo ""
-echo -e "${YELLOW}Services to be configured:${NC}"
-echo "  • REST API (HTTPS) - Port 1317 → 443"
-echo "  • gRPC (HTTPS) - Port 9090 → 9443"
-echo "  • SSL Certificates via Certbot"
-echo ""
-read -p "Continue with this configuration? (y/n): " CONFIRM
-if [[ ! $CONFIRM =~ ^[Yy]$ ]]; then
-    echo "Setup cancelled."
-    exit 0
-fi
-
-echo ""
-echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}Setting up NGINX and SSL on $REMOTE_HOST${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════════════════════════${NC}"
 echo ""
 
 # Execute on remote server
@@ -314,6 +294,15 @@ else
         --redirect \
         --hsts \
         --staple-ocsp
+fi
+
+echo ""
+
+# Close port 80 if we opened it earlier (only if UFW was active and we opened it)
+if [ "${PORT_80_WAS_CLOSED:-0}" -eq 1 ]; then
+    echo "🔒 Closing port 80 (no longer needed after SSL setup)..."
+    ufw delete allow 80/tcp
+    echo "✅ Port 80 closed"
 fi
 
 echo ""

@@ -159,7 +159,7 @@ download_from_github() {
     echo ""
     
     # Determine the binary name based on remote architecture
-    local BINARY_NAME="${CHAIN_BINARY}d-${REMOTE_OS}-${REMOTE_ARCH}"
+    local BINARY_NAME="${CHAIN_BINARY}-${REMOTE_OS}-${REMOTE_ARCH}"
     local ARCHIVE_NAME="${BINARY_NAME}-${RELEASE_TAG}.tar.gz"
     
     if [ "$RELEASE_TAG" = "latest" ]; then
@@ -180,6 +180,7 @@ download_from_github() {
     local DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${RELEASE_TAG}/${ARCHIVE_NAME}"
     local CHECKSUM_URL="https://github.com/${GITHUB_REPO}/releases/download/${RELEASE_TAG}/${ARCHIVE_NAME}.sha256"
     local TEMP_DIR="/tmp/pokerchain-download-$$"
+    local ORIGINAL_DIR="$(pwd)"
     
     echo "Downloading from: $DOWNLOAD_URL"
     
@@ -247,6 +248,9 @@ download_from_github() {
     
     # Make executable
     chmod +x "$LOCAL_BINARY"
+    
+    # Return to original directory
+    cd "$ORIGINAL_DIR"
     
     echo ""
     echo -e "${GREEN}✓${NC} Binary ready: $LOCAL_BINARY"
@@ -723,17 +727,82 @@ setup_firewall() {
         return 0
     fi
     
-    echo "Using setup-firewall.sh to configure firewall..."
+    echo "Configuring firewall rules..."
     
-    if [ ! -f "./setup-firewall.sh" ]; then
-        echo -e "${RED}❌ setup-firewall.sh not found${NC}"
-        return 1
-    fi
-    
-    ./setup-firewall.sh "$REMOTE_HOST" "$REMOTE_USER"
+    ssh "$REMOTE_USER@$REMOTE_HOST" << 'EOF'
+# Install UFW if not present
+if ! command -v ufw &> /dev/null; then
+    echo "📦 Installing UFW..."
+    apt-get update -qq
+    apt-get install -y ufw
+fi
+
+# Reset UFW to default state
+echo "🔄 Resetting UFW to defaults..."
+ufw --force reset
+
+# Set default policies
+echo "📋 Setting default policies..."
+ufw default deny incoming
+ufw default allow outgoing
+
+# Allow SSH (critical - do this first!)
+echo "🔓 Allowing SSH (port 22)..."
+ufw allow 22/tcp comment 'SSH'
+
+# Allow P2P port for Tendermint
+echo "🔓 Allowing P2P (port 26656)..."
+ufw allow 26656/tcp comment 'Tendermint P2P'
+
+# Allow RPC port for Tendermint
+echo "🔓 Allowing RPC (port 26657)..."
+ufw allow 26657/tcp comment 'Tendermint RPC'
+
+# Allow API port for Cosmos SDK REST API
+echo "🔓 Allowing API (port 1317)..."
+ufw allow 1317/tcp comment 'Cosmos REST API'
+
+# Allow gRPC port
+echo "🔓 Allowing gRPC (port 9090)..."
+ufw allow 9090/tcp comment 'gRPC'
+
+# Allow gRPC-web port
+echo "🔓 Allowing gRPC-web (port 9091)..."
+ufw allow 9091/tcp comment 'gRPC-web'
+
+# Allow HTTPS for NGINX (optional)
+echo "🔓 Allowing HTTPS (port 443)..."
+ufw allow 443/tcp comment 'HTTPS (NGINX)'
+
+# Allow gRPC over HTTPS (optional)
+echo "🔓 Allowing gRPC HTTPS (port 9443)..."
+ufw allow 9443/tcp comment 'gRPC HTTPS (NGINX)'
+
+# Enable UFW
+echo "✅ Enabling UFW..."
+ufw --force enable
+
+# Show status
+echo ""
+echo "📊 Firewall Status:"
+ufw status numbered
+EOF
     
     echo -e "${GREEN}✓${NC} Firewall configured"
+    echo ""
+    echo "📋 Allowed Ports:"
+    echo "  • 22    - SSH (management)"
+    echo "  • 443   - HTTPS (NGINX)"
+    echo "  • 1317  - Cosmos REST API (client access)"
+    echo "  • 9090  - gRPC (client access)"
+    echo "  • 9091  - gRPC-web (client access)"
+    echo "  • 9443  - gRPC HTTPS (NGINX)"
+    echo "  • 26656 - Tendermint P2P (peer connections)"
+    echo "  • 26657 - Tendermint RPC (queries)"
+    echo ""
+    echo "🔒 All other incoming connections are blocked"
 }
+
 
 # Start node
 start_node() {

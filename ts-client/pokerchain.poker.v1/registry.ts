@@ -8,6 +8,8 @@ import { MsgPerformAction } from "./types/pokerchain/poker/v1/tx";
 import { MsgMint } from "./types/pokerchain/poker/v1/tx";
 import { MsgBurn } from "./types/pokerchain/poker/v1/tx";
 import { MsgProcessDeposit } from "./types/pokerchain/poker/v1/tx";
+import { MsgInitiateWithdrawal } from "./types/pokerchain/poker/v1/tx";
+import { MsgSignWithdrawal } from "./types/pokerchain/poker/v1/tx";
 
 const msgTypes: Array<[string, GeneratedType]>  = [
     ["/pokerchain.poker.v1.MsgUpdateParams", MsgUpdateParams],
@@ -19,6 +21,8 @@ const msgTypes: Array<[string, GeneratedType]>  = [
     ["/pokerchain.poker.v1.MsgMint", MsgMint],
     ["/pokerchain.poker.v1.MsgBurn", MsgBurn],
     ["/pokerchain.poker.v1.MsgProcessDeposit", MsgProcessDeposit],
+    ["/pokerchain.poker.v1.MsgInitiateWithdrawal", MsgInitiateWithdrawal],
+    ["/pokerchain.poker.v1.MsgSignWithdrawal", MsgSignWithdrawal],
     
 ];
 

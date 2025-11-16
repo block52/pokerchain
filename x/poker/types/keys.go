@@ -26,3 +26,9 @@ var GamesKey = collections.NewPrefix("games")
 
 // GameStatesKey is the prefix to store game states
 var GameStatesKey = collections.NewPrefix("game_states")
+
+// WithdrawalRequestsKey is the prefix to store withdrawal requests
+var WithdrawalRequestsKey = collections.NewPrefix("withdrawal_requests")
+
+// WithdrawalNonceKey is the prefix for withdrawal nonce sequence
+var WithdrawalNonceKey = collections.NewPrefix("withdrawal_nonce")

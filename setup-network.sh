@@ -286,9 +286,29 @@ verify_network() {
                     echo -e "${YELLOW}   Node may be stalled or block time is very slow${NC}"
                     echo ""
                     echo "   Troubleshooting steps:"
-                    echo "   1. Check if node is running: ssh node1.block52.xyz 'systemctl status pokerchaind'"
-                    echo "   2. Check for errors: ssh node1.block52.xyz 'journalctl -u pokerchaind -n 50'"
+                    echo "   1. Check if node is running: ssh $remote_node 'systemctl status pokerchaind'"
+                    echo "   2. Check for errors: ssh $remote_node 'journalctl -u pokerchaind -n 50'"
                     echo "   3. Verify validators: curl http://$remote_node:$rpc_port/validators"
+                    echo ""
+                    read -p "   Would you like to restart the pokerchaind service on $remote_node? (y/n): " restart_choice
+                    
+                    if [[ "$restart_choice" =~ ^[Yy]$ ]]; then
+                        read -p "   SSH user (default: root): " ssh_user
+                        ssh_user=${ssh_user:-root}
+                        
+                        echo ""
+                        echo "   Restarting pokerchaind service..."
+                        if ssh "$ssh_user@$remote_node" "systemctl restart pokerchaind && sleep 2 && systemctl status pokerchaind --no-pager | head -10"; then
+                            echo ""
+                            echo -e "${GREEN}   ✅ Service restarted successfully${NC}"
+                            echo ""
+                            echo "   Wait a few seconds and check block production again."
+                        else
+                            echo ""
+                            echo -e "${RED}   ❌ Failed to restart service${NC}"
+                            echo "   You may need to SSH manually: ssh $ssh_user@$remote_node"
+                        fi
+                    fi
                 else
                     echo -e "${YELLOW}⚠️  Block height decreased (chain may have restarted)${NC}"
                 fi
