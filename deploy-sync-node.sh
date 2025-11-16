@@ -159,7 +159,7 @@ download_from_github() {
     echo ""
     
     # Determine the binary name based on remote architecture
-    local BINARY_NAME="${CHAIN_BINARY}d-${REMOTE_OS}-${REMOTE_ARCH}"
+    local BINARY_NAME="${CHAIN_BINARY}-${REMOTE_OS}-${REMOTE_ARCH}"
     local ARCHIVE_NAME="${BINARY_NAME}-${RELEASE_TAG}.tar.gz"
     
     if [ "$RELEASE_TAG" = "latest" ]; then
