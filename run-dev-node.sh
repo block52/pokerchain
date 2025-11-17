@@ -276,11 +276,11 @@ configure_node() {
         local persistent_peer="${sync_node_id}@${SYNC_NODE}:26656"
         echo "Setting persistent peer: $persistent_peer"
         
-        # Remove all existing persistent_peers lines and add the new one
+        # Use sed to replace the persistent_peers line in place
         if [ -f "$config_file" ]; then
-            grep -v '^persistent_peers' "$config_file" > "$config_file.tmp"
-            echo "persistent_peers = \"$persistent_peer\"" >> "$config_file.tmp"
-            mv "$config_file.tmp" "$config_file"
+            sed -i.bak "/^persistent_peers/d" "$config_file"
+            sed -i.bak "/^seeds = /a persistent_peers = \"$persistent_peer\"" "$config_file"
+            rm -f "$config_file.bak"
             echo -e "${GREEN}✓${NC} Configured persistent peer"
         fi
     else
