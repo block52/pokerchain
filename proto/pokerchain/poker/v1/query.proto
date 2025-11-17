@@ -113,6 +113,9 @@ message QueryLegalActionsResponse {
 // QueryGameStateRequest defines the QueryGameStateRequest message.
 message QueryGameStateRequest {
   string game_id = 1;
+  string player_address = 2;  // Cosmos address of the requesting player
+  int64 timestamp = 3;         // Unix timestamp in seconds
+  string signature = 4;        // Signature of the timestamp signed by the player's private key
 }
 
 // QueryGameStateResponse defines the QueryGameStateResponse message.
