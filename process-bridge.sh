@@ -43,7 +43,7 @@ VALIDATOR_HOST="${VALIDATOR_HOST:-node1.block52.xyz}"
 VALIDATOR_USER="${VALIDATOR_USER:-root}"
 CHAIN_ID="pokerchain"
 GAS="300000"
-GAS_PRICES="0.001stake"
+GAS_PRICES="0stake"  # Gasless transactions
 DEFAULT_FROM_KEY="b52"  # Default key to use for transactions (has funds on validator)
 
 # Event signature for Deposited(string indexed account, uint256 amount, uint256 index)
@@ -559,32 +559,46 @@ ENDSSH
     fi
 }
 
-# Check if deposit was already processed by nonce
+# Check if deposit was already processed by index
 check_if_processed() {
-    local nonce="$1"
+    local deposit_index="$1"
     local local_mode="$2"
     local home_dir="$3"
     
-    echo -e "${BLUE}Checking if deposit index $nonce already processed...${NC}"
+    echo -e "${BLUE}Checking if deposit index $deposit_index already processed...${NC}"
     
+    # Generate the same deterministic txHash that the keeper uses
+    # Format: sha256(contractAddress-depositIndex)
+    local tx_hash_input="${CONTRACT_ADDRESS}-${deposit_index}"
+    local eth_tx_hash="0x$(echo -n "$tx_hash_input" | sha256sum | cut -d' ' -f1)"
+    
+    echo "  Generated txHash: ${eth_tx_hash:0:20}..." >&2
+    
+    # Query if this txHash has been processed
+    local query_result=""
     if [ "$local_mode" = "true" ]; then
-        local query_cmd="pokerchaind query poker processed-deposit $nonce"
+        local query_cmd="pokerchaind query poker is-tx-processed --eth-tx-hash='$eth_tx_hash' --output json"
         if [ -n "$home_dir" ]; then
             query_cmd="$query_cmd --home '$home_dir'"
         fi
-        eval $query_cmd 2>/dev/null || true
+        query_result=$(eval $query_cmd 2>&1)
     else
-        ssh "$VALIDATOR_USER@$VALIDATOR_HOST" << ENDSSH 2>/dev/null || true
-pokerchaind query poker processed-deposit $nonce 2>/dev/null
-ENDSSH
+        query_result=$(ssh "$VALIDATOR_USER@$VALIDATOR_HOST" "pokerchaind query poker is-tx-processed --eth-tx-hash='$eth_tx_hash' --output json 2>&1")
     fi
     
-    if [ $? -eq 0 ]; then
-        echo -e "${YELLOW}⚠️  This deposit may have already been processed${NC}"
-        read -p "Continue anyway? (y/n): " continue_anyway
-        if [[ ! $continue_anyway =~ ^[Yy]$ ]]; then
-            exit 0
-        fi
+    # Parse the JSON response
+    local processed=$(echo "$query_result" | grep -o '"processed":\s*\(true\|false\)' | grep -o 'true\|false')
+    
+    if [ "$processed" = "true" ]; then
+        echo -e "${RED}❌ Deposit index $deposit_index has already been processed!${NC}" >&2
+        echo "" >&2
+        echo "This deposit cannot be processed again." >&2
+        echo "Transaction hash: $eth_tx_hash" >&2
+        echo "" >&2
+        return 1
+    else
+        echo -e "${GREEN}✓ Deposit not yet processed - safe to continue${NC}" >&2
+        return 0
     fi
 }
 
@@ -617,7 +631,10 @@ process_deposit_by_index() {
     
     # Check if already processed
     if [ "$dry_run" != "true" ]; then
-        check_if_processed "$DEPOSIT_INDEX" "$local_mode" "$home_dir"
+        if ! check_if_processed "$DEPOSIT_INDEX" "$local_mode" "$home_dir"; then
+            echo -e "${RED}❌ Cannot process deposit - already processed${NC}"
+            return 1
+        fi
     fi
     
     # Submit transaction
