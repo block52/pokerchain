@@ -137,9 +137,11 @@ check_binary() {
     echo ""
     echo -e "${YELLOW}⚠ Local binary differs from node1.block52.xyz${NC}"
     echo ""
+    echo -e "${RED}WARNING: Using an incompatible binary will cause P2P auth failures!${NC}"
+    echo ""
     echo "Options:"
     echo "  1) Download binary from node1.block52.xyz (recommended for compatibility)"
-    echo "  2) Use local binary (may cause sync issues if incompatible)"
+    echo "  2) Use local binary (will skip persistent peers to avoid auth failures)"
     echo ""
     read -p "Choose option [1-2]: " BINARY_CHOICE
     
@@ -235,32 +237,6 @@ initialize_node() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
-    if [ -d "$NODE_HOME" ]; then
-        echo -e "${YELLOW}⚠ Node directory already exists: $NODE_HOME${NC}"
-        echo ""
-        echo "Options:"
-        echo "  1) Keep existing data and configuration"
-        echo "  2) Reset and start fresh (delete all data)"
-        echo "  3) Cancel"
-        echo ""
-        read -p "Choose option [1-3]: " INIT_OPTION
-        
-        case $INIT_OPTION in
-            1)
-                echo -e "${GREEN}✓${NC} Using existing node data"
-                return 0
-                ;;
-            2)
-                echo -e "${YELLOW}Removing existing node data...${NC}"
-                rm -rf "$NODE_HOME"
-                ;;
-            *)
-                echo "Cancelled"
-                exit 0
-                ;;
-        esac
-    fi
-    
     echo "Initializing new node..."
     echo "  Home: $NODE_HOME"
     echo "  Moniker: $MONIKER"
@@ -291,19 +267,25 @@ configure_node() {
         echo -e "${GREEN}✓${NC} Copied app.toml"
     fi
     
-    # Now set the required values as before
-    # Get sync node ID
+    config_file="$NODE_HOME/config/config.toml"
+    
+    # Get sync node ID and configure persistent peers
+    echo "Getting node ID from $SYNC_NODE..."
     local sync_node_id=$(get_sync_node_id)
     if [ "$sync_node_id" != "null" ]; then
         local persistent_peer="${sync_node_id}@${SYNC_NODE}:26656"
         echo "Setting persistent peer: $persistent_peer"
-        persistent_peer_clean=$(echo "$persistent_peer" | tr -d '\n' | tr -cd '\11\12\15\40-\176')
-        config_file="$NODE_HOME/config/config.toml"
-        if grep -q '^persistent_peers' "$config_file"; then
-            awk -v val="persistent_peers = \"$persistent_peer_clean\"" 'BEGIN{done=0} /^persistent_peers[[:space:]]*=/{if(!done){print val; done=1; next}} {print}' "$config_file" > "$config_file.tmp" && mv "$config_file.tmp" "$config_file"
-        else
-            echo "persistent_peers = \"$persistent_peer_clean\"" >> "$config_file"
+        
+        # Remove all existing persistent_peers lines and add the new one
+        if [ -f "$config_file" ]; then
+            grep -v '^persistent_peers' "$config_file" > "$config_file.tmp"
+            echo "persistent_peers = \"$persistent_peer\"" >> "$config_file.tmp"
+            mv "$config_file.tmp" "$config_file"
+            echo -e "${GREEN}✓${NC} Configured persistent peer"
         fi
+    else
+        echo -e "${YELLOW}⚠ Could not get node ID from $SYNC_NODE${NC}"
+        echo "Continuing without persistent peers..."
     fi
     
     echo "Configuring developer settings..."
@@ -679,7 +661,7 @@ main() {
     # Print header
     print_header
     
-    # Prompt for PVM if not specified via flag
+    # Ask if user wants PVM (chain only vs chain + PVM)
     if [ "$RUN_PVM" != true ]; then
         prompt_pvm
     fi
@@ -689,16 +671,52 @@ main() {
         setup_pvm
     fi
     
-    # Check/build binary
-    check_binary
+    # Always rebuild the local binary for dev
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}Building Local Binary${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "Building pokerchaind with your latest changes..."
+    build_binary
     
-    # Initialize node
-    initialize_node
+    # Ask if user wants to reset data
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}Node Data${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
     
-    # Download genesis
+    if [ -d "$NODE_HOME" ]; then
+        echo -e "${YELLOW}⚠ Existing node data found: $NODE_HOME${NC}"
+        echo ""
+        echo "Options:"
+        echo "  1) Keep existing data (continue from where you left off)"
+        echo "  2) Reset and start fresh (recommended for testing changes)"
+        echo ""
+        read -p "Choose option [1-2, default: 1]: " RESET_CHOICE
+        RESET_CHOICE=${RESET_CHOICE:-1}
+        
+        if [ "$RESET_CHOICE" = "2" ]; then
+            echo ""
+            echo "Removing old data..."
+            rm -rf "$NODE_HOME"
+            echo -e "${GREEN}✓${NC} Data reset complete"
+        else
+            echo ""
+            echo -e "${GREEN}✓${NC} Keeping existing data"
+        fi
+    fi
+    
+    # Initialize node if needed
+    if [ ! -d "$NODE_HOME" ]; then
+        initialize_node
+    fi
+    
+    # Always download/update genesis from remote node
     get_genesis
     
-    # Configure node
+    # Configure node with persistent peers to node1.block52.xyz
     configure_node
     
     # Start PVM if requested
