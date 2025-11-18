@@ -199,13 +199,305 @@ setup_validator() {
     echo "Setting up Validator Node"
     echo ""
     
-    if check_script "./setup-validator-node.sh"; then
-        chmod +x ./setup-validator-node.sh
-        ./setup-validator-node.sh
-    else
-        echo "Please ensure setup-validator-node.sh is in the current directory"
+    # Configuration
+    PROD_DIR="./production"
+    CHAIN_BINARY="pokerchaind"
+    CHAIN_ID="pokerchain"
+    KEYRING_BACKEND="test"
+    
+    # Step 1: Ask for node number
+    echo -e "${BLUE}Step 1: Node Configuration${NC}"
+    echo ""
+    read -p "Enter node number (e.g., 2 for node2): " NODE_NUM
+    
+    if [ -z "$NODE_NUM" ] || ! [[ "$NODE_NUM" =~ ^[0-9]+$ ]]; then
+        echo -e "${RED}❌ Invalid node number${NC}"
         read -p "Press Enter to continue..."
+        return
     fi
+    
+    NODE_HOME="$PROD_DIR/node$NODE_NUM"
+    
+    # Check if node directory already exists
+    if [ -d "$NODE_HOME" ]; then
+        echo -e "${YELLOW}⚠️  Node directory already exists: $NODE_HOME${NC}"
+        read -p "Do you want to overwrite it? (y/n): " OVERWRITE
+        if [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
+            echo "Setup cancelled."
+            read -p "Press Enter to continue..."
+            return
+        fi
+        rm -rf "$NODE_HOME"
+    fi
+    
+    # Step 2: Mnemonic selection
+    echo ""
+    echo -e "${BLUE}Step 2: Validator Key Mnemonic${NC}"
+    echo ""
+    
+    SEEDS_FILE="./seeds.txt"
+    MNEMONIC=""
+    
+    if [ -f "$SEEDS_FILE" ]; then
+        echo "Found seed phrases file: $SEEDS_FILE"
+        echo ""
+        echo "Available seed phrases (24-word mnemonics):"
+        
+        # Read clean mnemonics (skip empty lines and comments)
+        mapfile -t SEED_ARRAY < <(grep -v "^#" "$SEEDS_FILE" | grep -v "^$")
+        
+        # Display with index numbers starting from 1
+        for i in "${!SEED_ARRAY[@]}"; do
+            local display_num=$((i + 1))
+            # Show first and last 3 words for identification
+            local first_words=$(echo "${SEED_ARRAY[$i]}" | awk '{print $1, $2, $3}')
+            local last_words=$(echo "${SEED_ARRAY[$i]}" | awk '{print $(NF-2), $(NF-1), $NF}')
+            echo "  $display_num) $first_words ... $last_words"
+        done
+        echo ""
+        read -p "Enter seed phrase number (1-${#SEED_ARRAY[@]}), or press Enter to add a new one: " SEED_NUM
+        
+        if [ -n "$SEED_NUM" ] && [[ "$SEED_NUM" =~ ^[0-9]+$ ]]; then
+            # Convert to 0-indexed array position
+            local array_index=$((SEED_NUM - 1))
+            
+            if [ "$array_index" -ge 0 ] && [ "$array_index" -lt "${#SEED_ARRAY[@]}" ]; then
+                MNEMONIC="${SEED_ARRAY[$array_index]}"
+                echo -e "${GREEN}✓ Using seed phrase #$SEED_NUM${NC}"
+            else
+                echo -e "${RED}❌ Invalid seed number${NC}"
+                read -p "Press Enter to continue..."
+                return
+            fi
+        fi
+    fi
+    
+    if [ -z "$MNEMONIC" ]; then
+        echo "Enter new 24-word mnemonic phrase (or press Enter to generate one):"
+        read -p "> " MNEMONIC
+        
+        if [ -z "$MNEMONIC" ]; then
+            echo "Generating new mnemonic..."
+            # Generate new mnemonic using pokerchaind
+            MNEMONIC=$($CHAIN_BINARY keys add temp --dry-run --keyring-backend test 2>&1 | grep -A 1 "mnemonic:" | tail -1)
+            if [ -z "$MNEMONIC" ]; then
+                echo -e "${RED}❌ Failed to generate mnemonic${NC}"
+                read -p "Press Enter to continue..."
+                return
+            fi
+            echo -e "${GREEN}✓ Generated new mnemonic${NC}"
+        fi
+    fi
+    
+    # Step 3: Create production/nodeX folder
+    echo ""
+    echo -e "${BLUE}Step 3: Creating Node Directory${NC}"
+    echo ""
+    
+    mkdir -p "$NODE_HOME/config"
+    mkdir -p "$NODE_HOME/data"
+    
+    read -p "Enter node moniker (default: validator-$NODE_NUM): " MONIKER
+    MONIKER=${MONIKER:-"validator-$NODE_NUM"}
+    
+    read -p "Enter node hostname/IP (e.g., node2.block52.xyz): " NODE_HOST
+    if [ -z "$NODE_HOST" ]; then
+        echo -e "${RED}❌ Hostname cannot be empty${NC}"
+        read -p "Press Enter to continue..."
+        return
+    fi
+    
+    # Check for binary
+    if [ -f "./build/pokerchaind" ]; then
+        CHAIN_BINARY="./build/pokerchaind"
+    elif ! command -v pokerchaind &> /dev/null; then
+        echo -e "${RED}❌ pokerchaind binary not found${NC}"
+        echo "Please build the binary first: make build"
+        read -p "Press Enter to continue..."
+        return
+    fi
+    
+    # Generate validator key from mnemonic
+    echo "Generating validator key from mnemonic..."
+    
+    # Check for genvalidatorkey tool
+    if [ -f "./genvalidatorkey" ] && [ -x "./genvalidatorkey" ]; then
+        ./genvalidatorkey "$MNEMONIC" "$NODE_HOME/config/priv_validator_key.json"
+        echo -e "${GREEN}✓ Validator key generated${NC}"
+    else
+        echo -e "${YELLOW}⚠️  genvalidatorkey tool not found, will use pokerchaind init${NC}"
+    fi
+    
+    # Create priv_validator_state.json
+    cat > "$NODE_HOME/data/priv_validator_state.json" << 'EOF'
+{
+  "height": "0",
+  "round": 0,
+  "step": 0
+}
+EOF
+    
+    # Initialize the node
+    echo "Initializing node..."
+    $CHAIN_BINARY init $MONIKER --chain-id $CHAIN_ID --home $NODE_HOME
+    
+    # Create validator account key
+    echo "Creating validator account key..."
+    echo "$MNEMONIC" | $CHAIN_BINARY keys add $MONIKER --recover --keyring-backend $KEYRING_BACKEND --home $NODE_HOME > /dev/null 2>&1
+    
+    # Get node ID and address
+    NODE_ID=$($CHAIN_BINARY comet show-node-id --home $NODE_HOME)
+    NODE_ADDR=$($CHAIN_BINARY keys show $MONIKER -a --keyring-backend $KEYRING_BACKEND --home $NODE_HOME)
+    
+    echo -e "${GREEN}✓ Node initialized${NC}"
+    echo "  Node ID: $NODE_ID"
+    echo "  Address: $NODE_ADDR"
+    
+    # Copy genesis from node0 if it exists
+    if [ -f "$PROD_DIR/node0/config/genesis.json" ]; then
+        cp "$PROD_DIR/node0/config/genesis.json" "$NODE_HOME/config/genesis.json"
+        echo -e "${GREEN}✓ Copied genesis from node0${NC}"
+    else
+        echo -e "${YELLOW}⚠️  genesis.json not found in node0, you'll need to copy it manually${NC}"
+    fi
+    
+    # Step 4: Configure bridge settings
+    echo ""
+    echo -e "${BLUE}Step 4: Bridge Configuration${NC}"
+    echo ""
+    
+    ALCHEMY_URL=""
+    
+    # Check for .env file
+    if [ -f ".env" ]; then
+        echo "Found .env file"
+        ALCHEMY_URL=$(grep "^ALCHEMY_URL=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        if [ -n "$ALCHEMY_URL" ]; then
+            echo -e "${GREEN}✓ Loaded Alchemy URL from .env${NC}"
+        fi
+    fi
+    
+    if [ -z "$ALCHEMY_URL" ] || [ "$ALCHEMY_URL" = "https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY_HERE" ]; then
+        echo "Enter Alchemy URL (Base mainnet RPC):"
+        echo "Example: https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY"
+        read -p "> " ALCHEMY_URL
+        
+        if [ -z "$ALCHEMY_URL" ]; then
+            echo -e "${YELLOW}⚠️  No Alchemy URL provided, bridge will be disabled${NC}"
+            ALCHEMY_URL="https://mainnet.base.org"
+        fi
+    fi
+    
+    # Update app.toml with bridge configuration
+    if [ -f "$NODE_HOME/config/app.toml" ]; then
+        # Enable bridge
+        sed -i.bak 's/bridge_enabled = false/bridge_enabled = true/' "$NODE_HOME/config/app.toml"
+        
+        # Set Alchemy URL
+        sed -i.bak "s|ethereum_rpc_url = \".*\"|ethereum_rpc_url = \"$ALCHEMY_URL\"|" "$NODE_HOME/config/app.toml"
+        
+        # Set deposit contract
+        sed -i.bak 's|deposit_contract = ""|deposit_contract = "0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"|' "$NODE_HOME/config/app.toml"
+        
+        rm -f "$NODE_HOME/config/app.toml.bak"
+        echo -e "${GREEN}✓ Bridge configuration updated${NC}"
+    fi
+    
+    # Update config.toml with persistent peers
+    if [ -f "$NODE_HOME/config/config.toml" ]; then
+        # Set persistent peer to node0
+        if [ -f "$PROD_DIR/node0/config/config.toml" ]; then
+            NODE0_ID=$($CHAIN_BINARY comet show-node-id --home "$PROD_DIR/node0")
+            sed -i.bak "/^seeds = /a persistent_peers = \"${NODE0_ID}@node1.block52.xyz:26656\"" "$NODE_HOME/config/config.toml"
+            rm -f "$NODE_HOME/config/config.toml.bak"
+            echo -e "${GREEN}✓ Configured peer connection to node0${NC}"
+        fi
+    fi
+    
+    # Save mnemonic to backup file
+    mkdir -p "$PROD_DIR"
+    MNEMONICS_BACKUP="$PROD_DIR/MNEMONICS_BACKUP.txt"
+    
+    # Create backup file if it doesn't exist
+    if [ ! -f "$MNEMONICS_BACKUP" ]; then
+        cat > "$MNEMONICS_BACKUP" << EOF
+# VALIDATOR KEY MNEMONICS - KEEP THIS FILE EXTREMELY SECURE!
+# Generated: $(date)
+# Chain ID: $CHAIN_ID
+#
+# These mnemonics are backed up from deployed validator nodes.
+# Store this file in a secure location (encrypted storage, password manager, etc.)
+# DO NOT commit this file to version control!
+
+EOF
+        chmod 600 "$MNEMONICS_BACKUP"
+    fi
+    
+    echo "" >> "$MNEMONICS_BACKUP"
+    echo "# Node $NODE_NUM: $MONIKER" >> "$MNEMONICS_BACKUP"
+    echo "# Hostname: $NODE_HOST" >> "$MNEMONICS_BACKUP"
+    echo "# Address: $NODE_ADDR" >> "$MNEMONICS_BACKUP"
+    echo "# Generated: $(date)" >> "$MNEMONICS_BACKUP"
+    echo "$MNEMONIC" >> "$MNEMONICS_BACKUP"
+    echo "" >> "$MNEMONICS_BACKUP"
+    echo -e "${GREEN}✓ Mnemonic saved to $MNEMONICS_BACKUP${NC}"
+    
+    # Step 5: Remote deployment option
+    echo ""
+    echo -e "${BLUE}Step 5: Remote Deployment (Optional)${NC}"
+    echo ""
+    echo "Do you want to deploy this node to a remote server now?"
+    read -p "(y/n): " DEPLOY_REMOTE
+    
+    if [[ "$DEPLOY_REMOTE" =~ ^[Yy]$ ]]; then
+        echo ""
+        read -p "Remote user (default: root): " REMOTE_USER
+        REMOTE_USER=${REMOTE_USER:-root}
+        
+        echo ""
+        echo "Testing SSH connection to $REMOTE_USER@$NODE_HOST..."
+        if ssh -o ConnectTimeout=10 -o BatchMode=yes "$REMOTE_USER@$NODE_HOST" "echo 'SSH OK'" > /dev/null 2>&1; then
+            echo -e "${GREEN}✓ SSH connection successful${NC}"
+            
+            # Use deploy-production-node.sh if available
+            if [ -f "./deploy-production-node.sh" ]; then
+                echo ""
+                echo "Deploying node..."
+                chmod +x ./deploy-production-node.sh
+                ./deploy-production-node.sh "$NODE_NUM" "$NODE_HOST" "$REMOTE_USER"
+            else
+                echo -e "${YELLOW}⚠️  deploy-production-node.sh not found${NC}"
+                echo "Please deploy manually by copying $NODE_HOME to the remote server"
+            fi
+        else
+            echo -e "${RED}❌ Cannot connect to $REMOTE_USER@$NODE_HOST${NC}"
+            echo "Please ensure SSH key access is configured"
+        fi
+    else
+        echo ""
+        echo "Node configuration created locally at: $NODE_HOME"
+        echo ""
+        echo "To deploy later, run:"
+        echo "  ./deploy-production-node.sh $NODE_NUM $NODE_HOST"
+    fi
+    
+    echo ""
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}✅ Validator Node Setup Complete!${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "Node Information:"
+    echo "  Number: $NODE_NUM"
+    echo "  Moniker: $MONIKER"
+    echo "  Hostname: $NODE_HOST"
+    echo "  Node ID: $NODE_ID"
+    echo "  Address: $NODE_ADDR"
+    echo "  Home: $NODE_HOME"
+    echo ""
+    echo "⚠️  IMPORTANT: Keep $MNEMONICS_BACKUP secure!"
+    echo ""
+    
+    read -p "Press Enter to continue..."
 }
 
 # Verify network connectivity (option 4)

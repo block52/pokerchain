@@ -150,6 +150,97 @@ cleanup_old_installation() {
     echo -e "${GREEN}✅ Cleanup complete${NC}"
 }
 
+# Fetch binary from GitHub releases
+fetch_binary_from_github() {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 2: Fetching Binary from GitHub Releases${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    # Get latest release version
+    echo "Fetching latest release information..."
+    local latest_release=$(curl -s https://api.github.com/repos/block52/pokerchain/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+    
+    if [ -z "$latest_release" ]; then
+        echo -e "${YELLOW}⚠️  Could not fetch latest release from GitHub${NC}"
+        return 1
+    fi
+    
+    echo "Latest release: $latest_release"
+    
+    # Determine architecture
+    local arch="linux-amd64"
+    read -p "Target architecture (linux-amd64 or linux-arm64) [default: linux-amd64]: " input_arch
+    arch=${input_arch:-linux-amd64}
+    
+    local binary_name="pokerchaind-${arch}"
+    local download_url="https://github.com/block52/pokerchain/releases/download/${latest_release}/${binary_name}-${latest_release}.tar.gz"
+    local checksum_url="https://github.com/block52/pokerchain/releases/download/${latest_release}/${binary_name}-${latest_release}.tar.gz.sha256"
+    
+    echo ""
+    echo "Download URL: $download_url"
+    
+    # Create temp directory for download
+    local temp_dir=$(mktemp -d)
+    cd "$temp_dir" || return 1
+    
+    # Download binary
+    echo "Downloading binary..."
+    if ! curl -L -o "${binary_name}.tar.gz" "$download_url"; then
+        echo -e "${RED}❌ Failed to download binary${NC}"
+        cd - > /dev/null
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Download and verify checksum
+    echo "Downloading checksum..."
+    if curl -L -o "${binary_name}.tar.gz.sha256" "$checksum_url" 2>/dev/null; then
+        echo "Verifying checksum..."
+        local expected_hash=$(cat "${binary_name}.tar.gz.sha256")
+        local actual_hash=$(sha256sum "${binary_name}.tar.gz" | awk '{print $1}')
+        
+        if [ "$expected_hash" = "$actual_hash" ]; then
+            echo -e "${GREEN}✓ Checksum verified${NC}"
+        else
+            echo -e "${RED}❌ Checksum mismatch!${NC}"
+            echo "Expected: $expected_hash"
+            echo "Got:      $actual_hash"
+            cd - > /dev/null
+            rm -rf "$temp_dir"
+            return 1
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Checksum file not found, skipping verification${NC}"
+    fi
+    
+    # Extract binary
+    echo "Extracting binary..."
+    tar -xzf "${binary_name}.tar.gz"
+    
+    if [ ! -f "$binary_name" ]; then
+        echo -e "${RED}❌ Binary not found in archive${NC}"
+        cd - > /dev/null
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Move to build directory
+    cd - > /dev/null
+    mkdir -p build
+    mv "$temp_dir/$binary_name" build/pokerchaind
+    chmod +x build/pokerchaind
+    rm -rf "$temp_dir"
+    
+    # Verify binary
+    local version=$(./build/pokerchaind version 2>/dev/null || echo "unknown")
+    echo "Binary version: $version"
+    
+    echo -e "${GREEN}✅ Binary fetched from GitHub releases${NC}"
+    return 0
+}
+
 # Build binary
 build_binary() {
     echo ""
@@ -626,11 +717,31 @@ main() {
         exit 0
     fi
     
+    # Ask how to get the binary
+    echo ""
+    echo "Binary Source Options:"
+    echo "  1) Fetch from GitHub releases (recommended)"
+    echo "  2) Build locally from source"
+    echo ""
+    read -p "Choose option [1-2, default: 1]: " binary_choice
+    binary_choice=${binary_choice:-1}
+    
     # Run deployment steps
     check_node_dir "$node_num"
     test_ssh "$remote_host" "$remote_user"
     cleanup_old_installation "$remote_host" "$remote_user"
-    build_binary
+    
+    # Get binary based on choice
+    if [ "$binary_choice" = "1" ]; then
+        if ! fetch_binary_from_github; then
+            echo ""
+            echo -e "${YELLOW}Failed to fetch from GitHub, falling back to local build...${NC}"
+            build_binary
+        fi
+    else
+        build_binary
+    fi
+    
     deploy_binary "$remote_host" "$remote_user"
     deploy_config "$node_num" "$remote_host" "$remote_user"
     configure_bridge "$remote_host" "$remote_user"
