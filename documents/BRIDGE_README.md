@@ -16,7 +16,7 @@ Add the following to your app configuration:
 ```yaml
 bridge:
     enabled: true
-    ethereum_rpc_url: "https://eth.llamarpc.com"
+    ethereum_rpc_url: "https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY_HERE"
     deposit_contract_address: "0x..." # Your deposit contract address
     usdc_contract_address: "0xA0b86a33E6d3D24fDbCBFe003eDa2E26A6E73a60"
     polling_interval_seconds: 15
