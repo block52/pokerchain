@@ -85,18 +85,17 @@ check_binary() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
-    # If --rebuild flag is set, rebuild immediately
-    if [ "$REBUILD" = true ]; then
-        echo -e "${YELLOW}Rebuild requested...${NC}"
-        build_binary
-        return 0
-    fi
-
     # Check if binary exists locally
     if [ ! -f "build/pokerchaind" ]; then
         echo "No binary found in ./build directory"
-        echo "Building binary with make..."
-        build_binary
+        
+        if [ "$REBUILD" = true ]; then
+            echo "Building binary with make..."
+            build_binary
+        else
+            echo -e "${YELLOW}⚠ No binary found. Run with --rebuild to build, or use ./fix-binary.sh to download from production${NC}"
+            exit 1
+        fi
         return 0
     fi
 
@@ -265,6 +264,25 @@ configure_node() {
     if [ -f "./app.toml" ]; then
         cp ./app.toml "$NODE_HOME/config/app.toml"
         echo -e "${GREEN}✓${NC} Copied app.toml"
+    fi
+    
+    # Update bridge configuration with Alchemy URL from .env
+    if [ -f ".env" ]; then
+        source .env
+        if [ -n "$ALCHEMY_URL" ]; then
+            echo "Updating bridge configuration with Alchemy URL..."
+            if grep -q "ethereum_rpc_url" "$NODE_HOME/config/app.toml"; then
+                sed -i.bak "s|ethereum_rpc_url = .*|ethereum_rpc_url = \"$ALCHEMY_URL\"|" "$NODE_HOME/config/app.toml"
+                echo -e "${GREEN}✓${NC} Updated bridge ethereum_rpc_url"
+            else
+                echo -e "${YELLOW}⚠${NC} ethereum_rpc_url not found in app.toml"
+            fi
+        else
+            echo -e "${YELLOW}⚠${NC} ALCHEMY_URL not set in .env - bridge will use placeholder"
+        fi
+    else
+        echo -e "${YELLOW}⚠${NC} .env file not found - bridge will use placeholder"
+        echo "  To enable bridge, copy .env.example to .env and add your Alchemy API key"
     fi
     
     config_file="$NODE_HOME/config/config.toml"
