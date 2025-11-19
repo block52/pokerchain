@@ -10,7 +10,7 @@ REMOTE_USER="${2:-$(whoami)}"
 WITH_GENESIS="$3"
 BUILD_DIR="./build"
 LOCAL_BINARY="$BUILD_DIR/pokerchaind"
-GENESIS_FILE="./genesis-minimal-b52Token.json"
+GENESIS_FILE="./genesis.json"
 REMOTE_PATH="/usr/local/bin/pokerchaind"
 REMOTE_HOME="/home/$REMOTE_USER"
 

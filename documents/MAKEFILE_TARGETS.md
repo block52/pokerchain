@@ -74,7 +74,7 @@ Sets up a local validator node with minimal genesis.
 
 **What it does:**
 
--   Copies `genesis-minimal-b52Token.json` to `~/.pokerchain/config/genesis.json`
+-   Copies `genesis.json` to `~/.pokerchain/config/genesis.json`
 -   Creates `priv_validator_state.json` from template if it doesn't exist
 -   Sets up directories for local development
 

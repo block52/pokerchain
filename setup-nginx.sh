@@ -85,7 +85,7 @@ fi
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 3: Stopping NGINX"
+echo "Step 3: Stopping NGINX and Cleaning Existing Configurations"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -93,17 +93,33 @@ systemctl stop nginx 2>/dev/null || true
 echo "✅ NGINX stopped"
 
 echo ""
+echo "Cleaning up old NGINX configurations..."
+
+# Remove all existing site configurations
+rm -f /etc/nginx/sites-enabled/*
+rm -f /etc/nginx/sites-available/default
+rm -f /etc/nginx/sites-available/default.bak
+
+# List any remaining site configs (excluding our target domain)
+EXISTING_SITES=$(ls /etc/nginx/sites-available/ 2>/dev/null | grep -v "^${DOMAIN}$" || true)
+if [ -n "$EXISTING_SITES" ]; then
+    echo "Found existing site configurations:"
+    echo "$EXISTING_SITES" | while read site; do
+        echo "  - $site"
+    done
+    echo ""
+    echo "These will remain but won't be enabled."
+fi
+
+echo "✅ Cleaned up existing NGINX configurations"
+
+echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Step 4: Creating Initial HTTP Configuration"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Remove any existing default site
-rm -f /etc/nginx/sites-enabled/default
-rm -f /etc/nginx/sites-available/default
-
-# Remove existing config if it exists
-rm -f /etc/nginx/sites-enabled/${DOMAIN}
+# Remove existing domain config if it exists
 rm -f /etc/nginx/sites-available/${DOMAIN}
 
 # Create initial HTTP-only NGINX config (Certbot will add SSL later)
@@ -149,6 +165,8 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
         
         # WebSocket support
         proxy_http_version 1.1;
@@ -163,6 +181,8 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
         
         # WebSocket support for subscriptions
         proxy_http_version 1.1;
@@ -273,28 +293,155 @@ echo ""
 
 # Check if certificate already exists
 if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
-    echo "✅ SSL certificate already exists for $DOMAIN"
-    echo "Skipping certificate request"
-else
-    echo "Requesting SSL certificate for $DOMAIN..."
-    echo "Email: $ADMIN_EMAIL"
-    echo ""
-    echo "Certbot will automatically:"
-    echo "  • Obtain SSL certificate from Let's Encrypt"
-    echo "  • Configure NGINX for HTTPS"
-    echo "  • Set up HTTP to HTTPS redirect"
-    echo ""
-
-    # Run certbot to get certificate and auto-configure nginx
-    certbot --nginx \
-        --non-interactive \
-        --agree-tos \
-        --email $ADMIN_EMAIL \
-        --domains $DOMAIN \
-        --redirect \
-        --hsts \
-        --staple-ocsp
+    echo "⚠️  Existing SSL certificate found for $DOMAIN"
+    echo "Deleting existing certificate to obtain fresh one..."
+    certbot delete --non-interactive --cert-name $DOMAIN 2>/dev/null || true
+    echo "✅ Old certificate removed"
 fi
+
+echo ""
+echo "Requesting fresh SSL certificate for $DOMAIN..."
+echo "Email: $ADMIN_EMAIL"
+echo ""
+echo "Certbot will automatically:"
+echo "  • Obtain SSL certificate from Let's Encrypt"
+echo "  • Configure NGINX for HTTPS"
+echo "  • Set up HTTP to HTTPS redirect"
+echo ""
+
+# Use certbot in certonly mode (don't let it modify nginx config)
+echo "Obtaining SSL certificate (without automatic nginx configuration)..."
+if certbot certonly \
+    --webroot \
+    --webroot-path=/var/www/html \
+    --non-interactive \
+    --agree-tos \
+    --email $ADMIN_EMAIL \
+    --domains $DOMAIN \
+    --force-renewal 2>&1 | tee /tmp/certbot-output.log; then
+    echo "✅ SSL certificate obtained successfully"
+else
+    echo "❌ Failed to obtain SSL certificate"
+    echo "Please check:"
+    echo "  1. DNS is correctly pointing to this server"
+    echo "  2. Port 80 is accessible from the internet"
+    echo "  3. No firewall blocking Let's Encrypt validation"
+    cat /tmp/certbot-output.log
+    exit 1
+fi
+
+echo ""
+echo "Manually configuring NGINX for SSL..."
+
+# Now manually add SSL configuration to our existing HTTP config
+# We'll create the HTTPS server block ourselves
+cat > /etc/nginx/sites-available/${DOMAIN}-ssl << 'ENDSSL'
+# HTTPS - REST API
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${DOMAIN};
+
+    # SSL certificates
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    
+    # SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+    
+    # HSTS
+    add_header Strict-Transport-Security "max-age=63072000" always;
+    
+    # OCSP Stapling
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    ssl_trusted_certificate /etc/letsencrypt/live/${DOMAIN}/chain.pem;
+
+    # Logging
+    access_log /var/log/nginx/${DOMAIN}_access.log;
+    error_log /var/log/nginx/${DOMAIN}_error.log;
+
+    # Increase timeouts for blockchain operations
+    proxy_connect_timeout 300s;
+    proxy_send_timeout 300s;
+    proxy_read_timeout 300s;
+
+    # CORS headers for API
+    add_header Access-Control-Allow-Origin * always;
+    add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+    add_header Access-Control-Allow-Headers "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization" always;
+    add_header Access-Control-Expose-Headers "Content-Length,Content-Range" always;
+
+    # Handle preflight requests
+    if ($request_method = 'OPTIONS') {
+        return 204;
+    }
+
+    # REST API - Cosmos SDK
+    location / {
+        proxy_pass http://127.0.0.1:1317;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port 443;
+        
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    # Tendermint RPC
+    location /rpc/ {
+        proxy_pass http://127.0.0.1:26657/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port 443;
+        
+        # WebSocket support for subscriptions
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+# HTTP to HTTPS redirect
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN};
+    
+    # Allow Certbot to verify domain ownership
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+    
+    # Redirect all other traffic to HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+ENDSSL
+
+# Replace ${DOMAIN} placeholder
+sed -i "s/\${DOMAIN}/$DOMAIN/g" /etc/nginx/sites-available/${DOMAIN}-ssl
+
+# Remove the old HTTP-only config and replace with SSL version
+rm -f /etc/nginx/sites-available/${DOMAIN}
+mv /etc/nginx/sites-available/${DOMAIN}-ssl /etc/nginx/sites-available/${DOMAIN}
+
+# Enable the site
+ln -sf /etc/nginx/sites-available/${DOMAIN} /etc/nginx/sites-enabled/${DOMAIN}
+ln -sf /etc/nginx/sites-available/${DOMAIN} /etc/nginx/sites-enabled/default
+
+echo "✅ SSL configuration created manually"
 
 echo ""
 
@@ -306,24 +453,33 @@ if [ "${PORT_80_WAS_CLOSED:-0}" -eq 1 ]; then
 fi
 
 echo ""
-
-# Check for duplicate listen directives (certbot sometimes creates them)
-echo "Checking for duplicate listen directives..."
-if grep -c "listen \[::\]:443 ssl" /etc/nginx/sites-available/$DOMAIN | grep -q '^[2-9]'; then
-    echo "⚠️  Found duplicate IPv6 listen directives, fixing..."
-
-    # Create a temporary file with duplicates removed
-    awk '!seen[$0]++ || !/listen \[::\]:443/' /etc/nginx/sites-available/$DOMAIN > /tmp/nginx-$DOMAIN-fixed
-    mv /tmp/nginx-$DOMAIN-fixed /etc/nginx/sites-available/$DOMAIN
-
-    echo "✅ Removed duplicate listen directives"
-fi
-
 echo "✅ SSL certificate obtained and NGINX configured for HTTPS"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 8: Adding gRPC HTTPS Configuration"
+echo "Step 8: Fixing SSL Proxy Headers"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# After certbot runs, we need to ensure proxy headers are correct in SSL block
+# Update the SSL server block to have proper headers
+if grep -q "listen 443 ssl" /etc/nginx/sites-available/$DOMAIN; then
+    echo "Updating SSL configuration with proper proxy headers..."
+    
+    # Use sed to replace X-Forwarded-Proto $scheme with X-Forwarded-Proto https in SSL block
+    # This ensures the backend knows it's receiving HTTPS traffic
+    sed -i '/listen 443 ssl/,/^}/ {
+        s|proxy_set_header X-Forwarded-Proto \$scheme;|proxy_set_header X-Forwarded-Proto https;|g
+    }' /etc/nginx/sites-available/$DOMAIN
+    
+    echo "✅ Updated proxy headers for SSL"
+else
+    echo "⚠️  No SSL configuration found yet"
+fi
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Step 9: Adding gRPC HTTPS Configuration"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -355,7 +511,9 @@ server {
         grpc_set_header Host $host;
         grpc_set_header X-Real-IP $remote_addr;
         grpc_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        grpc_set_header X-Forwarded-Proto $scheme;
+        grpc_set_header X-Forwarded-Proto https;
+        grpc_set_header X-Forwarded-Host $host;
+        grpc_set_header X-Forwarded-Port 9443;
 
         # Error handling
         error_page 502 = /error502grpc;
@@ -391,7 +549,7 @@ fi
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 9: Finalizing Configuration"
+echo "Step 10: Finalizing Configuration"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -401,7 +559,7 @@ echo "✅ NGINX restarted with full SSL configuration"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 10: Setting up Auto-renewal"
+echo "Step 11: Setting up Auto-renewal"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 

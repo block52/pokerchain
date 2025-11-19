@@ -486,14 +486,14 @@ submit_mint_tx() {
     # The keeper will query the contract using the index to get recipient and amount
     local cmd="pokerchaind tx poker process-deposit \
   $nonce \
-  --from='$from_address' \
-  --chain-id='$CHAIN_ID' \
-  --gas='$GAS' \
-  --gas-prices='$GAS_PRICES' \
+  --from=$from_address \
+  --chain-id=$CHAIN_ID \
+  --gas=$GAS \
+  --gas-prices=$GAS_PRICES \
   --yes"
     
     if [ "$local_mode" = "true" ] && [ -n "$home_dir" ]; then
-        cmd="$cmd --home='$home_dir' --keyring-backend=test"
+        cmd="$cmd --home=$home_dir --keyring-backend=test"
     fi
     
     if [ "$dry_run" = "true" ]; then
