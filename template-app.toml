@@ -250,28 +250,5 @@ stop-node-on-err = true
 # implementations.
 max-txs = 5000
 
-###############################################################################
-###                           Bridge Configuration                          ###
-###############################################################################
-
-[bridge]
-# Enable or disable the Ethereum bridge service
-enabled = true
-
-# Ethereum RPC URL (Base Chain)
-# NOTE: This will be automatically populated from .env file during deployment
-# To set your API key, copy .env.example to .env and add your Alchemy API key
-# Get your API key from: https://dashboard.alchemy.com/
-ethereum_rpc_url = "https://base-mainnet.g.alchemy.com/v2/YOUR_API_KEY_HERE"
-
-# CosmosBridge contract address on Base Chain (immutable)
-deposit_contract_address = "0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"
-
-# USDC contract address on Base Chain (immutable)
-usdc_contract_address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-
-# Polling interval in seconds
-polling_interval_seconds = 60
-
-# Starting block number (block where CosmosBridge was deployed)
-starting_block = 22208836
+# NOTE: Bridge configuration is automatically added by pokerchaind init
+# See cmd/pokerchaind/cmd/config.go for the bridge template

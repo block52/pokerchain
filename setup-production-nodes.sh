@@ -414,12 +414,18 @@ generate_validator_key_from_mnemonic() {
         # Use provided mnemonic
         echo "  Recovering validator key from mnemonic..." >&2
         
+        # Debug: show mnemonic length and first few words
+        local word_count=$(echo "$mnemonic" | wc -w)
+        local first_words=$(echo "$mnemonic" | cut -d' ' -f1-3)
+        echo "  Debug: Mnemonic has $word_count words, starts with: $first_words..." >&2
+        
         # Capture output for error reporting
         local gen_output=$(./genvalidatorkey "$mnemonic" "$key_file" 2>&1)
         local gen_exit_code=$?
         
         if [ $gen_exit_code -ne 0 ]; then
             echo -e "  ${RED}❌ Failed to generate key from mnemonic${NC}" >&2
+            echo "  Debug: Full mnemonic was: '$mnemonic'" >&2
             echo "$gen_output" >&2
             return 1
         fi
@@ -527,13 +533,15 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
                 echo -e "  ${GREEN}Found seed phrase for node $i in seeds.txt${NC}"
                 echo -e "  ${YELLOW}Preview: $(echo "$DEFAULT_SEED" | cut -d' ' -f1-3)...${NC}"
                 echo ""
-                read -p "Use this seed? (Enter=yes, or paste your own mnemonic): " input_mnemonic
+                read -p "Use this seed? (press Enter to use it, or paste a different mnemonic): " input_mnemonic
 
                 # If user pressed Enter (empty input), use the default seed
                 if [ -z "$input_mnemonic" ]; then
                     NODE_MNEMONICS[$i]="$DEFAULT_SEED"
+                    echo -e "  ${GREEN}✓${NC} Using seed from seeds.txt"
                 else
                     NODE_MNEMONICS[$i]="$input_mnemonic"
+                    echo -e "  ${GREEN}✓${NC} Using custom seed"
                 fi
             else
                 echo -e "  ${YELLOW}No seed found for node $i in seeds.txt (line $((i + 1)) is empty)${NC}"
