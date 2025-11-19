@@ -361,33 +361,77 @@ generate_validator_key_from_mnemonic() {
     
     mkdir -p "$node_home/config"
     
+    # Check if genvalidatorkey tool exists and is executable
+    if [ ! -x "./genvalidatorkey" ]; then
+        echo -e "  ${RED}❌ genvalidatorkey tool not found or not executable${NC}" >&2
+        echo -e "  ${YELLOW}   Attempting to build it...${NC}" >&2
+        
+        if [ -f "./genvalidatorkey.go" ]; then
+            if go build -o genvalidatorkey ./genvalidatorkey.go 2>&1; then
+                echo -e "  ${GREEN}✓${NC} Built genvalidatorkey tool" >&2
+            else
+                echo -e "  ${RED}❌ Failed to build genvalidatorkey tool${NC}" >&2
+                return 1
+            fi
+        else
+            echo -e "  ${RED}❌ genvalidatorkey.go source file not found${NC}" >&2
+            return 1
+        fi
+    fi
+    
     if [ -z "$mnemonic" ]; then
         # Generate new mnemonic
-        echo "  Generating new mnemonic for $node_moniker..."
-        ./genvalidatorkey generate "$key_file" > /tmp/genkey_output_$$.txt 2>&1
+        echo "  Generating new mnemonic for $node_moniker..." >&2
+        
+        if ! ./genvalidatorkey generate "$key_file" > /tmp/genkey_output_$$.txt 2>&1; then
+            echo -e "  ${RED}❌ Failed to generate key${NC}" >&2
+            cat /tmp/genkey_output_$$.txt >&2
+            rm -f /tmp/genkey_output_$$.txt
+            return 1
+        fi
         
         # Extract mnemonic from output
-        mnemonic=$(grep -A 1 "Generated mnemonic" /tmp/genkey_output_$$.txt | tail -n 1)
+        mnemonic=$(grep -A 1 "Generated mnemonic" /tmp/genkey_output_$$.txt | tail -n 1 | tr -d '\r\n')
         
-        echo -e "  ${GREEN}✓${NC} Generated validator key with new mnemonic"
-        echo ""
-        echo -e "  ${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "  ${RED}⚠️  SAVE THIS MNEMONIC SECURELY - Required for key recovery!${NC}"
-        echo -e "  ${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo "  $mnemonic"
-        echo -e "  ${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
+        if [ -z "$mnemonic" ]; then
+            echo -e "  ${RED}❌ Failed to extract mnemonic from output${NC}" >&2
+            cat /tmp/genkey_output_$$.txt >&2
+            rm -f /tmp/genkey_output_$$.txt
+            return 1
+        fi
+        
+        echo -e "  ${GREEN}✓${NC} Generated validator key with new mnemonic" >&2
+        echo "" >&2
+        echo -e "  ${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}" >&2
+        echo -e "  ${RED}⚠️  SAVE THIS MNEMONIC SECURELY - Required for key recovery!${NC}" >&2
+        echo -e "  ${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}" >&2
+        echo "  $mnemonic" >&2
+        echo -e "  ${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}" >&2
+        echo "" >&2
         
         rm -f /tmp/genkey_output_$$.txt
     else
         # Use provided mnemonic
-        echo "  Recovering validator key from mnemonic..."
-        if ./genvalidatorkey "$mnemonic" "$key_file" > /dev/null 2>&1; then
-            echo -e "  ${GREEN}✓${NC} Recovered validator key from mnemonic"
-        else
-            echo -e "  ${RED}❌ Failed to generate key from mnemonic${NC}"
+        echo "  Recovering validator key from mnemonic..." >&2
+        
+        # Capture output for error reporting
+        local gen_output=$(./genvalidatorkey "$mnemonic" "$key_file" 2>&1)
+        local gen_exit_code=$?
+        
+        if [ $gen_exit_code -ne 0 ]; then
+            echo -e "  ${RED}❌ Failed to generate key from mnemonic${NC}" >&2
+            echo "$gen_output" >&2
             return 1
         fi
+        
+        # Verify the key file was created
+        if [ ! -f "$key_file" ]; then
+            echo -e "  ${RED}❌ Key file was not created${NC}" >&2
+            echo "$gen_output" >&2
+            return 1
+        fi
+        
+        echo -e "  ${GREEN}✓${NC} Recovered validator key from mnemonic" >&2
     fi
     
     echo "$mnemonic"
@@ -585,7 +629,20 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
 
     # Generate validator key from mnemonic if enabled
     if [ "$USE_MNEMONICS" = true ]; then
-        mnemonic=$(generate_validator_key_from_mnemonic "$NODE_HOME" "$NODE_MONIKER" "${NODE_MNEMONICS[$i]}")
+        if ! mnemonic=$(generate_validator_key_from_mnemonic "$NODE_HOME" "$NODE_MONIKER" "${NODE_MNEMONICS[$i]}"); then
+            echo -e "${RED}❌ Failed to generate validator key for ${NODE_MONIKER}${NC}"
+            echo ""
+            echo "This is usually because:"
+            echo "  1. genvalidatorkey binary is missing or not executable"
+            echo "  2. genvalidatorkey.go source file is missing"
+            echo "  3. Invalid mnemonic phrase provided"
+            echo ""
+            echo "Please ensure:"
+            echo "  - genvalidatorkey.go exists in current directory"
+            echo "  - Go is installed (to build the tool)"
+            echo ""
+            exit 1
+        fi
 
         # Create priv_validator_state.json BEFORE running init
         # This is required because init expects it when priv_validator_key.json exists

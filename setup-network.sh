@@ -1163,8 +1163,9 @@ reset_chain() {
     echo "Would you like to replace the genesis file?"
     echo "  1) No - Keep existing genesis.json"
     echo "  2) Yes - Copy from local repo"
+    echo "  3) Yes - Download from GitHub"
     echo ""
-    read -p "Enter choice [1-2] (default: 1): " genesis_choice
+    read -p "Enter choice [1-3] (default: 1): " genesis_choice
     genesis_choice=${genesis_choice:-1}
     
     local genesis_updated=false
@@ -1320,11 +1321,288 @@ reset_chain() {
             echo "   App Hash: ${new_app_hash:-"(empty)"}"
             genesis_updated=true
         fi
+    elif [ "$genesis_choice" = "3" ]; then
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo -e "${BLUE}Download Genesis from GitHub${NC}"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        
+        local github_repo="block52/pokerchain"
+        local genesis_file="genesis.json"
+        
+        echo "Choose genesis file source:"
+        echo "  1) Main branch (latest)"
+        echo "  2) Specific tag/release"
+        echo ""
+        read -p "Enter choice [1-2] (default: 1): " github_choice
+        github_choice=${github_choice:-1}
+        
+        local github_ref="main"
+        
+        if [ "$github_choice" = "2" ]; then
+            echo ""
+            read -p "Enter tag or branch name (e.g., v0.1.6): " github_ref
+            if [ -z "$github_ref" ]; then
+                echo -e "${YELLOW}❌ Tag/branch cannot be empty${NC}"
+                echo "Using main branch instead"
+                github_ref="main"
+            fi
+        fi
+        
+        local github_url="https://raw.githubusercontent.com/${github_repo}/${github_ref}/${genesis_file}"
+        
+        echo ""
+        echo "Downloading genesis file..."
+        echo "URL: $github_url"
+        echo ""
+        
+        # Download to temporary location on remote server
+        if ! ssh "$remote_user@$remote_host" "curl -L -f -o /tmp/genesis.json.new '$github_url'"; then
+            echo -e "${YELLOW}❌ Failed to download genesis from GitHub${NC}"
+            echo ""
+            echo "Possible reasons:"
+            echo "  - Invalid tag/branch name"
+            echo "  - Network connectivity issue"
+            echo "  - File not found in repository"
+            read -p "Press Enter to continue..."
+            return
+        fi
+        
+        echo -e "${GREEN}✓${NC} Downloaded genesis file"
+        
+        # Validate the downloaded genesis
+        echo ""
+        echo "Validating downloaded genesis..."
+        
+        local new_chain_id=$(ssh "$remote_user@$remote_host" "cat /tmp/genesis.json.new | jq -r '.chain_id' 2>/dev/null")
+        local new_app_hash=$(ssh "$remote_user@$remote_host" "cat /tmp/genesis.json.new | jq -r '.app_hash' 2>/dev/null")
+        
+        if [ -z "$new_chain_id" ] || [ "$new_chain_id" = "null" ]; then
+            echo -e "${YELLOW}❌ Downloaded genesis file is invalid (missing chain_id)${NC}"
+            ssh "$remote_user@$remote_host" "rm -f /tmp/genesis.json.new"
+            read -p "Press Enter to continue..."
+            return
+        fi
+        
+        echo "Downloaded genesis file:"
+        echo "  Chain ID:  $new_chain_id"
+        echo "  App Hash:  ${new_app_hash:-"(empty)"}"
+        echo "  Source:    $github_ref"
+        echo ""
+        
+        # Get existing genesis info
+        local old_chain_id=$(ssh "$remote_user@$remote_host" "cat ~/.pokerchain/config/genesis.json | jq -r '.chain_id' 2>/dev/null" || echo "unknown")
+        local old_app_hash=$(ssh "$remote_user@$remote_host" "cat ~/.pokerchain/config/genesis.json | jq -r '.app_hash' 2>/dev/null" || echo "unknown")
+        
+        echo "Current genesis file:"
+        echo "  Chain ID:  $old_chain_id"
+        echo "  App Hash:  ${old_app_hash:-"(empty)"}"
+        echo ""
+        
+        # Compare chain IDs
+        if [ "$new_chain_id" != "$old_chain_id" ]; then
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${YELLOW}⚠️  WARNING: CHAIN ID MISMATCH!${NC}"
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+            echo "You are changing the chain ID from '$old_chain_id' to '$new_chain_id'"
+            echo ""
+            echo "This means you are starting a COMPLETELY NEW CHAIN."
+            echo "This is NOT compatible with the existing network!"
+            echo ""
+            read -p "Are you ABSOLUTELY SURE you want to change the chain ID? (type 'YES' to confirm): " chain_id_confirm
+            
+            if [ "$chain_id_confirm" != "YES" ]; then
+                echo ""
+                echo "Genesis replacement cancelled."
+                ssh "$remote_user@$remote_host" "rm -f /tmp/genesis.json.new"
+                return
+            fi
+        fi
+        
+        # Backup existing genesis
+        echo ""
+        echo "Backing up existing genesis..."
+        ssh "$remote_user@$remote_host" "cp ~/.pokerchain/config/genesis.json ~/.pokerchain/config/genesis.json.backup" || {
+            echo -e "${YELLOW}⚠️  Could not backup existing genesis${NC}"
+        }
+        
+        echo "Backup created: ~/.pokerchain/config/genesis.json.backup"
+        
+        # Replace genesis
+        echo "Installing new genesis..."
+        ssh "$remote_user@$remote_host" "mv /tmp/genesis.json.new ~/.pokerchain/config/genesis.json" || {
+            echo -e "${YELLOW}❌ Failed to replace genesis file${NC}"
+            echo "Restoring backup..."
+            ssh "$remote_user@$remote_host" "mv ~/.pokerchain/config/genesis.json.backup ~/.pokerchain/config/genesis.json"
+            read -p "Press Enter to continue..."
+            return
+        }
+        
+        echo -e "${GREEN}✅ Genesis file updated from GitHub${NC}"
+        echo "   Chain ID: $new_chain_id"
+        echo "   App Hash: ${new_app_hash:-"(empty)"}"
+        echo "   Source:   $github_ref"
+        genesis_updated=true
     fi
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 3: Resetting blockchain state...${NC}"
+    echo -e "${BLUE}Step 3: Backup and Reset Validator Key?${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    # First, backup the current validator key
+    echo "Creating backup of current validator key..."
+    ssh "$remote_user@$remote_host" "cp ~/.pokerchain/config/priv_validator_key.json ~/.pokerchain/config/priv_validator_key.json.backup" || {
+        echo -e "${YELLOW}⚠️  Could not backup validator key${NC}"
+    }
+    echo "Backup created: ~/.pokerchain/config/priv_validator_key.json.backup"
+    
+    # Get current validator address for display
+    local current_address=$(ssh "$remote_user@$remote_host" "cat ~/.pokerchain/config/priv_validator_key.json | jq -r '.address' 2>/dev/null")
+    if [ -n "$current_address" ]; then
+        echo "Current validator address: $current_address"
+    fi
+    
+    echo ""
+    echo "Would you like to replace the validator key?"
+    echo "  1) No - Keep existing validator key (use backup)"
+    echo "  2) Yes - Generate from seed phrase (seeds.txt)"
+    echo ""
+    read -p "Enter choice [1-2] (default: 1): " validator_key_choice
+    validator_key_choice=${validator_key_choice:-1}
+    
+    if [ "$validator_key_choice" = "2" ]; then
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo -e "${BLUE}Generate Validator Key from Seed${NC}"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        
+        # Check for genvalidatorkey tool
+        local genvalidatorkey_path="./genvalidatorkey"
+        if [ ! -f "$genvalidatorkey_path" ]; then
+            echo -e "${YELLOW}genvalidatorkey tool not found, checking for source...${NC}"
+            
+            if [ -f "./genvalidatorkey.go" ]; then
+                echo "Building genvalidatorkey tool..."
+                if go build -o genvalidatorkey ./genvalidatorkey.go; then
+                    echo -e "${GREEN}✓ Built genvalidatorkey tool${NC}"
+                else
+                    echo -e "${RED}❌ Failed to build genvalidatorkey tool${NC}"
+                    echo "Using backed up validator key instead."
+                    validator_key_choice="1"
+                fi
+            else
+                echo -e "${RED}❌ genvalidatorkey.go not found in current directory${NC}"
+                echo "Using backed up validator key instead."
+                validator_key_choice="1"
+            fi
+        fi
+        
+        if [ "$validator_key_choice" = "2" ]; then
+            # Try to read from seeds.txt
+            local seed_phrase=""
+            local seeds_file="./seeds.txt"
+            
+            if [ -f "$seeds_file" ]; then
+                echo -e "${GREEN}Found seeds.txt file${NC}"
+                echo ""
+                echo "Available seed phrases:"
+                
+                local line_num=1
+                while IFS= read -r line; do
+                    if [ -n "$line" ]; then
+                        # Show truncated preview (first 3 words)
+                        local preview=$(echo "$line" | cut -d' ' -f1-3)
+                        echo "  $line_num) $preview..."
+                    fi
+                    ((line_num++))
+                done < "$seeds_file"
+                
+                echo ""
+                read -p "Select line number (or press Enter to type custom seed): " seed_line_num
+                
+                if [ -n "$seed_line_num" ]; then
+                    seed_phrase=$(sed -n "${seed_line_num}p" "$seeds_file" | tr -d '\r\n')
+                    
+                    if [ -z "$seed_phrase" ]; then
+                        echo -e "${YELLOW}❌ Invalid line number or empty line${NC}"
+                        echo ""
+                        read -p "Enter seed phrase manually: " seed_phrase
+                    else
+                        local preview=$(echo "$seed_phrase" | cut -d' ' -f1-3)
+                        echo "Using seed: $preview..."
+                    fi
+                else
+                    read -p "Enter seed phrase: " seed_phrase
+                fi
+            else
+                echo -e "${YELLOW}seeds.txt not found${NC}"
+                echo ""
+                read -p "Enter seed phrase: " seed_phrase
+            fi
+            
+            if [ -z "$seed_phrase" ]; then
+                echo -e "${YELLOW}❌ Seed phrase cannot be empty${NC}"
+                echo "Using backed up validator key instead."
+                validator_key_choice="1"
+            else
+                # Generate validator key locally
+                echo ""
+                echo "Generating validator key from seed..."
+                
+                local temp_key="/tmp/priv_validator_key.json.$$"
+                if echo "$seed_phrase" | ./genvalidatorkey > "$temp_key" 2>/dev/null; then
+                    # Verify the generated key is valid JSON
+                    local new_address=$(cat "$temp_key" | jq -r '.address' 2>/dev/null)
+                    
+                    if [ -n "$new_address" ] && [ "$new_address" != "null" ]; then
+                        echo -e "${GREEN}✓ Generated new validator key${NC}"
+                        echo "New validator address: $new_address"
+                        echo ""
+                        
+                        # Copy to remote server
+                        echo "Copying new validator key to remote server..."
+                        if scp "$temp_key" "$remote_user@$remote_host:~/.pokerchain/config/priv_validator_key.json"; then
+                            echo -e "${GREEN}✅ Validator key replaced${NC}"
+                            echo "   Old address: $current_address"
+                            echo "   New address: $new_address"
+                        else
+                            echo -e "${YELLOW}❌ Failed to copy validator key to remote${NC}"
+                            echo "Restoring backed up key..."
+                            ssh "$remote_user@$remote_host" "cp ~/.pokerchain/config/priv_validator_key.json.backup ~/.pokerchain/config/priv_validator_key.json"
+                        fi
+                        
+                        # Clean up temp file
+                        rm -f "$temp_key"
+                    else
+                        echo -e "${YELLOW}❌ Generated key is invalid${NC}"
+                        echo "Using backed up validator key instead."
+                        rm -f "$temp_key"
+                    fi
+                else
+                    echo -e "${YELLOW}❌ Failed to generate validator key${NC}"
+                    echo "Using backed up validator key instead."
+                    rm -f "$temp_key"
+                fi
+            fi
+        fi
+    fi
+    
+    if [ "$validator_key_choice" = "1" ]; then
+        echo ""
+        echo -e "${GREEN}✓ Using existing validator key (preserved from backup)${NC}"
+        if [ -n "$current_address" ]; then
+            echo "Validator address: $current_address"
+        fi
+    fi
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 4: Resetting blockchain state...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
     # Run tendermint unsafe-reset-all
@@ -1342,7 +1620,7 @@ reset_chain() {
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 4: Verifying preserved files...${NC}"
+    echo -e "${BLUE}Step 5: Verifying preserved files...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
     # Check that keys and genesis still exist
@@ -1365,7 +1643,7 @@ reset_chain() {
         1)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo -e "${BLUE}Step 5: Starting pokerchaind service...${NC}"
+            echo -e "${BLUE}Step 6: Starting pokerchaind service...${NC}"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             
             ssh "$remote_user@$remote_host" "sudo systemctl start pokerchaind" || {
@@ -1386,11 +1664,18 @@ reset_chain() {
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo -e "${BLUE}Step 6: Create Validator? (Optional)${NC}"
+            echo -e "${BLUE}Step 7: Create Validator Transaction? (Optional)${NC}"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo ""
-            echo "Would you like to create a validator now?"
-            echo "  1) Yes - Import key and create validator"
+            echo "The validator KEY is already set up from Step 3."
+            echo "Now you can optionally create a VALIDATOR TRANSACTION to stake tokens."
+            echo ""
+            echo "This requires:"
+            echo "  • An account with tokens (from genesis or transferred)"
+            echo "  • Chain producing blocks (at least 2-3 blocks)"
+            echo ""
+            echo "Would you like to create a validator transaction now?"
+            echo "  1) Yes - Import account key and stake tokens"
             echo "  2) No - I'll do it manually later"
             echo ""
             read -p "Enter choice [1-2]: " validator_choice
@@ -1398,8 +1683,11 @@ reset_chain() {
             if [ "$validator_choice" = "1" ]; then
                 echo ""
                 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                echo -e "${BLUE}Validator Setup${NC}"
+                echo -e "${BLUE}Import Account Key (for signing transactions)${NC}"
                 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                echo ""
+                echo "NOTE: This is your ACCOUNT KEY (wallet), not your validator key."
+                echo "      The validator key (priv_validator_key.json) is already configured."
                 echo ""
                 
                 # Wait for chain to produce a few blocks
@@ -1418,9 +1706,9 @@ reset_chain() {
                 echo "Validator Public Key: $validator_pubkey"
                 echo ""
                 
-                # Ask which key to import
-                echo "Which account key would you like to import?"
-                echo "  1) alice (default genesis account)"
+                # Ask which account key to import
+                echo "Which account (wallet) key would you like to import?"
+                echo "  1) alice (default genesis account with tokens)"
                 echo "  2) Other account (provide mnemonic)"
                 echo ""
                 read -p "Enter choice [1-2] (default: 1): " key_choice
