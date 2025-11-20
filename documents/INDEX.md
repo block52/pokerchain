@@ -38,6 +38,7 @@ All project documentation has been organized into this `documents/` folder.
 ### Network Configuration
 
 -   [**GENESIS_SUMMARY.md**](./GENESIS_SUMMARY.md) - Genesis file creation summary
+-   [**WEBSOCKET_SETUP.md**](./WEBSOCKET_SETUP.md) - WebSocket configuration for PVM (port 8545)
 
 ### Planning & Architecture
 

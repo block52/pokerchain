@@ -2,6 +2,11 @@
 # NGINX and SSL Setup Script for Pokerchaind
 # Usage: ./setup-nginx.sh <domain> [remote-host] [remote-user]
 # Example: ./setup-nginx.sh block52.xyz node1.block52.xyz root
+# 
+# This script configures:
+#   - REST API on https://<domain>
+#   - gRPC on grpcs://<domain>:9443
+#   - WebSocket PVM on wss://<domain>/ws (port 8545)
 
 set -e
 
@@ -43,6 +48,7 @@ echo -e "${BLUE}║        NGINX & SSL Setup for Pokerchaind                    
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${BLUE}Setting up NGINX and SSL on $REMOTE_HOST${NC}"
+echo -e "${BLUE}Domain: $DOMAIN${NC}"
 echo ""
 
 # Execute on remote server
@@ -188,6 +194,25 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+    }
+
+    # PVM WebSocket endpoint on /ws path
+    location /ws {
+        proxy_pass http://127.0.0.1:8545;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        
+        # WebSocket support - critical for PVM
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Prevent connection timeout for long-lived connections
+        proxy_read_timeout 86400;
     }
 }
 ENDNGINX
@@ -410,6 +435,25 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
     }
+
+    # PVM WebSocket endpoint on /ws path
+    location /ws {
+        proxy_pass http://127.0.0.1:8545;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port 443;
+        
+        # WebSocket support - critical for PVM
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Prevent connection timeout for long-lived connections
+        proxy_read_timeout 86400;
+    }
 }
 
 # HTTP to HTTPS redirect
@@ -587,6 +631,7 @@ echo "✅ NGINX installed and configured"
 echo "✅ SSL certificate obtained from Let's Encrypt"
 echo "✅ HTTP to HTTPS redirect enabled"
 echo "✅ gRPC HTTPS configured on port 9443"
+echo "✅ WebSocket PVM configured at /ws path (port 8545)"
 echo "✅ Auto-renewal configured"
 echo ""
 echo -e "${YELLOW}🌐 Your endpoints:${NC}"
@@ -599,6 +644,10 @@ echo "    https://${DOMAIN}/rpc/status"
 echo ""
 echo "  gRPC (HTTPS):"
 echo "    grpcs://${DOMAIN}:9443"
+echo ""
+echo "  WebSocket PVM (HTTPS):"
+echo "    wss://${DOMAIN}/ws"
+echo "    (Poker Virtual Machine - port 8545)"
 echo ""
 echo -e "${YELLOW}🧪 Test your endpoints:${NC}"
 echo ""

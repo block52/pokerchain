@@ -472,7 +472,11 @@ setup_nginx() {
         return 0
     fi
 
-    echo "NGINX provides HTTPS access to your node's REST API and gRPC endpoints."
+    echo "NGINX provides HTTPS access to your node's REST API, gRPC, and WebSocket endpoints."
+    echo "This will configure:"
+    echo "  - REST API: https://<domain>"
+    echo "  - gRPC: grpcs://<domain>:9443"
+    echo "  - WebSocket PVM: wss://<domain>/ws (port 8545)"
     echo ""
     read -p "Do you want to set up NGINX and SSL now? (y/n): " setup_nginx_choice
 
