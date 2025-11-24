@@ -622,17 +622,65 @@ verify_network() {
     else
         echo -e "${YELLOW}⚠️  Not accessible${NC}"
     fi
-    
+
+    # Test SSL/HTTPS endpoints
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Testing SSL/HTTPS Endpoints...${NC}"
+    echo ""
+
+    # Test HTTPS API at root
+    echo -n "HTTPS REST API (root): "
+    if curl -s --max-time 5 "https://$remote_node/cosmos/base/tendermint/v1beta1/node_info" > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Accessible${NC}"
+
+        # Get node info via HTTPS
+        local https_api_output=$(curl -s --max-time 5 "https://$remote_node/cosmos/base/tendermint/v1beta1/node_info" 2>/dev/null)
+        if [ -n "$https_api_output" ]; then
+            echo "$https_api_output" | jq -r '
+                "  Default Node ID: " + .default_node_id,
+                "  Network: " + .default_node_info.network
+            ' 2>/dev/null || echo "  (API response received)"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Not accessible${NC}"
+    fi
+
+    echo ""
+    echo -n "HTTPS RPC (/rpc): "
+    if curl -s --max-time 5 "https://$remote_node/rpc/status" > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Accessible${NC}"
+
+        # Get status via HTTPS RPC
+        local https_rpc_output=$(curl -s --max-time 5 "https://$remote_node/rpc/status" 2>/dev/null)
+        if [ -n "$https_rpc_output" ]; then
+            echo "$https_rpc_output" | jq -r '
+                "  Chain ID: " + .result.node_info.network,
+                "  Latest Block: " + .result.sync_info.latest_block_height
+            ' 2>/dev/null || echo "  (RPC response received)"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Not accessible${NC}"
+    fi
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
     echo ""
     echo "Public Endpoints:"
-    echo "  RPC:  http://$remote_node:$rpc_port"
-    echo "  API:  http://$remote_node:$api_port"
+    echo "  HTTP RPC:   http://$remote_node:$rpc_port"
+    echo "  HTTP API:   http://$remote_node:$api_port"
+    echo "  HTTPS RPC:  https://$remote_node/rpc"
+    echo "  HTTPS API:  https://$remote_node/"
     echo ""
     echo "Test commands:"
-    echo "  curl http://$remote_node:$rpc_port/status"
-    echo "  curl http://$remote_node:$api_port/cosmos/base/tendermint/v1beta1/node_info"
+    echo "  HTTP:"
+    echo "    curl http://$remote_node:$rpc_port/status"
+    echo "    curl http://$remote_node:$api_port/cosmos/base/tendermint/v1beta1/node_info"
+    echo "  HTTPS:"
+    echo "    curl https://$remote_node/rpc/status"
+    echo "    curl https://$remote_node/cosmos/base/tendermint/v1beta1/node_info"
     echo ""
-    
+
     read -p "Press Enter to continue..."
 }
 

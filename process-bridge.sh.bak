@@ -43,7 +43,7 @@ VALIDATOR_HOST="${VALIDATOR_HOST:-node1.block52.xyz}"
 VALIDATOR_USER="${VALIDATOR_USER:-root}"
 CHAIN_ID="pokerchain"
 GAS="300000"
-GAS_PRICES="0.001stake"  # Gasless transactions
+GAS_PRICES="0stake"  # Gasless transactions
 DEFAULT_FROM_KEY="b52"  # Default key to use for transactions (has funds on validator)
 
 # Event signature for Deposited(string indexed account, uint256 amount, uint256 index)
