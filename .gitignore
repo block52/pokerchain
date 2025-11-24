@@ -12,5 +12,15 @@ build/
 test/
 production/
 
+# CLI tool binaries (in root directory only)
+/create-table
+/join-game
+/leave-game
+/perform-action
+/get-legal-actions
+/poker-cli
+/ws-server
+/trigger-broadcast
+
 # Environment variables with secrets
 .env

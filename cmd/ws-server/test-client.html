@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poker WebSocket Test Client</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Monaco', 'Courier New', monospace;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #00d9ff;
+            font-size: 2em;
+        }
+
+        .panel {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #0f3460;
+        }
+
+        .panel h2 {
+            color: #00d9ff;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .status.connected {
+            background: #27ae60;
+            color: white;
+        }
+
+        .status.disconnected {
+            background: #e74c3c;
+            color: white;
+        }
+
+        input, button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        input {
+            background: #0f3460;
+            color: #eee;
+            border: 1px solid #00d9ff;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #00ff88;
+        }
+
+        button {
+            background: #00d9ff;
+            color: #1a1a2e;
+            cursor: pointer;
+            font-weight: bold;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: #00ff88;
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .messages {
+            background: #0a0e27;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            padding: 15px;
+            height: 400px;
+            overflow-y: auto;
+            font-size: 13px;
+        }
+
+        .message {
+            padding: 8px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            border-left: 3px solid #00d9ff;
+        }
+
+        .message.sent {
+            background: #1a2332;
+            border-left-color: #00ff88;
+        }
+
+        .message.received {
+            background: #1f1f3d;
+            border-left-color: #00d9ff;
+        }
+
+        .message.error {
+            background: #3d1f1f;
+            border-left-color: #e74c3c;
+        }
+
+        .message.info {
+            background: #2d2d1f;
+            border-left-color: #f39c12;
+        }
+
+        .message-time {
+            color: #888;
+            font-size: 11px;
+            margin-right: 10px;
+        }
+
+        .message-content {
+            color: #eee;
+        }
+
+        .json {
+            background: #0a0e27;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 5px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+
+        .subscriptions {
+            margin-top: 15px;
+        }
+
+        .subscription-tag {
+            display: inline-block;
+            background: #0f3460;
+            padding: 5px 10px;
+            border-radius: 15px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            font-size: 12px;
+            border: 1px solid #00d9ff;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-box {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #00d9ff;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 Poker WebSocket Test Client</h1>
+
+        <div class="panel">
+            <h2>Connection</h2>
+            <span id="status" class="status disconnected">Disconnected</span>
+            <div style="margin-top: 15px;">
+                <input type="text" id="wsUrl" value="ws://localhost:8585/ws" placeholder="WebSocket URL">
+                <button id="connectBtn" onclick="connect()">Connect</button>
+                <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Subscribe to Game</h2>
+            <input type="text" id="gameId" placeholder="Game ID (0x...)" value="0x89a7c217580fb3fcd84d541e30538374c2974bc57e59c7c4cdb6b38714771df1">
+            <button onclick="subscribe()" id="subBtn" disabled>Subscribe</button>
+            <button onclick="unsubscribe()" id="unsubBtn" disabled>Unsubscribe</button>
+            <button onclick="ping()" id="pingBtn" disabled>Ping</button>
+
+            <div class="subscriptions" id="subscriptions">
+                <strong>Active Subscriptions:</strong>
+                <div id="subList">None</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Statistics</h2>
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-value" id="msgSent">0</div>
+                    <div class="stat-label">Messages Sent</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="msgReceived">0</div>
+                    <div class="stat-label">Messages Received</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="activeSubs">0</div>
+                    <div class="stat-label">Active Subscriptions</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Messages</h2>
+            <button onclick="clearMessages()">Clear</button>
+            <div class="messages" id="messages"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let messagesSent = 0;
+        let messagesReceived = 0;
+        let subscriptions = new Set();
+
+        function updateStats() {
+            document.getElementById('msgSent').textContent = messagesSent;
+            document.getElementById('msgReceived').textContent = messagesReceived;
+            document.getElementById('activeSubs').textContent = subscriptions.size;
+        }
+
+        function updateSubscriptionList() {
+            const list = document.getElementById('subList');
+            if (subscriptions.size === 0) {
+                list.innerHTML = 'None';
+            } else {
+                list.innerHTML = '';
+                subscriptions.forEach(gameId => {
+                    const tag = document.createElement('span');
+                    tag.className = 'subscription-tag';
+                    tag.textContent = gameId.substring(0, 10) + '...';
+                    tag.title = gameId;
+                    list.appendChild(tag);
+                });
+            }
+        }
+
+        function addMessage(type, content) {
+            const messages = document.getElementById('messages');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+
+            const time = new Date().toLocaleTimeString();
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'message-time';
+            timeSpan.textContent = time;
+
+            const contentSpan = document.createElement('span');
+            contentSpan.className = 'message-content';
+
+            if (typeof content === 'object') {
+                contentSpan.textContent = type === 'sent' ? 'Sent: ' : 'Received: ';
+                const json = document.createElement('div');
+                json.className = 'json';
+                json.textContent = JSON.stringify(content, null, 2);
+                msg.appendChild(timeSpan);
+                msg.appendChild(contentSpan);
+                msg.appendChild(json);
+            } else {
+                contentSpan.textContent = content;
+                msg.appendChild(timeSpan);
+                msg.appendChild(contentSpan);
+            }
+
+            messages.appendChild(msg);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function connect() {
+            const url = document.getElementById('wsUrl').value;
+            addMessage('info', `Connecting to ${url}...`);
+
+            try {
+                ws = new WebSocket(url);
+
+                ws.onopen = () => {
+                    addMessage('info', 'Connected!');
+                    document.getElementById('status').textContent = 'Connected';
+                    document.getElementById('status').className = 'status connected';
+                    document.getElementById('connectBtn').disabled = true;
+                    document.getElementById('disconnectBtn').disabled = false;
+                    document.getElementById('subBtn').disabled = false;
+                    document.getElementById('unsubBtn').disabled = false;
+                    document.getElementById('pingBtn').disabled = false;
+                };
+
+                ws.onmessage = (event) => {
+                    messagesReceived++;
+                    updateStats();
+                    try {
+                        const data = JSON.parse(event.data);
+                        addMessage('received', data);
+                    } catch (e) {
+                        addMessage('received', event.data);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    addMessage('error', 'WebSocket error occurred');
+                    console.error('WebSocket error:', error);
+                };
+
+                ws.onclose = () => {
+                    addMessage('info', 'Disconnected');
+                    document.getElementById('status').textContent = 'Disconnected';
+                    document.getElementById('status').className = 'status disconnected';
+                    document.getElementById('connectBtn').disabled = false;
+                    document.getElementById('disconnectBtn').disabled = true;
+                    document.getElementById('subBtn').disabled = true;
+                    document.getElementById('unsubBtn').disabled = true;
+                    document.getElementById('pingBtn').disabled = true;
+                };
+            } catch (error) {
+                addMessage('error', `Failed to connect: ${error.message}`);
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function sendMessage(msg) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(msg));
+                messagesSent++;
+                updateStats();
+                addMessage('sent', msg);
+            } else {
+                addMessage('error', 'Not connected');
+            }
+        }
+
+        function subscribe() {
+            const gameId = document.getElementById('gameId').value.trim();
+            if (!gameId) {
+                addMessage('error', 'Please enter a game ID');
+                return;
+            }
+
+            sendMessage({
+                type: 'subscribe',
+                game_id: gameId
+            });
+
+            subscriptions.add(gameId);
+            updateSubscriptionList();
+            updateStats();
+        }
+
+        function unsubscribe() {
+            const gameId = document.getElementById('gameId').value.trim();
+            if (!gameId) {
+                addMessage('error', 'Please enter a game ID');
+                return;
+            }
+
+            sendMessage({
+                type: 'unsubscribe',
+                game_id: gameId
+            });
+
+            subscriptions.delete(gameId);
+            updateSubscriptionList();
+            updateStats();
+        }
+
+        function ping() {
+            sendMessage({
+                type: 'ping'
+            });
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        // Auto-connect on load (optional)
+        // connect();
+    </script>
+</body>
+</html>
