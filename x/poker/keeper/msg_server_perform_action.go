@@ -208,9 +208,15 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 	node := "http://localhost:8545"
 	resp, err := http.Post(node, "application/json", bytes.NewBuffer(requestBody))
 	if err != nil {
-		return fmt.Errorf("failed to make HTTP request to game engine: %w", err)
+		return fmt.Errorf("failed to make HTTP request to game engine at %s: %w", node, err)
 	}
 	defer resp.Body.Close()
+
+	// Check HTTP status code
+	if resp.StatusCode != http.StatusOK {
+		responseBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("game engine returned non-OK status %d: %s (body: %s)", resp.StatusCode, resp.Status, string(responseBody))
+	}
 
 	// Parse JSON-RPC response
 	var response JSONRPCResponse
