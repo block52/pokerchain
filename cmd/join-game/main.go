@@ -53,7 +53,7 @@ func main() {
 		fmt.Println("")
 		fmt.Println("Arguments:")
 		fmt.Println("  game_id       - The game/table ID to join (hex string)")
-		fmt.Println("  seat          - Seat number (0-8 for 9-max tables)")
+		fmt.Println("  seat          - Seat number (1-9 for 9-max tables)")
 		fmt.Println("  buy_in_amount - Buy-in amount in uusdc (e.g., 500000000 = 500 USDC)")
 		os.Exit(1)
 	}
@@ -64,6 +64,10 @@ func main() {
 
 	if _, err := fmt.Sscanf(os.Args[2], "%d", &seat); err != nil {
 		fmt.Printf("Error: Invalid seat number: %v\n", err)
+		os.Exit(1)
+	}
+	if seat < 1 || seat > 9 {
+		fmt.Println("Error: Seat number must be between 1 and 9")
 		os.Exit(1)
 	}
 

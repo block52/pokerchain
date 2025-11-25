@@ -36,7 +36,7 @@ go build -o join-game ./cmd/join-game
 
 **Arguments:**
 - `game_id` - The game/table ID to join (hex string starting with 0x)
-- `seat` - Seat number (0-8 for 9-max tables)
+- `seat` - Seat number (1-9 for 9-max tables)
 - `buy_in_amount` - Buy-in amount in uusdc (e.g., 500000000 = 500 USDC)
 
 ### Example

@@ -114,7 +114,7 @@ Returns the transaction hash on success.
 
 Interactive prompts for:
 - **Game ID** - The table to join (hex format: 0x...)
-- **Seat number** - Which seat to take (0-8)
+- **Seat number** - Which seat to take (1-9)
 - **Buy-in amount** - Chips to bring to table (e.g., 500000000 = 500 USDC)
 
 ### 5. Perform Poker Action
@@ -200,7 +200,7 @@ Transaction hash: A8E1668ABAB64109...
 # Join a game
 Select option: 3
 Game ID (0x...): 0x89a7c217580fb3fc...
-Seat number (0-8): 1
+Seat number (1-9): 1
 Buy-in amount (uusdc): 500000000
 
 ✅ Joined table successfully!

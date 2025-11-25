@@ -3,11 +3,13 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/tx"
@@ -22,6 +24,7 @@ import (
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/cosmos/go-bip39"
+	"github.com/ethereum/go-ethereum/crypto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -310,7 +313,11 @@ func (cli *PokerCLI) joinTable() {
 	fmt.Print("Game ID (0x...): ")
 	gameID := cli.readLine()
 
-	seat := cli.readUint64("Seat number (0-8): ")
+	seat := cli.readUint64("Seat number (1-9): ")
+	if seat < 1 || seat > 9 {
+		fmt.Println("❌ Invalid seat number. Must be between 1 and 9.\n")
+		return
+	}
 	buyIn := cli.readUint64("Buy-in amount (uusdc, e.g., 500000000 = 500 USDC): ")
 
 	fmt.Println()
@@ -382,26 +389,62 @@ func (cli *PokerCLI) queryGameState() {
 	gameID := cli.readLine()
 
 	fmt.Println()
-	fmt.Println("Querying game state...")
-	fmt.Println()
 
 	queryClient := pokertypes.NewQueryClient(cli.grpcConn)
-	res, err := queryClient.Game(context.Background(), &pokertypes.QueryGameRequest{
-		GameId: gameID,
-	})
-	if err != nil {
-		fmt.Printf("❌ Error querying game: %v\n\n", err)
-		cli.pressEnterToContinue()
-		return
+
+	var game map[string]interface{}
+	authenticated := false
+
+	// Try authenticated query first (to see your own cards)
+	fmt.Println("Querying game state (with signature authentication)...")
+	timestamp := time.Now().Unix()
+	signature, signErr := cli.signQueryMessage(timestamp)
+	if signErr == nil {
+		res, err := queryClient.GameState(context.Background(), &pokertypes.QueryGameStateRequest{
+			GameId:        gameID,
+			PlayerAddress: cli.address.String(),
+			Timestamp:     timestamp,
+			Signature:     signature,
+		})
+		if err == nil {
+			if parseErr := json.Unmarshal([]byte(res.GameState), &game); parseErr == nil {
+				authenticated = true
+				fmt.Println("✓ Authenticated query successful (showing your cards)")
+			}
+		} else {
+			fmt.Printf("⚠ Authenticated query failed: %v\n", err)
+		}
 	}
 
-	// Parse the JSON string response
-	var game map[string]interface{}
-	if err := json.Unmarshal([]byte(res.Game), &game); err != nil {
-		fmt.Printf("❌ Error parsing game data: %v\n\n", err)
-		cli.pressEnterToContinue()
-		return
+	// Fall back to public query if authenticated failed
+	if !authenticated {
+		fmt.Println("Falling back to public query (all cards hidden)...")
+		res, err := queryClient.Game(context.Background(), &pokertypes.QueryGameRequest{
+			GameId: gameID,
+		})
+		if err != nil {
+			fmt.Printf("❌ Error querying game: %v\n\n", err)
+			cli.pressEnterToContinue()
+			return
+		}
+		if parseErr := json.Unmarshal([]byte(res.Game), &game); parseErr != nil {
+			fmt.Printf("❌ Error parsing game data: %v\n\n", parseErr)
+			cli.pressEnterToContinue()
+			return
+		}
+
+		// For public query, check if gameState is nested
+		if gs, ok := game["gameState"].(map[string]interface{}); ok {
+			// Merge gameState into root level for consistent display
+			for k, v := range gs {
+				if _, exists := game[k]; !exists {
+					game[k] = v
+				}
+			}
+		}
 	}
+
+	fmt.Println()
 
 	// Display formatted game state
 	fmt.Println("╔══════════════════════════════════════════════════════════════════╗")
@@ -423,32 +466,68 @@ func (cli *PokerCLI) queryGameState() {
 		return 0
 	}
 
+	// Extract game options (nested in gameOptions for TexasHoldemStateDTO)
+	var gameOptions map[string]interface{}
+	if opts, ok := game["gameOptions"].(map[string]interface{}); ok {
+		gameOptions = opts
+	}
+
+	getOptionFloat := func(key string) float64 {
+		if gameOptions != nil {
+			if val, ok := gameOptions[key].(float64); ok {
+				return val
+			}
+			// Also try string (some values come as strings)
+			if val, ok := gameOptions[key].(string); ok {
+				if f, err := strconv.ParseFloat(val, 64); err == nil {
+					return f
+				}
+			}
+		}
+		return 0
+	}
+
 	// Game Info
 	fmt.Println("┌─ Game Information ────────────────────────────────────────────────┐")
-	gameIDStr := getString("gameId")
-	if len(gameIDStr) > 20 {
-		gameIDStr = gameIDStr[:20] + "..."
+	gameAddr := getString("address")
+	if len(gameAddr) > 20 {
+		gameAddr = gameAddr[:20] + "..."
 	}
-	fmt.Printf("│ Game ID:       %s\n", gameIDStr)
-	fmt.Printf("│ Creator:       %s\n", getString("creator"))
-	fmt.Printf("│ Status:        %s\n", getString("status"))
-	fmt.Printf("│ Game Type:     %s\n", getString("gameType"))
-	fmt.Printf("│ Min/Max Buy:   %.0f / %.0f uusdc\n", getFloat("minBuyIn"), getFloat("maxBuyIn"))
-	fmt.Printf("│ Blinds:        %.0f / %.0f uusdc (SB/BB)\n", getFloat("smallBlind"), getFloat("bigBlind"))
+	fmt.Printf("│ Game Address:  %s\n", gameAddr)
+	fmt.Printf("│ Type:          %v\n", game["type"])
+	fmt.Printf("│ Round:         %s\n", getString("round"))
+	fmt.Printf("│ Hand #:        %.0f\n", getFloat("handNumber"))
+
+	// Game options
+	minBuyIn := getOptionFloat("minBuyIn")
+	maxBuyIn := getOptionFloat("maxBuyIn")
+	smallBlind := getOptionFloat("smallBlind")
+	bigBlind := getOptionFloat("bigBlind")
+	if minBuyIn > 0 || maxBuyIn > 0 {
+		fmt.Printf("│ Min/Max Buy:   %.0f / %.0f uusdc\n", minBuyIn, maxBuyIn)
+	}
+	if smallBlind > 0 || bigBlind > 0 {
+		fmt.Printf("│ Blinds:        %.0f / %.0f uusdc (SB/BB)\n", smallBlind, bigBlind)
+	}
 
 	players := []interface{}{}
 	if p, ok := game["players"].([]interface{}); ok {
 		players = p
 	}
-	fmt.Printf("│ Players:       %d / %.0f (min/max: %.0f/%.0f)\n",
-		len(players), getFloat("maxPlayers"), getFloat("minPlayers"), getFloat("maxPlayers"))
+	maxPlayers := getOptionFloat("maxPlayers")
+	minPlayers := getOptionFloat("minPlayers")
+	fmt.Printf("│ Players:       %d", len(players))
+	if maxPlayers > 0 {
+		fmt.Printf(" / %.0f (min: %.0f)", maxPlayers, minPlayers)
+	}
+	fmt.Println()
 	fmt.Println("└───────────────────────────────────────────────────────────────────┘")
 	fmt.Println()
 
 	// Players Table
 	if len(players) > 0 {
 		fmt.Println("┌─ Players ─────────────────────────────────────────────────────────┐")
-		fmt.Println("│ Seat │ Address                │ Stack         │ Status    │ Bet   │")
+		fmt.Println("│ Seat │ Address                │ Stack         │ Status    │ Cards │")
 		fmt.Println("├──────┼────────────────────────┼───────────────┼───────────┼───────┤")
 
 		for _, p := range players {
@@ -470,74 +549,91 @@ func (cli *PokerCLI) queryGameState() {
 				seat = s
 			}
 
+			// Stack can be string or float in TexasHoldemStateDTO
 			stack := float64(0)
-			if s, ok := player["stack"].(float64); ok {
+			if s, ok := player["stack"].(string); ok {
+				stack, _ = strconv.ParseFloat(s, 64)
+			} else if s, ok := player["stack"].(float64); ok {
 				stack = s
 			}
 			stackUSDC := stack / 1_000_000
-
-			bet := float64(0)
-			if b, ok := player["currentBet"].(float64); ok {
-				bet = b
-			}
-			betUSDC := bet / 1_000_000
 
 			status := ""
 			if st, ok := player["status"].(string); ok {
 				status = st
 			}
 
-			fmt.Printf("│ %-4.0f │ %-22s │ %8.2f USDC │ %-9s │ %.2f  │\n",
-				seat, addr, stackUSDC, status, betUSDC)
-		}
-		fmt.Println("└───────────────────────────────────────────────────────────────────┘")
-		fmt.Println()
-	}
-
-	// Game State
-	status := getString("status")
-	if status == "active" || status == "in_progress" {
-		fmt.Println("┌─ Current Hand ────────────────────────────────────────────────────┐")
-
-		// Community cards
-		communityCards := []interface{}{}
-		if cc, ok := game["communityCards"].([]interface{}); ok {
-			communityCards = cc
-		}
-		if len(communityCards) > 0 {
-			fmt.Printf("│ Community:     %v\n", communityCards)
-		} else {
-			fmt.Println("│ Community:     (no cards dealt yet)")
-		}
-
-		// Pot
-		pots := []interface{}{}
-		if p, ok := game["pots"].([]interface{}); ok {
-			pots = p
-		}
-		if len(pots) > 0 {
-			totalPot := float64(0)
-			for _, pot := range pots {
-				if potStr, ok := pot.(string); ok {
-					if potVal, err := strconv.ParseFloat(potStr, 64); err == nil {
-						totalPot += potVal
+			// Hole cards (only visible for current player, others show "X")
+			cards := ""
+			if hc, ok := player["holeCards"].([]interface{}); ok && len(hc) > 0 {
+				cardStrs := []string{}
+				for _, c := range hc {
+					if cs, ok := c.(string); ok {
+						cardStrs = append(cardStrs, cs)
 					}
 				}
+				cards = strings.Join(cardStrs, " ")
 			}
-			potUSDC := totalPot / 1_000_000
-			fmt.Printf("│ Pot:           %.2f USDC\n", potUSDC)
-		}
 
-		// Round and next to act
-		fmt.Printf("│ Round:         %s\n", getString("round"))
-		nextToAct := getFloat("nextToAct")
-		if nextToAct >= 0 {
-			fmt.Printf("│ Next to Act:   Seat %.0f\n", nextToAct)
+			fmt.Printf("│ %-4.0f │ %-22s │ %8.2f USDC │ %-9s │ %-5s │\n",
+				seat, addr, stackUSDC, status, cards)
 		}
-
 		fmt.Println("└───────────────────────────────────────────────────────────────────┘")
 		fmt.Println()
 	}
+
+	// Current Hand Info
+	fmt.Println("┌─ Current Hand ────────────────────────────────────────────────────┐")
+
+	// Community cards
+	communityCards := []interface{}{}
+	if cc, ok := game["communityCards"].([]interface{}); ok {
+		communityCards = cc
+	}
+	if len(communityCards) > 0 {
+		cardStrs := []string{}
+		for _, c := range communityCards {
+			if cs, ok := c.(string); ok {
+				cardStrs = append(cardStrs, cs)
+			}
+		}
+		fmt.Printf("│ Community:     %s\n", strings.Join(cardStrs, " "))
+	} else {
+		fmt.Println("│ Community:     (no cards dealt yet)")
+	}
+
+	// Pot
+	pots := []interface{}{}
+	if p, ok := game["pots"].([]interface{}); ok {
+		pots = p
+	}
+	if len(pots) > 0 {
+		totalPot := float64(0)
+		for _, pot := range pots {
+			if potStr, ok := pot.(string); ok {
+				if potVal, err := strconv.ParseFloat(potStr, 64); err == nil {
+					totalPot += potVal
+				}
+			}
+		}
+		potUSDC := totalPot / 1_000_000
+		fmt.Printf("│ Pot:           %.2f USDC\n", potUSDC)
+	} else {
+		fmt.Println("│ Pot:           0.00 USDC")
+	}
+
+	// Next to act
+	nextToAct := getFloat("nextToAct")
+	if nextToAct >= 0 {
+		fmt.Printf("│ Next to Act:   Seat %.0f\n", nextToAct)
+	}
+
+	// Action count
+	actionCount := getFloat("actionCount")
+	fmt.Printf("│ Action Count:  %.0f\n", actionCount)
+
+	fmt.Println("└───────────────────────────────────────────────────────────────────┘")
+	fmt.Println()
 
 	// Ask if they want to see raw JSON
 	fmt.Print("Show raw JSON? (y/n): ")
@@ -813,4 +909,36 @@ func makeEncodingConfig() EncodingConfig {
 		TxConfig:          txCfg,
 		Amino:             amino,
 	}
+}
+
+// signQueryMessage signs a message for authenticated queries using Ethereum personal_sign format
+func (cli *PokerCLI) signQueryMessage(timestamp int64) (string, error) {
+	// Create the message: "pokerchain-query:<timestamp>"
+	message := fmt.Sprintf("pokerchain-query:%d", timestamp)
+
+	// Add Ethereum signed message prefix
+	prefixedMessage := fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)
+	hash := crypto.Keccak256Hash([]byte(prefixedMessage))
+
+	// Get the secp256k1 private key bytes
+	privKeyBytes := cli.privKey.Bytes()
+
+	// Convert to ECDSA private key for ethereum signing
+	ecdsaPrivKey, err := crypto.ToECDSA(privKeyBytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert to ECDSA key: %w", err)
+	}
+
+	// Sign the hash
+	signature, err := crypto.Sign(hash.Bytes(), ecdsaPrivKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign message: %w", err)
+	}
+
+	// Adjust v value for Ethereum compatibility (add 27)
+	if signature[64] < 27 {
+		signature[64] += 27
+	}
+
+	return "0x" + hex.EncodeToString(signature), nil
 }

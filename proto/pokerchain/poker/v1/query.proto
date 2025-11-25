@@ -38,9 +38,14 @@ service Query {
     option (google.api.http).get = "/block52/pokerchain/poker/v1/legal_actions/{game_id}/{player_address}";
   }
 
-  // GameState Queries the detailed game state for a game.
+  // GameState Queries the detailed game state for a game (authenticated, shows your cards).
   rpc GameState(QueryGameStateRequest) returns (QueryGameStateResponse) {
     option (google.api.http).get = "/block52/pokerchain/poker/v1/game_state/{game_id}";
+  }
+
+  // GameStatePublic Queries the public game state (unauthenticated, all cards masked).
+  rpc GameStatePublic(QueryGameStatePublicRequest) returns (QueryGameStatePublicResponse) {
+    option (google.api.http).get = "/block52/pokerchain/poker/v1/game_state_public/{game_id}";
   }
 
   // IsTxProcessed checks if an Ethereum transaction hash has been processed
@@ -120,6 +125,16 @@ message QueryGameStateRequest {
 
 // QueryGameStateResponse defines the QueryGameStateResponse message.
 message QueryGameStateResponse {
+  string game_state = 1;
+}
+
+// QueryGameStatePublicRequest defines the QueryGameStatePublicRequest message.
+message QueryGameStatePublicRequest {
+  string game_id = 1;
+}
+
+// QueryGameStatePublicResponse defines the QueryGameStatePublicResponse message.
+message QueryGameStatePublicResponse {
   string game_state = 1;
 }
 

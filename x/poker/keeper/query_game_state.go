@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/bech32"
 	"github.com/ethereum/go-ethereum/crypto"
+	"golang.org/x/crypto/ripemd160"
 
 	"github.com/block52/pokerchain/x/poker/types"
 	"google.golang.org/grpc/codes"
@@ -81,7 +83,7 @@ func (q queryServer) GameState(ctx context.Context, req *types.QueryGameStateReq
 // verifyCosmosSignature verifies that the signature was created by signing the timestamp
 // with the private key corresponding to the given Cosmos address
 func verifyCosmosSignature(cosmosAddress string, timestamp int64, signatureHex string) error {
-	// Decode the Cosmos address to get the public key hash
+	// Decode the Cosmos address to get the address bytes
 	_, addressBytes, err := bech32.DecodeAndConvert(cosmosAddress)
 	if err != nil {
 		return fmt.Errorf("invalid cosmos address: %w", err)
@@ -122,18 +124,21 @@ func verifyCosmosSignature(cosmosAddress string, timestamp int64, signatureHex s
 		return fmt.Errorf("failed to recover public key: %w", err)
 	}
 
-	// Get the address from the recovered public key
-	recoveredAddress := crypto.PubkeyToAddress(*recoveredPubKey)
+	// Convert the recovered ECDSA public key to Cosmos address
+	// Cosmos uses: RIPEMD160(SHA256(compressed_pubkey))
+	// First, get the compressed public key bytes (33 bytes)
+	compressedPubKey := crypto.CompressPubkey(recoveredPubKey)
 
-	// For Cosmos addresses, we need to compare the address bytes
-	// The last 20 bytes of the Cosmos address should match the Ethereum address
-	if len(addressBytes) < 20 {
-		return fmt.Errorf("cosmos address too short")
-	}
+	// Hash with SHA256
+	sha256Hash := sha256.Sum256(compressedPubKey)
 
-	// Compare the last 20 bytes (Ethereum address portion)
-	ethAddressFromCosmos := addressBytes[len(addressBytes)-20:]
-	if !bytesEqual(ethAddressFromCosmos, recoveredAddress.Bytes()) {
+	// Hash with RIPEMD160
+	ripemd160Hasher := ripemd160.New()
+	ripemd160Hasher.Write(sha256Hash[:])
+	recoveredCosmosAddress := ripemd160Hasher.Sum(nil)
+
+	// Compare the Cosmos addresses
+	if !bytesEqual(addressBytes, recoveredCosmosAddress) {
 		return fmt.Errorf("signature does not match the provided address")
 	}
 
