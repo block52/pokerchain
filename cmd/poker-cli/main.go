@@ -677,8 +677,8 @@ func (cli *PokerCLI) getLegalActions() {
 		return
 	}
 
-	// Parse the actions JSON string
-	var actions map[string]interface{}
+	// Parse the actions JSON string - it's an array of LegalActionDTO
+	var actions []map[string]interface{}
 	if err := json.Unmarshal([]byte(res.Actions), &actions); err != nil {
 		fmt.Printf("❌ Error parsing actions data: %v\n\n", err)
 		cli.pressEnterToContinue()
@@ -688,39 +688,35 @@ func (cli *PokerCLI) getLegalActions() {
 	// Display legal actions
 	fmt.Println("┌─ Legal Actions ───────────────────────────────────────────────────┐")
 
-	// Check if it's your turn
-	isYourTurn, ok := actions["is_your_turn"].(bool)
-	if ok && isYourTurn {
-		fmt.Println("│ ✓ It's your turn to act                                          │")
+	if len(actions) == 0 {
+		fmt.Println("│ No legal actions available (not your turn or not in game)       │")
 	} else {
-		fmt.Println("│ ✗ It's not your turn                                             │")
-	}
-
-	// Display available actions
-	if availableActions, ok := actions["available_actions"].([]interface{}); ok && len(availableActions) > 0 {
+		fmt.Println("│ ✓ You have legal actions available                              │")
 		fmt.Println("│                                                                   │")
 		fmt.Println("│ Available actions:                                                │")
-		for _, action := range availableActions {
-			actionStr := fmt.Sprintf("%v", action)
+
+		for _, action := range actions {
+			actionType := ""
+			if a, ok := action["action"].(string); ok {
+				actionType = a
+			}
+
+			// Format action with min/max if present
+			actionStr := actionType
+			if min, ok := action["min"].(string); ok && min != "" {
+				if max, ok := action["max"].(string); ok && max != "" {
+					// Convert to USDC for display
+					minVal, _ := strconv.ParseFloat(min, 64)
+					maxVal, _ := strconv.ParseFloat(max, 64)
+					actionStr = fmt.Sprintf("%s (min: %.2f, max: %.2f USDC)", actionType, minVal/1_000_000, maxVal/1_000_000)
+				} else {
+					minVal, _ := strconv.ParseFloat(min, 64)
+					actionStr = fmt.Sprintf("%s (min: %.2f USDC)", actionType, minVal/1_000_000)
+				}
+			}
+
 			fmt.Printf("│   • %-60s│\n", actionStr)
 		}
-	}
-
-	// Display bet information if present
-	if currentBet, ok := actions["current_bet"].(float64); ok && currentBet > 0 {
-		betUSDC := currentBet / 1_000_000
-		fmt.Printf("│                                                                   │\n")
-		fmt.Printf("│ Current bet: %.6f USDC                                       │\n", betUSDC)
-	}
-
-	if minRaise, ok := actions["min_raise"].(float64); ok && minRaise > 0 {
-		raiseUSDC := minRaise / 1_000_000
-		fmt.Printf("│ Min raise:   %.6f USDC                                       │\n", raiseUSDC)
-	}
-
-	if maxRaise, ok := actions["max_raise"].(float64); ok {
-		maxUSDC := maxRaise / 1_000_000
-		fmt.Printf("│ Max raise:   %.6f USDC                                       │\n", maxUSDC)
 	}
 
 	fmt.Println("└───────────────────────────────────────────────────────────────────┘")
