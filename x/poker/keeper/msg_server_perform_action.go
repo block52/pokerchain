@@ -31,6 +31,7 @@ const (
 	SitOut     PlayerActionType = "sit-out"
 	Show       PlayerActionType = "show"
 	Join       PlayerActionType = "join"
+	Leave      PlayerActionType = "leave"
 	Deal       PlayerActionType = "deal"
 	NewHand    PlayerActionType = "new-hand"
 )
@@ -38,7 +39,7 @@ const (
 // isValidAction checks if the action is valid
 func isValidAction(action string) bool {
 	validActions := []PlayerActionType{
-		SmallBlind, BigBlind, Fold, Check, Bet, Call, Raise, AllIn, Muck, SitIn, SitOut, Show, Join, Deal, NewHand,
+		SmallBlind, BigBlind, Fold, Check, Bet, Call, Raise, AllIn, Muck, SitIn, SitOut, Show, Join, Leave, Deal, NewHand,
 	}
 	for _, validAction := range validActions {
 		if PlayerActionType(action) == validAction {
