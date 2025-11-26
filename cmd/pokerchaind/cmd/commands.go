@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"io"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/sync/errgroup"
 
 	"cosmossdk.io/log"
 	confixcmd "cosmossdk.io/tools/confix/cmd"
@@ -25,6 +27,7 @@ import (
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
 
 	"github.com/block52/pokerchain/app"
+	"github.com/block52/pokerchain/pkg/wsserver"
 )
 
 func initRootCmd(
@@ -43,7 +46,8 @@ func initRootCmd(
 	)
 
 	server.AddCommandsWithStartCmdOptions(rootCmd, app.DefaultNodeHome, newApp, appExport, server.StartCmdOptions{
-		AddFlags: addModuleInitFlags,
+		AddFlags:  addModuleInitFlags,
+		PostSetup: startWebSocketServer,
 	})
 
 	// add keybase, auxiliary RPC, query, genesis, and tx child commands
@@ -58,6 +62,26 @@ func initRootCmd(
 
 // addModuleInitFlags adds more flags to the start command.
 func addModuleInitFlags(startCmd *cobra.Command) {
+}
+
+// startWebSocketServer starts the WebSocket server for real-time game updates
+// This is called by the Cosmos SDK start command after the chain is initialized
+func startWebSocketServer(svrCtx *server.Context, clientCtx client.Context, ctx context.Context, g *errgroup.Group) error {
+	svrCtx.Logger.Info("Starting WebSocket server for real-time game updates...")
+
+	// Start the WebSocket server in a background goroutine
+	wsserver.StartAsync(wsserver.Config{
+		Port:            ":8585",
+		TendermintWSURL: "ws://localhost:26657/websocket",
+		GRPCAddress:     "localhost:9090",
+	})
+
+	svrCtx.Logger.Info("WebSocket server started",
+		"ws_endpoint", "ws://localhost:8585/ws",
+		"health_check", "http://localhost:8585/health",
+	)
+
+	return nil
 }
 
 func queryCommand() *cobra.Command {

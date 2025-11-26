@@ -282,6 +282,17 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 		if err := k.GameStates.Set(ctx, gameId, updatedGameState); err != nil {
 			return fmt.Errorf("failed to store updated game state: %w", err)
 		}
+
+		// Emit event for WebSocket subscribers (Tendermint event system)
+		sdkCtx.EventManager().EmitEvents(sdk.Events{
+			sdk.NewEvent(
+				"action_performed",
+				sdk.NewAttribute("game_id", gameId),
+				sdk.NewAttribute("player", playerId),
+				sdk.NewAttribute("action", action),
+				sdk.NewAttribute("amount", strconv.FormatUint(amount, 10)),
+			),
+		})
 	} else {
 		return fmt.Errorf("no result returned from poker engine")
 	}

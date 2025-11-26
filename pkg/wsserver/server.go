@@ -1,4 +1,4 @@
-package main
+package wsserver
 
 import (
 	"context"
@@ -11,22 +11,26 @@ import (
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-
-	"github.com/cosmos/cosmos-sdk/codec"
-	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	"github.com/cosmos/cosmos-sdk/std"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	"google.golang.org/grpc/credentials/insecure"
 
 	pokertypes "github.com/block52/pokerchain/x/poker/types"
 )
 
-const (
-	grpcURL          = "node.texashodl.net:9443"
-	addressPrefix    = "b52"
-	tendermintWSURL  = "ws://localhost:26657/websocket" // Local Tendermint WebSocket endpoint
-)
+// Config holds the WebSocket server configuration
+type Config struct {
+	Port            string // HTTP port for WebSocket server (e.g., ":8585")
+	TendermintWSURL string // Tendermint WebSocket URL (e.g., "ws://localhost:26657/websocket")
+	GRPCAddress     string // gRPC address for querying game state (e.g., "localhost:9090")
+}
+
+// DefaultConfig returns default configuration for local development
+func DefaultConfig() Config {
+	return Config{
+		Port:            ":8585",
+		TendermintWSURL: "ws://localhost:26657/websocket",
+		GRPCAddress:     "localhost:9090",
+	}
+}
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -39,22 +43,22 @@ type Client struct {
 	hub     *Hub
 	conn    *websocket.Conn
 	send    chan []byte
-	gameIDs map[string]bool // Games this client is subscribed to
+	gameIDs map[string]bool
 	mu      sync.RWMutex
 }
 
 // Hub manages all client connections and game subscriptions
 type Hub struct {
-	clients       map[*Client]bool
-	games         map[string]map[*Client]bool // gameID -> clients
-	broadcast     chan *GameUpdate
-	register      chan *Client
-	unregister    chan *Client
-	subscribe     chan *Subscription
-	unsubscribe   chan *Subscription
-	mu            sync.RWMutex
-	grpcConn      *grpc.ClientConn
-	queryClient   pokertypes.QueryClient
+	clients     map[*Client]bool
+	games       map[string]map[*Client]bool
+	broadcast   chan *GameUpdate
+	register    chan *Client
+	unregister  chan *Client
+	subscribe   chan *Subscription
+	unsubscribe chan *Subscription
+	mu          sync.RWMutex
+	grpcConn    *grpc.ClientConn
+	queryClient pokertypes.QueryClient
 }
 
 // Subscription represents a client subscribing to a game
@@ -67,17 +71,47 @@ type Subscription struct {
 type GameUpdate struct {
 	GameID    string          `json:"game_id"`
 	Timestamp time.Time       `json:"timestamp"`
-	Event     string          `json:"event"` // "action", "join", "leave", "state_change"
+	Event     string          `json:"event"`
 	Data      json.RawMessage `json:"data"`
 }
 
-// Message from client
+// ClientMessage from client
 type ClientMessage struct {
-	Type   string `json:"type"`   // "subscribe", "unsubscribe", "ping"
+	Type   string `json:"type"`
 	GameID string `json:"game_id"`
 }
 
+// TendermintEventResponse represents the structure of a Tendermint WebSocket event
+type TendermintEventResponse struct {
+	ID      int    `json:"id"`
+	JSONRPC string `json:"jsonrpc"`
+	Result  struct {
+		Query  string `json:"query"`
+		Data   struct {
+			Type  string `json:"type"`
+			Value struct {
+				TxResult struct {
+					Result struct {
+						Events []struct {
+							Type       string `json:"type"`
+							Attributes []struct {
+								Key   string `json:"key"`
+								Value string `json:"value"`
+							} `json:"attributes"`
+						} `json:"events"`
+					} `json:"result"`
+				} `json:"TxResult"`
+			} `json:"value"`
+		} `json:"data"`
+		Events map[string][]string `json:"events"`
+	} `json:"result"`
+}
+
 func newHub(grpcConn *grpc.ClientConn) *Hub {
+	var queryClient pokertypes.QueryClient
+	if grpcConn != nil {
+		queryClient = pokertypes.NewQueryClient(grpcConn)
+	}
 	return &Hub{
 		clients:     make(map[*Client]bool),
 		games:       make(map[string]map[*Client]bool),
@@ -87,7 +121,7 @@ func newHub(grpcConn *grpc.ClientConn) *Hub {
 		subscribe:   make(chan *Subscription),
 		unsubscribe: make(chan *Subscription),
 		grpcConn:    grpcConn,
-		queryClient: pokertypes.NewQueryClient(grpcConn),
+		queryClient: queryClient,
 	}
 }
 
@@ -98,14 +132,13 @@ func (h *Hub) run() {
 			h.mu.Lock()
 			h.clients[client] = true
 			h.mu.Unlock()
-			log.Printf("Client registered. Total clients: %d", len(h.clients))
+			log.Printf("[WS-Server] Client registered. Total clients: %d", len(h.clients))
 
 		case client := <-h.unregister:
 			if _, ok := h.clients[client]; ok {
 				h.mu.Lock()
 				delete(h.clients, client)
 
-				// Unsubscribe from all games
 				client.mu.RLock()
 				for gameID := range client.gameIDs {
 					if clients, exists := h.games[gameID]; exists {
@@ -119,7 +152,7 @@ func (h *Hub) run() {
 
 				close(client.send)
 				h.mu.Unlock()
-				log.Printf("Client unregistered. Total clients: %d", len(h.clients))
+				log.Printf("[WS-Server] Client unregistered. Total clients: %d", len(h.clients))
 			}
 
 		case sub := <-h.subscribe:
@@ -134,9 +167,8 @@ func (h *Hub) run() {
 			sub.client.gameIDs[sub.gameID] = true
 			sub.client.mu.Unlock()
 
-			log.Printf("Client subscribed to game %s. Subscribers: %d", sub.gameID, len(h.games[sub.gameID]))
+			log.Printf("[WS-Server] Client subscribed to game %s. Subscribers: %d", sub.gameID, len(h.games[sub.gameID]))
 
-			// Send current game state to newly subscribed client
 			go h.sendGameState(sub.client, sub.gameID)
 
 		case sub := <-h.unsubscribe:
@@ -153,7 +185,7 @@ func (h *Hub) run() {
 			delete(sub.client.gameIDs, sub.gameID)
 			sub.client.mu.Unlock()
 
-			log.Printf("Client unsubscribed from game %s", sub.gameID)
+			log.Printf("[WS-Server] Client unsubscribed from game %s", sub.gameID)
 
 		case update := <-h.broadcast:
 			h.mu.RLock()
@@ -163,12 +195,11 @@ func (h *Hub) run() {
 					select {
 					case client.send <- message:
 					default:
-						// Client's send channel is full, close it
 						close(client.send)
 						delete(h.clients, client)
 					}
 				}
-				log.Printf("Broadcasted %s event to %d clients for game %s", update.Event, len(clients), update.GameID)
+				log.Printf("[WS-Server] Broadcasted %s event to %d clients for game %s", update.Event, len(clients), update.GameID)
 			}
 			h.mu.RUnlock()
 		}
@@ -176,6 +207,11 @@ func (h *Hub) run() {
 }
 
 func (h *Hub) sendGameState(client *Client, gameID string) {
+	if h.queryClient == nil {
+		log.Printf("[WS-Server] No gRPC client available, skipping initial state for game %s", gameID)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -183,7 +219,7 @@ func (h *Hub) sendGameState(client *Client, gameID string) {
 		GameId: gameID,
 	})
 	if err != nil {
-		log.Printf("Error querying game state for %s: %v", gameID, err)
+		log.Printf("[WS-Server] Error querying game state for %s: %v", gameID, err)
 		return
 	}
 
@@ -197,14 +233,26 @@ func (h *Hub) sendGameState(client *Client, gameID string) {
 	message, _ := json.Marshal(update)
 	select {
 	case client.send <- message:
-		log.Printf("Sent initial game state to client for game %s", gameID)
+		log.Printf("[WS-Server] Sent initial game state to client for game %s", gameID)
 	default:
-		log.Printf("Failed to send game state to client (channel full)")
+		log.Printf("[WS-Server] Failed to send game state to client (channel full)")
 	}
 }
 
 // BroadcastGameUpdate broadcasts a game state update to all subscribers
 func (h *Hub) BroadcastGameUpdate(gameID string, event string) {
+	if h.queryClient == nil {
+		log.Printf("[WS-Server] No gRPC client, broadcasting event only for game %s", gameID)
+		update := &GameUpdate{
+			GameID:    gameID,
+			Timestamp: time.Now(),
+			Event:     event,
+			Data:      json.RawMessage(`{}`),
+		}
+		h.broadcast <- update
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -212,7 +260,7 @@ func (h *Hub) BroadcastGameUpdate(gameID string, event string) {
 		GameId: gameID,
 	})
 	if err != nil {
-		log.Printf("Error querying game for broadcast: %v", err)
+		log.Printf("[WS-Server] Error querying game for broadcast: %v", err)
 		return
 	}
 
@@ -242,14 +290,14 @@ func (c *Client) readPump() {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error: %v", err)
+				log.Printf("[WS-Server] WebSocket error: %v", err)
 			}
 			break
 		}
 
 		var msg ClientMessage
 		if err := json.Unmarshal(message, &msg); err != nil {
-			log.Printf("Error unmarshaling message: %v", err)
+			log.Printf("[WS-Server] Error unmarshaling message: %v", err)
 			continue
 		}
 
@@ -269,7 +317,6 @@ func (c *Client) readPump() {
 				}
 			}
 		case "ping":
-			// Respond with pong
 			pong := map[string]string{"type": "pong"}
 			pongBytes, _ := json.Marshal(pong)
 			c.send <- pongBytes
@@ -299,7 +346,6 @@ func (c *Client) writePump() {
 			}
 			w.Write(message)
 
-			// Add queued messages to current websocket message
 			n := len(c.send)
 			for i := 0; i < n; i++ {
 				w.Write([]byte{'\n'})
@@ -322,7 +368,7 @@ func (c *Client) writePump() {
 func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("Upgrade error: %v", err)
+		log.Printf("[WS-Server] Upgrade error: %v", err)
 		return
 	}
 
@@ -338,26 +384,108 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	go client.readPump()
 }
 
-func main() {
-	// Set address prefix
-	config := sdk.GetConfig()
-	config.SetBech32PrefixForAccount(addressPrefix, addressPrefix+"pub")
-	config.Seal()
+// subscribeTendermintEvents connects to Tendermint WebSocket and subscribes to poker module events
+func subscribeTendermintEvents(hub *Hub, tendermintWSURL string) {
+	log.Printf("[WS-Server] Connecting to Tendermint WebSocket at %s...", tendermintWSURL)
 
-	// Create gRPC connection
-	log.Println("Connecting to blockchain via gRPC...")
-	creds := credentials.NewTLS(nil)
-	grpcConn, err := grpc.Dial(grpcURL, grpc.WithTransportCredentials(creds))
-	if err != nil {
-		log.Fatalf("Failed to connect to gRPC: %v", err)
+	for {
+		conn, _, err := websocket.DefaultDialer.Dial(tendermintWSURL, nil)
+		if err != nil {
+			log.Printf("[WS-Server] Failed to connect to Tendermint WebSocket: %v. Retrying in 5 seconds...", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		log.Println("[WS-Server] Connected to Tendermint WebSocket")
+
+		subscribeToEvent(conn, "action_performed", 1)
+		subscribeToEvent(conn, "player_joined_game", 2)
+		subscribeToEvent(conn, "game_created", 3)
+
+		for {
+			_, message, err := conn.ReadMessage()
+			if err != nil {
+				log.Printf("[WS-Server] Tendermint WebSocket read error: %v. Reconnecting...", err)
+				conn.Close()
+				break
+			}
+
+			var response TendermintEventResponse
+			if err := json.Unmarshal(message, &response); err != nil {
+				log.Printf("[WS-Server] Failed to parse Tendermint event: %v", err)
+				continue
+			}
+
+			if response.Result.Query == "" {
+				continue
+			}
+
+			processBlockEvent(hub, response)
+		}
 	}
-	defer grpcConn.Close()
+}
+
+func subscribeToEvent(conn *websocket.Conn, eventType string, id int) {
+	query := fmt.Sprintf("%s.game_id EXISTS", eventType)
+
+	subscribeRequest := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  "subscribe",
+		"params": map[string]interface{}{
+			"query": fmt.Sprintf("tm.event='Tx' AND %s", query),
+		},
+	}
+
+	requestBytes, _ := json.Marshal(subscribeRequest)
+	if err := conn.WriteMessage(websocket.TextMessage, requestBytes); err != nil {
+		log.Printf("[WS-Server] Failed to subscribe to %s events: %v", eventType, err)
+	} else {
+		log.Printf("[WS-Server] Subscribed to %s events", eventType)
+	}
+}
+
+func processBlockEvent(hub *Hub, response TendermintEventResponse) {
+	if response.Result.Events == nil {
+		return
+	}
+
+	eventTypes := []string{"action_performed", "player_joined_game", "game_created"}
+
+	for _, eventType := range eventTypes {
+		gameIDKey := eventType + ".game_id"
+		if gameIDs, ok := response.Result.Events[gameIDKey]; ok && len(gameIDs) > 0 {
+			for _, gameID := range gameIDs {
+				log.Printf("[WS-Server] Tendermint event received: %s for game %s", eventType, gameID)
+				hub.BroadcastGameUpdate(gameID, eventType)
+			}
+		}
+	}
+}
+
+// Start starts the WebSocket server with the given configuration
+// This function blocks, so call it in a goroutine if needed
+func Start(cfg Config) error {
+	log.Printf("[WS-Server] Starting WebSocket server on %s", cfg.Port)
+
+	// Create gRPC connection (optional - for querying game state)
+	var grpcConn *grpc.ClientConn
+	var err error
+	if cfg.GRPCAddress != "" {
+		grpcConn, err = grpc.Dial(cfg.GRPCAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			log.Printf("[WS-Server] Warning: Failed to connect to gRPC at %s: %v (continuing without game state queries)", cfg.GRPCAddress, err)
+			grpcConn = nil
+		} else {
+			log.Printf("[WS-Server] Connected to gRPC at %s", cfg.GRPCAddress)
+		}
+	}
 
 	hub := newHub(grpcConn)
 	go hub.run()
 
-	// Start Tendermint event subscription (subscribes to poker module events)
-	go subscribeTendermintEvents(hub, tendermintWSURL)
+	// Start Tendermint event subscription
+	go subscribeTendermintEvents(hub, cfg.TendermintWSURL)
 
 	// HTTP endpoints
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
@@ -374,7 +502,6 @@ func main() {
 	})
 
 	http.HandleFunc("/trigger", func(w http.ResponseWriter, r *http.Request) {
-		// Manual trigger endpoint for testing
 		gameID := r.URL.Query().Get("game_id")
 		event := r.URL.Query().Get("event")
 		if gameID != "" && event != "" {
@@ -385,152 +512,17 @@ func main() {
 		}
 	})
 
-	port := ":8585"
-	log.Printf("WebSocket server starting on %s", port)
-	log.Printf("WebSocket endpoint: ws://localhost:8585/ws")
-	log.Printf("Health check: http://localhost:8585/health")
+	log.Printf("[WS-Server] WebSocket endpoint: ws://localhost%s/ws", cfg.Port)
+	log.Printf("[WS-Server] Health check: http://localhost%s/health", cfg.Port)
 
-	if err := http.ListenAndServe(port, nil); err != nil {
-		log.Fatalf("ListenAndServe error: %v", err)
-	}
+	return http.ListenAndServe(cfg.Port, nil)
 }
 
-// subscribeTendermintEvents connects to Tendermint WebSocket and subscribes to poker module events
-func subscribeTendermintEvents(hub *Hub, tendermintWSURL string) {
-	// Connect to Tendermint WebSocket
-	log.Printf("Connecting to Tendermint WebSocket at %s...", tendermintWSURL)
-
-	for {
-		conn, _, err := websocket.DefaultDialer.Dial(tendermintWSURL, nil)
-		if err != nil {
-			log.Printf("Failed to connect to Tendermint WebSocket: %v. Retrying in 5 seconds...", err)
-			time.Sleep(5 * time.Second)
-			continue
+// StartAsync starts the WebSocket server in a background goroutine
+func StartAsync(cfg Config) {
+	go func() {
+		if err := Start(cfg); err != nil {
+			log.Printf("[WS-Server] Error: %v", err)
 		}
-
-		log.Println("Connected to Tendermint WebSocket")
-
-		// Subscribe to poker module events
-		subscribeToEvent(conn, "action_performed", 1)
-		subscribeToEvent(conn, "player_joined_game", 2)
-		subscribeToEvent(conn, "game_created", 3)
-
-		// Read events from Tendermint
-		for {
-			_, message, err := conn.ReadMessage()
-			if err != nil {
-				log.Printf("Tendermint WebSocket read error: %v. Reconnecting...", err)
-				conn.Close()
-				break
-			}
-
-			// Parse the Tendermint event response
-			var response TendermintEventResponse
-			if err := json.Unmarshal(message, &response); err != nil {
-				log.Printf("Failed to parse Tendermint event: %v", err)
-				continue
-			}
-
-			// Skip subscription confirmations
-			if response.Result.Query == "" {
-				continue
-			}
-
-			// Extract game_id from events and broadcast
-			processBlockEvent(hub, response)
-		}
-	}
-}
-
-// TendermintEventResponse represents the structure of a Tendermint WebSocket event
-type TendermintEventResponse struct {
-	ID      int    `json:"id"`
-	JSONRPC string `json:"jsonrpc"`
-	Result  struct {
-		Query  string `json:"query"`
-		Data   struct {
-			Type  string `json:"type"`
-			Value struct {
-				TxResult struct {
-					Result struct {
-						Events []struct {
-							Type       string `json:"type"`
-							Attributes []struct {
-								Key   string `json:"key"`
-								Value string `json:"value"`
-							} `json:"attributes"`
-						} `json:"events"`
-					} `json:"result"`
-				} `json:"TxResult"`
-			} `json:"value"`
-		} `json:"data"`
-		Events map[string][]string `json:"events"`
-	} `json:"result"`
-}
-
-// subscribeToEvent sends a subscription request for a specific event type
-func subscribeToEvent(conn *websocket.Conn, eventType string, id int) {
-	// Cosmos SDK events are queried using the format: message.action='event_type'
-	// Or for custom events: event_type.attribute_key='value'
-	query := fmt.Sprintf("%s.game_id EXISTS", eventType)
-
-	subscribeRequest := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      id,
-		"method":  "subscribe",
-		"params": map[string]interface{}{
-			"query": fmt.Sprintf("tm.event='Tx' AND %s", query),
-		},
-	}
-
-	requestBytes, _ := json.Marshal(subscribeRequest)
-	if err := conn.WriteMessage(websocket.TextMessage, requestBytes); err != nil {
-		log.Printf("Failed to subscribe to %s events: %v", eventType, err)
-	} else {
-		log.Printf("Subscribed to %s events", eventType)
-	}
-}
-
-// processBlockEvent extracts game_id from Tendermint events and broadcasts updates
-func processBlockEvent(hub *Hub, response TendermintEventResponse) {
-	// Check if we have events in the response
-	if response.Result.Events == nil {
-		return
-	}
-
-	// Look for poker-related events
-	eventTypes := []string{"action_performed", "player_joined_game", "game_created"}
-
-	for _, eventType := range eventTypes {
-		// Check for game_id attribute in events
-		gameIDKey := eventType + ".game_id"
-		if gameIDs, ok := response.Result.Events[gameIDKey]; ok && len(gameIDs) > 0 {
-			for _, gameID := range gameIDs {
-				log.Printf("Tendermint event received: %s for game %s", eventType, gameID)
-				hub.BroadcastGameUpdate(gameID, eventType)
-			}
-		}
-	}
-}
-
-func makeEncodingConfig() struct {
-	InterfaceRegistry codectypes.InterfaceRegistry
-	Codec             codec.Codec
-} {
-	amino := codec.NewLegacyAmino()
-	interfaceRegistry := codectypes.NewInterfaceRegistry()
-	cdc := codec.NewProtoCodec(interfaceRegistry)
-
-	std.RegisterLegacyAminoCodec(amino)
-	std.RegisterInterfaces(interfaceRegistry)
-	authtypes.RegisterInterfaces(interfaceRegistry)
-	pokertypes.RegisterInterfaces(interfaceRegistry)
-
-	return struct {
-		InterfaceRegistry codectypes.InterfaceRegistry
-		Codec             codec.Codec
-	}{
-		InterfaceRegistry: interfaceRegistry,
-		Codec:             cdc,
-	}
+	}()
 }
