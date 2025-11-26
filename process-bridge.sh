@@ -3,27 +3,26 @@
 # Bridge Deposit Processor
 # Fetches deposit data from Base CosmosBridge contract by index and submits mint transaction to Pokerchain
 #
-# IMPORTANT NOTES:
-# ================
-# 1. This script connects to the remote validator (node1.block52.xyz) via SSH to submit transactions
-# 2. The validator must have the 'b52' key in its keyring-test with funds to pay for gas
-# 3. The b52 key corresponds to the validator operator account: b521hu5fcly62xa5g0lsftwu5fetugjt0lk2cjy4at
-# 4. Keyring files are located in production/node0/keyring-test/ and should be synced to the validator
-# 5. The script queries Base blockchain via Alchemy RPC (requires ALCHEMY_URL in .env)
-# 6. The on-chain keeper must be configured with Base RPC access to verify deposits
+# FEATURES:
+# =========
+# - Auto-detects available keys on the validator (no hardcoded key names)
+# - Supports multiple validators via --validator flag
+# - Can list available keys with --list-keys
+# - Validates deposit hasn't been processed before submitting
 #
 # SETUP REQUIREMENTS:
 # ===================
 # - .env file with ALCHEMY_URL for Base blockchain queries
-# - SSH access to validator node (root@node1.block52.xyz)
-# - b52 key installed in validator's keyring-test with sufficient stake for gas
+# - SSH access to validator node
+# - At least one key in the validator's keyring-test with stake for gas
 # - On-chain bridge keeper configured with Ethereum RPC endpoint
 #
 # USAGE:
 # ======
-# ./process-bridge.sh <deposit_index> [--from b52]
-# 
-# The --from flag defaults to 'b52' if not specified
+# ./process-bridge.sh <deposit_index>                    # Auto-detect key
+# ./process-bridge.sh <deposit_index> --from <keyname>   # Specify key
+# ./process-bridge.sh --list-keys                        # Show available keys
+# ./process-bridge.sh --list-keys --validator <host>     # Keys on specific validator
 
 set -e
 
@@ -39,58 +38,409 @@ fi
 
 # Configuration
 CONTRACT_ADDRESS="0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"
-VALIDATOR_HOST="${VALIDATOR_HOST:-node1.block52.xyz}"
-VALIDATOR_USER="${VALIDATOR_USER:-root}"
 CHAIN_ID="pokerchain"
 GAS="300000"
 GAS_PRICES="0.001stake"  # Gasless transactions
-DEFAULT_FROM_KEY="b52"  # Default key to use for transactions (has funds on validator)
+DEFAULT_FROM_KEY=""  # Will be auto-detected from validator keyring
+
+# Default network
+VALIDATOR_HOST="${VALIDATOR_HOST:-}"
+VALIDATOR_USER="${VALIDATOR_USER:-root}"
+
+# Query all deposits and their status
+query_all_deposits() {
+    local local_mode="$1"
+    local home_dir="$2"
+    local max_deposits="${3:-20}"  # Default to checking first 20 deposits
+
+    echo -e "  ${CYAN}🔍${NC} Scanning Base chain for deposits..."
+    echo ""
+
+    local deposits=()
+    local i=0
+    local spinner=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    local spin_idx=0
+
+    while [ $i -lt $max_deposits ]; do
+        # Show spinner
+        printf "\r  ${PURPLE}${spinner[$spin_idx]}${NC} Checking deposit ${WHITE}#%d${NC}...  " "$i"
+        spin_idx=$(( (spin_idx + 1) % 10 ))
+
+        # Query deposit from contract
+        local result=$(query_deposit_by_index "$i" "false" 2>/dev/null)
+
+        if [ -z "$result" ] || [ "$result" = "0x" ]; then
+            break  # No more deposits
+        fi
+
+        # Parse the result to get recipient and amount
+        local result_clean="${result#0x}"
+        local amount_hex="0x${result_clean:64:64}"
+        local amount=$(printf "%d" "$amount_hex" 2>/dev/null || echo "0")
+
+        # Get string data
+        local string_offset_hex="0x${result_clean:0:64}"
+        local string_offset=$(printf "%d" "$string_offset_hex" 2>/dev/null || echo "0")
+        local string_start=$((string_offset * 2))
+        local string_len_hex="0x${result_clean:$string_start:64}"
+        local string_len=$(printf "%d" "$string_len_hex" 2>/dev/null || echo "0")
+        local string_data_start=$((string_start + 64))
+        local string_hex="${result_clean:$string_data_start:$((string_len * 2))}"
+        local recipient=$(echo "$string_hex" | xxd -r -p 2>/dev/null)
+
+        if [ -z "$recipient" ] || [ "$amount" = "0" ]; then
+            break
+        fi
+
+        # Check if processed
+        local tx_hash_input="${CONTRACT_ADDRESS}-${i}"
+        local eth_tx_hash="0x$(echo -n "$tx_hash_input" | shasum -a 256 | cut -d' ' -f1)"
+
+        local is_processed="pending"
+        local query_result=""
+        if [ "$local_mode" = "true" ]; then
+            query_result=$(pokerchaind query poker is-tx-processed --eth-tx-hash="$eth_tx_hash" --output json ${home_dir:+--home=$home_dir} 2>/dev/null)
+        else
+            query_result=$(ssh "$VALIDATOR_USER@$VALIDATOR_HOST" "pokerchaind query poker is-tx-processed --eth-tx-hash='$eth_tx_hash' --output json 2>/dev/null" 2>/dev/null)
+        fi
+
+        if echo "$query_result" | grep -q '"processed":\s*true'; then
+            is_processed="processed"
+        fi
+
+        # Format amount for display (USDC has 6 decimals)
+        local amount_usdc=$(echo "scale=6; $amount / 1000000" | bc 2>/dev/null || echo "$amount")
+
+        deposits+=("$i|$recipient|$amount_usdc|$is_processed")
+
+        i=$((i + 1))
+    done
+
+    printf "\r  ${GREEN}✓${NC} Found ${WHITE}%d${NC} deposits                    \n" "${#deposits[@]}"
+    echo ""
+
+    # Store deposits in global variable
+    DEPOSIT_LIST=("${deposits[@]}")
+}
+
+# Draw a single deposit row
+draw_deposit_row() {
+    local idx="$1"
+    local recipient="$2"
+    local amount="$3"
+    local status="$4"
+    local is_selected="$5"
+    local is_pending="$6"
+
+    # Truncate recipient for display
+    local short_recipient="${recipient:0:15}...${recipient: -12}"
+
+    # Pad values for alignment
+    local padded_idx=$(printf "%-4s" "$idx")
+    local padded_recipient=$(printf "%-38s" "$short_recipient")
+    local padded_amount=$(printf "\$%-13s" "$amount")
+
+    if [ "$is_selected" = "true" ]; then
+        # Selected row - highlighted
+        if [ "$is_pending" = "true" ]; then
+            echo -e "  ${CYAN}│${NC} ${WHITE}▶${NC}${CYAN}${BOLD}${padded_idx}${NC} ${CYAN}│${NC} ${BOLD}${WHITE}${padded_recipient}${NC} ${CYAN}│${NC} ${BOLD}${GREEN}${padded_amount}${NC} ${CYAN}│${NC} ${YELLOW}⏳ Pending${NC} ${CYAN}│${NC}"
+        else
+            echo -e "  ${GRAY}│${NC}  ${DIM}${padded_idx}${NC} ${GRAY}│${NC} ${DIM}${padded_recipient}${NC} ${GRAY}│${NC} ${DIM}${padded_amount}${NC} ${GRAY}│${NC} ${GREEN}✅ Done${NC}    ${GRAY}│${NC}"
+        fi
+    else
+        # Not selected
+        if [ "$is_pending" = "true" ]; then
+            echo -e "  ${GRAY}│${NC}  ${CYAN}${padded_idx}${NC} ${GRAY}│${NC} ${WHITE}${padded_recipient}${NC} ${GRAY}│${NC} ${GREEN}${padded_amount}${NC} ${GRAY}│${NC} ${YELLOW}⏳ Pending${NC} ${GRAY}│${NC}"
+        else
+            echo -e "  ${GRAY}│${NC}  ${DIM}${padded_idx}${NC} ${GRAY}│${NC} ${DIM}${padded_recipient}${NC} ${GRAY}│${NC} ${DIM}${padded_amount}${NC} ${GRAY}│${NC} ${GREEN}✅ Done${NC}    ${GRAY}│${NC}"
+        fi
+    fi
+}
+
+# Interactive deposit selector with arrow key navigation
+select_deposit() {
+    local local_mode="$1"
+    local home_dir="$2"
+
+    # Query all deposits
+    query_all_deposits "$local_mode" "$home_dir"
+
+    if [ ${#DEPOSIT_LIST[@]} -eq 0 ]; then
+        echo -e "  ${RED}✗${NC} No deposits found on Base chain"
+        exit 1
+    fi
+
+    # Build arrays for navigation
+    local pending_indices=()
+    local pending_count=0
+    local processed_count=0
+
+    for deposit in "${DEPOSIT_LIST[@]}"; do
+        IFS='|' read -r idx recipient amount status <<< "$deposit"
+        if [ "$status" = "pending" ]; then
+            pending_indices+=("$idx")
+            pending_count=$((pending_count + 1))
+        else
+            processed_count=$((processed_count + 1))
+        fi
+    done
+
+    if [ $pending_count -eq 0 ]; then
+        echo -e "  ${GREEN}🎉 All deposits have been processed!${NC}"
+        echo ""
+        exit 0
+    fi
+
+    # Current selection index (into pending_indices array)
+    local current_selection=0
+    local selected_deposit_idx="${pending_indices[$current_selection]}"
+
+    # Function to draw the full table
+    draw_table() {
+        # Clear screen area (move cursor up and redraw)
+        # Show header with stats
+        echo -e "${PURPLE}┌─────────────────────────────────────────────────────────────────────────┐${NC}"
+        echo -e "${PURPLE}│${NC}  ${BOLD}📋 Deposit Queue${NC}                                                       ${PURPLE}│${NC}"
+        echo -e "${PURPLE}│${NC}  ${DIM}Found ${WHITE}${#DEPOSIT_LIST[@]}${DIM} deposits: ${YELLOW}${pending_count} pending${DIM}, ${GREEN}${processed_count} processed${NC}                      ${PURPLE}│${NC}"
+        echo -e "${PURPLE}└─────────────────────────────────────────────────────────────────────────┘${NC}"
+        echo ""
+
+        # Table header
+        echo -e "  ${GRAY}┌──────┬────────────────────────────────────────┬────────────────┬───────────┐${NC}"
+        echo -e "  ${GRAY}│${NC} ${BOLD}#${NC}    ${GRAY}│${NC} ${BOLD}Recipient${NC}                              ${GRAY}│${NC} ${BOLD}Amount${NC}         ${GRAY}│${NC} ${BOLD}Status${NC}    ${GRAY}│${NC}"
+        echo -e "  ${GRAY}├──────┼────────────────────────────────────────┼────────────────┼───────────┤${NC}"
+
+        for deposit in "${DEPOSIT_LIST[@]}"; do
+            IFS='|' read -r idx recipient amount status <<< "$deposit"
+            local is_pending="false"
+            local is_selected="false"
+
+            if [ "$status" = "pending" ]; then
+                is_pending="true"
+            fi
+
+            if [ "$idx" = "$selected_deposit_idx" ]; then
+                is_selected="true"
+            fi
+
+            draw_deposit_row "$idx" "$recipient" "$amount" "$status" "$is_selected" "$is_pending"
+        done
+
+        echo -e "  ${GRAY}└──────┴────────────────────────────────────────┴────────────────┴───────────┘${NC}"
+        echo ""
+        echo -e "  ${DIM}Use ${WHITE}↑${DIM}/${WHITE}↓${DIM} arrows to select, ${WHITE}Enter${DIM} to confirm, ${WHITE}q${DIM} to quit${NC}"
+        echo ""
+        echo -ne "  ${CYAN}▶${NC} Deposit ${BOLD}#${selected_deposit_idx}${NC} selected "
+    }
+
+    # Draw initial table
+    draw_table
+
+    # Read input
+    while true; do
+        # Read a single character
+        IFS= read -rsn1 key
+
+        # Check for escape sequence (arrow keys)
+        # macOS bash 3.x doesn't support decimal timeouts, so use -t 1
+        if [[ "$key" == $'\x1b' ]]; then
+            read -rsn2 -t 1 key2 2>/dev/null || true
+            key+="$key2"
+        fi
+
+        case "$key" in
+            $'\x1b[A'|'k')  # Up arrow or k
+                if [ $current_selection -gt 0 ]; then
+                    current_selection=$((current_selection - 1))
+                    selected_deposit_idx="${pending_indices[$current_selection]}"
+                fi
+                ;;
+            $'\x1b[B'|'j')  # Down arrow or j
+                if [ $current_selection -lt $((pending_count - 1)) ]; then
+                    current_selection=$((current_selection + 1))
+                    selected_deposit_idx="${pending_indices[$current_selection]}"
+                fi
+                ;;
+            ''|$'\n')  # Enter
+                break
+                ;;
+            'q'|'Q')  # Quit
+                echo ""
+                echo ""
+                echo -e "  ${DIM}Cancelled.${NC}"
+                echo ""
+                exit 0
+                ;;
+            [0-9])  # Direct number input
+                # Read rest of number if any (for 2-digit numbers)
+                local num="$key"
+                read -rsn1 -t 1 more_digit 2>/dev/null || true
+                if [[ "$more_digit" =~ [0-9] ]]; then
+                    num+="$more_digit"
+                fi
+
+                # Check if this is a valid pending index
+                for i in "${!pending_indices[@]}"; do
+                    if [ "${pending_indices[$i]}" = "$num" ]; then
+                        current_selection=$i
+                        selected_deposit_idx="$num"
+                        break 2  # Break out of both loops
+                    fi
+                done
+                ;;
+        esac
+
+        # Redraw - clear lines and redraw table
+        local lines_to_clear=$((${#DEPOSIT_LIST[@]} + 12))
+        for ((i=0; i<lines_to_clear; i++)); do
+            echo -ne "\033[A\033[K"  # Move up and clear line
+        done
+        draw_table
+    done
+
+    SELECTED_DEPOSIT_INDEX="$selected_deposit_idx"
+    echo ""
+    echo ""
+    echo -e "  ${GREEN}✓${NC} Processing deposit ${BOLD}#${SELECTED_DEPOSIT_INDEX}${NC}..."
+}
+
+# Interactive network selector (compatible with bash 3.x on macOS)
+select_network() {
+    echo -e "${PURPLE}┌─────────────────────────────────────────┐${NC}"
+    echo -e "${PURPLE}│${NC}  ${BOLD}🌐 Select Network${NC}                      ${PURPLE}│${NC}"
+    echo -e "${PURPLE}└─────────────────────────────────────────┘${NC}"
+    echo ""
+    echo -e "  ${CYAN}[1]${NC}  🤠  Texas Hodl    ${DIM}node.texashodl.net${NC}"
+    echo -e "  ${CYAN}[2]${NC}  🎰  Block52       ${DIM}node1.block52.xyz${NC}"
+    echo -e "  ${CYAN}[3]${NC}  💻  Local         ${DIM}localhost${NC}"
+    echo -e "  ${CYAN}[4]${NC}  ⚙️   Custom        ${DIM}enter your own${NC}"
+    echo ""
+
+    local choice
+    echo -ne "  ${WHITE}Enter choice ${CYAN}[1-4]${WHITE}:${NC} "
+    read choice
+
+    echo ""
+    case "$choice" in
+        1)
+            VALIDATOR_HOST="node.texashodl.net"
+            echo -e "  ${GREEN}✓${NC} Connected to ${BOLD}Texas Hodl${NC} ${DIM}(${VALIDATOR_HOST})${NC}"
+            ;;
+        2)
+            VALIDATOR_HOST="node1.block52.xyz"
+            echo -e "  ${GREEN}✓${NC} Connected to ${BOLD}Block52${NC} ${DIM}(${VALIDATOR_HOST})${NC}"
+            ;;
+        3)
+            VALIDATOR_HOST="localhost"
+            echo -e "  ${GREEN}✓${NC} Connected to ${BOLD}Local${NC} ${DIM}(${VALIDATOR_HOST})${NC}"
+            ;;
+        4)
+            echo -ne "  ${WHITE}Enter hostname:${NC} "
+            read VALIDATOR_HOST
+            echo -e "  ${GREEN}✓${NC} Connected to ${BOLD}${VALIDATOR_HOST}${NC}"
+            ;;
+        *)
+            echo -e "  ${YELLOW}⚠${NC} Invalid selection, using ${BOLD}Texas Hodl${NC}"
+            VALIDATOR_HOST="node.texashodl.net"
+            ;;
+    esac
+    echo ""
+}
 
 # Event signature for Deposited(string indexed account, uint256 amount, uint256 index)
 # keccak256("Deposited(string,uint256,uint256)") = 0x46008385c8bcecb546cb0a96e5b409f34ac1a8ece8f3ea98488282519372bdf2
 DEPOSITED_EVENT_TOPIC="0x46008385c8bcecb546cb0a96e5b409f34ac1a8ece8f3ea98488282519372bdf2"
 
-# Colors
+# Colors and styling
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+GRAY='\033[0;90m'
+BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
+
+# Box drawing characters
+BOX_TL="╔"
+BOX_TR="╗"
+BOX_BL="╚"
+BOX_BR="╝"
+BOX_H="═"
+BOX_V="║"
 
 # Print header
 print_header() {
-    echo -e "${BLUE}"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "           Bridge Deposit Processor"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${NC}"
+    echo ""
+    echo -e "${CYAN}╔════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}  ${PURPLE}🌉${NC}  ${BOLD}${WHITE}Bridge Deposit Processor${NC}                                        ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}      ${DIM}Base Chain → Pokerchain USDC Bridge${NC}                             ${CYAN}║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
 }
 
 # Show usage
 show_usage() {
-    echo "Usage: $0 <deposit_index> [options]"
+    echo "Usage: $0 [deposit_index] [options]"
     echo ""
     echo "Arguments:"
-    echo "  <deposit_index>        Deposit index to process (decimal integer)"
+    echo "  [deposit_index]        Deposit index to process (optional - interactive if omitted)"
     echo ""
     echo "Options:"
-    echo "  --validator <host>     Validator host (default: node1.block52.xyz)"
+    echo "  --validator <host>     Validator host (prompts if not specified)"
     echo "  --user <user>          SSH user (default: root)"
-    echo "  --from <address>       Cosmos address to submit from (optional, auto-detects)"
+    echo "  --from <keyname>       Key name to sign with (auto-detects from keyring)"
     echo "  --local                Run locally without SSH (for testing)"
     echo "  --home <path>          Home directory for local pokerchaind (default: ~/.pokerchain)"
     echo "  --dry-run              Show what would be done without executing"
     echo "  --debug                Show detailed debug information"
+    echo "  --list-keys            List available keys on validator and exit"
     echo ""
-    echo "Examples:"
-    echo "  $0 42                                     # Process deposit index 42"
-    echo "  $0 42 --from cosmos1abc...                # Specify address"
-    echo "  $0 42 --validator node1.block52.xyz       # Custom validator"
-    echo "  $0 42 --local --from cosmos1abc...        # Run locally (no SSH)"
-    echo "  $0 42 --local --home ./test/node0         # Local with custom home"
+    echo "Interactive Mode (recommended):"
+    echo "  $0                                        # Select network, then choose from pending deposits"
+    echo "  $0 --validator node.texashodl.net         # Skip network selection, show pending deposits"
+    echo ""
+    echo "Direct Mode:"
+    echo "  $0 42                                     # Process deposit index 42 (prompts for network)"
+    echo "  $0 42 --validator node.texashodl.net      # Process deposit 42 on specific validator"
+    echo "  $0 42 --from validator                    # Use specific key name"
     echo "  $0 42 --dry-run                           # Test without executing"
-    echo "  $0 42 --debug                             # Show debug output"
     echo ""
+    echo "Utilities:"
+    echo "  $0 --list-keys                            # Show available keys on validator"
+    echo ""
+}
+
+# List available keys
+list_keys() {
+    local local_mode="$1"
+    local home_dir="$2"
+
+    echo -e "${BLUE}Listing available keys on validator...${NC}"
+    echo ""
+
+    local key_info=""
+    if [ "$local_mode" = "true" ]; then
+        key_info=$(pokerchaind keys list --keyring-backend=test --output=json ${home_dir:+--home=$home_dir} 2>/dev/null)
+    else
+        key_info=$(ssh "$VALIDATOR_USER@$VALIDATOR_HOST" "pokerchaind keys list --keyring-backend=test --output=json 2>/dev/null")
+    fi
+
+    if [ -n "$key_info" ] && [ "$key_info" != "[]" ] && [ "$key_info" != "null" ]; then
+        echo "$key_info" | jq -r '.[] | "  \(.name): \(.address)"'
+        echo ""
+        echo -e "${GREEN}Use --from <keyname> to specify which key to use${NC}"
+    else
+        echo -e "${RED}No keys found or could not connect to validator${NC}"
+        echo ""
+        echo "Check:"
+        echo "  1. SSH access to $VALIDATOR_USER@$VALIDATOR_HOST"
+        echo "  2. pokerchaind is installed"
+        echo "  3. Keyring has keys: pokerchaind keys add <name> --keyring-backend=test"
+    fi
 }
 
 # Convert hex to decimal
@@ -720,29 +1070,54 @@ process_deposits_from_block() {
 
 # Main function
 main() {
-    # Parse arguments
-    if [ $# -eq 0 ]; then
-        show_usage
-        exit 1
-    fi
-    
-    # Check for help flag first
+    # Check for help and list-keys flags first
     for arg in "$@"; do
         if [[ "$arg" == "--help" ]] || [[ "$arg" == "-h" ]]; then
             show_usage
             exit 0
         fi
+        if [[ "$arg" == "--list-keys" ]]; then
+            # Process remaining args for validator/local options, then list keys
+            shift  # Remove first arg (might be deposit_index or --list-keys itself)
+            local local_mode="false"
+            local home_dir="$HOME/.pokerchain"
+            while [[ $# -gt 0 ]]; do
+                case $1 in
+                    --validator) VALIDATOR_HOST="$2"; shift 2 ;;
+                    --user) VALIDATOR_USER="$2"; shift 2 ;;
+                    --local) local_mode="true"; shift ;;
+                    --home) home_dir="$2"; shift 2 ;;
+                    --list-keys) shift ;;  # Skip if we hit it again
+                    *) shift ;;  # Skip unknown args
+                esac
+            done
+            print_header
+            # If no validator specified, prompt for network selection
+            if [ -z "$VALIDATOR_HOST" ]; then
+                select_network
+            fi
+            list_keys "$local_mode" "$home_dir"
+            exit 0
+        fi
     done
-    
-    local deposit_index="$1"
-    shift
-    
+
+    # Check if first arg is a number (deposit index) or an option
+    local deposit_index=""
+    local interactive_mode="false"
+
+    if [[ "$1" =~ ^[0-9]+$ ]]; then
+        deposit_index="$1"
+        shift
+    else
+        interactive_mode="true"
+    fi
+
     local dry_run="false"
     local from_address=""
     local debug="false"
     local local_mode="false"
     local home_dir="$HOME/.pokerchain"
-    
+
     while [[ $# -gt 0 ]]; do
         case $1 in
             --validator)
@@ -781,29 +1156,75 @@ main() {
         esac
     done
     
+    print_header
+
+    # If no validator specified, prompt for network selection
+    if [ -z "$VALIDATOR_HOST" ]; then
+        select_network
+    fi
+
     # Auto-enable local mode if validator is localhost
     if [[ "$VALIDATOR_HOST" == "localhost" ]] || [[ "$VALIDATOR_HOST" == "127.0.0.1" ]]; then
         local_mode="true"
         echo -e "${BLUE}ℹ️  Auto-enabling local mode (validator is localhost)${NC}"
     fi
-    
+
+    # If interactive mode, show deposit selector
+    if [ "$interactive_mode" = "true" ]; then
+        select_deposit "$local_mode" "$home_dir"
+        deposit_index="$SELECTED_DEPOSIT_INDEX"
+    fi
+
     # Validate deposit index
     if ! [[ "$deposit_index" =~ ^[0-9]+$ ]]; then
         echo -e "${RED}❌ Invalid deposit index. Must be a positive integer.${NC}"
         exit 1
     fi
     
-    print_header
-    
     # Get from address if not provided
     if [ -z "$from_address" ]; then
         echo ""
-        echo -e "${BLUE}Getting validator address...${NC}"
-        
-        # Default to b52 key first
-        from_address="$DEFAULT_FROM_KEY"
-        echo -e "${GREEN}✓ Using default key: $from_address (b521hu5fcly62xa5g0lsftwu5fetugjt0lk2cjy4at)${NC}"
-        
+        echo -e "${BLUE}Getting available keys from validator...${NC}"
+
+        local key_info=""
+        if [ "$local_mode" = "true" ]; then
+            key_info=$(pokerchaind keys list --keyring-backend=test --output=json ${home_dir:+--home=$home_dir} 2>/dev/null)
+        else
+            key_info=$(ssh "$VALIDATOR_USER@$VALIDATOR_HOST" "pokerchaind keys list --keyring-backend=test --output=json 2>/dev/null")
+        fi
+
+        if [ -n "$key_info" ] && [ "$key_info" != "[]" ] && [ "$key_info" != "null" ]; then
+            # Get first key with name and address
+            local key_name=$(echo "$key_info" | jq -r '.[0].name // empty')
+            local key_address=$(echo "$key_info" | jq -r '.[0].address // empty')
+            local key_count=$(echo "$key_info" | jq -r 'length')
+
+            if [ -n "$key_name" ]; then
+                from_address="$key_name"
+                echo -e "${GREEN}✓ Auto-detected key: $key_name${NC}"
+                echo -e "  Address: $key_address"
+                [ "$key_count" -gt 1 ] && echo -e "  (${key_count} keys available, using first)"
+            else
+                echo -e "${RED}❌ No keys found in validator keyring${NC}"
+                echo ""
+                echo "Please either:"
+                echo "  1. Add a key to the validator: pokerchaind keys add <name> --keyring-backend=test"
+                echo "  2. Specify a key with --from: ./process-bridge.sh $deposit_index --from <keyname>"
+                exit 1
+            fi
+        else
+            echo -e "${RED}❌ Could not list keys from validator${NC}"
+            echo ""
+            echo "SSH command failed or returned empty. Check:"
+            echo "  1. SSH access to $VALIDATOR_USER@$VALIDATOR_HOST"
+            echo "  2. pokerchaind is installed on validator"
+            echo "  3. Keyring has at least one key"
+            echo ""
+            echo "Or specify a key manually with --from:"
+            echo "  ./process-bridge.sh $deposit_index --from <keyname>"
+            exit 1
+        fi
+
     fi
     
     echo ""
