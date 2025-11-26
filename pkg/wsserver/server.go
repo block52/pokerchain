@@ -40,11 +40,14 @@ var upgrader = websocket.Upgrader{
 
 // Client represents a WebSocket client connection
 type Client struct {
-	hub     *Hub
-	conn    *websocket.Conn
-	send    chan []byte
-	gameIDs map[string]bool
-	mu      sync.RWMutex
+	hub       *Hub
+	conn      *websocket.Conn
+	send      chan []byte
+	gameIDs   map[string]bool
+	playerId  string // Authenticated player address for per-client card masking
+	timestamp int64  // Timestamp from subscription for GameState query
+	signature string // Signature from subscription for GameState query
+	mu        sync.RWMutex
 }
 
 // Hub manages all client connections and game subscriptions
@@ -77,8 +80,11 @@ type GameUpdate struct {
 
 // ClientMessage from client
 type ClientMessage struct {
-	Type   string `json:"type"`
-	GameID string `json:"game_id"`
+	Type          string `json:"type"`
+	GameID        string `json:"game_id"`
+	PlayerAddress string `json:"player_address,omitempty"` // For authenticated subscriptions
+	Timestamp     int64  `json:"timestamp,omitempty"`      // Unix timestamp for signature verification
+	Signature     string `json:"signature,omitempty"`      // Ethereum personal_sign signature
 }
 
 // TendermintEventResponse represents the structure of a Tendermint WebSocket event
@@ -215,31 +221,72 @@ func (h *Hub) sendGameState(client *Client, gameID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	res, err := h.queryClient.Game(ctx, &pokertypes.QueryGameRequest{
-		GameId: gameID,
-	})
-	if err != nil {
-		log.Printf("[WS-Server] Error querying game state for %s: %v", gameID, err)
-		return
+	var gameData string
+
+	// Try authenticated query if client has credentials
+	client.mu.RLock()
+	hasAuth := client.playerId != "" && client.signature != ""
+	playerId := client.playerId
+	timestamp := client.timestamp
+	signature := client.signature
+	client.mu.RUnlock()
+
+	log.Printf("[WS-Server] 🔍 sendGameState: hasAuth=%v, playerId=%s, timestamp=%d, signatureLen=%d",
+		hasAuth, playerId, timestamp, len(signature))
+
+	if hasAuth {
+		// Use authenticated GameState query for per-player card masking
+		log.Printf("[WS-Server] 🔐 Attempting authenticated GameState query for player %s", playerId)
+		res, err := h.queryClient.GameState(ctx, &pokertypes.QueryGameStateRequest{
+			GameId:        gameID,
+			PlayerAddress: playerId,
+			Timestamp:     timestamp,
+			Signature:     signature,
+		})
+		if err != nil {
+			log.Printf("[WS-Server] ❌ Error querying authenticated game state for %s (player %s): %v - falling back to public query",
+				gameID, playerId, err)
+			// Fall back to public query
+			hasAuth = false
+		} else {
+			// Wrap GameState result to match Game query format: {"gameState": {...}}
+			// The frontend expects data.gameState to contain the game state
+			gameData = fmt.Sprintf(`{"gameState":%s}`, res.GameState)
+			log.Printf("[WS-Server] ✅ Using authenticated GameState for player %s - response length: %d", playerId, len(res.GameState))
+		}
+	}
+
+	if !hasAuth {
+		// Fall back to public Game query (all cards masked)
+		log.Printf("[WS-Server] 📢 Using public Game query (all cards masked)")
+		res, err := h.queryClient.Game(ctx, &pokertypes.QueryGameRequest{
+			GameId: gameID,
+		})
+		if err != nil {
+			log.Printf("[WS-Server] Error querying game state for %s: %v", gameID, err)
+			return
+		}
+		gameData = res.Game
 	}
 
 	update := &GameUpdate{
 		GameID:    gameID,
 		Timestamp: time.Now(),
 		Event:     "state",
-		Data:      json.RawMessage(res.Game),
+		Data:      json.RawMessage(gameData),
 	}
 
 	message, _ := json.Marshal(update)
 	select {
 	case client.send <- message:
-		log.Printf("[WS-Server] Sent initial game state to client for game %s", gameID)
+		log.Printf("[WS-Server] 📤 Sent initial game state to client for game %s (authenticated: %v)", gameID, hasAuth)
 	default:
 		log.Printf("[WS-Server] Failed to send game state to client (channel full)")
 	}
 }
 
 // BroadcastGameUpdate broadcasts a game state update to all subscribers
+// Each client receives a personalized state with their own cards visible
 func (h *Hub) BroadcastGameUpdate(gameID string, event string) {
 	if h.queryClient == nil {
 		log.Printf("[WS-Server] No gRPC client, broadcasting event only for game %s", gameID)
@@ -253,25 +300,90 @@ func (h *Hub) BroadcastGameUpdate(gameID string, event string) {
 		return
 	}
 
+	// Get all clients subscribed to this game
+	h.mu.RLock()
+	clients, exists := h.games[gameID]
+	if !exists || len(clients) == 0 {
+		h.mu.RUnlock()
+		log.Printf("[WS-Server] No subscribers for game %s", gameID)
+		return
+	}
+
+	// Make a copy of client pointers to avoid holding lock during queries
+	clientList := make([]*Client, 0, len(clients))
+	for client := range clients {
+		clientList = append(clientList, client)
+	}
+	h.mu.RUnlock()
+
+	log.Printf("[WS-Server] Broadcasting %s event to %d clients for game %s", event, len(clientList), gameID)
+
+	// Send personalized state to each client
+	for _, client := range clientList {
+		go h.sendPersonalizedUpdate(client, gameID, event)
+	}
+}
+
+// sendPersonalizedUpdate sends a game state update to a single client with their cards visible
+func (h *Hub) sendPersonalizedUpdate(client *Client, gameID string, event string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	res, err := h.queryClient.Game(ctx, &pokertypes.QueryGameRequest{
-		GameId: gameID,
-	})
-	if err != nil {
-		log.Printf("[WS-Server] Error querying game for broadcast: %v", err)
-		return
+	var gameData string
+
+	// Check if client has authentication credentials
+	client.mu.RLock()
+	hasAuth := client.playerId != "" && client.signature != ""
+	playerId := client.playerId
+	timestamp := client.timestamp
+	signature := client.signature
+	client.mu.RUnlock()
+
+	if hasAuth {
+		// Use authenticated GameState query for per-player card masking
+		res, err := h.queryClient.GameState(ctx, &pokertypes.QueryGameStateRequest{
+			GameId:        gameID,
+			PlayerAddress: playerId,
+			Timestamp:     timestamp,
+			Signature:     signature,
+		})
+		if err != nil {
+			log.Printf("[WS-Server] Error querying authenticated game state for broadcast (player %s): %v - falling back to public query",
+				playerId, err)
+			hasAuth = false
+		} else {
+			// Wrap GameState result to match Game query format: {"gameState": {...}}
+			// The frontend expects data.gameState to contain the game state
+			gameData = fmt.Sprintf(`{"gameState":%s}`, res.GameState)
+		}
+	}
+
+	if !hasAuth {
+		// Fall back to public Game query (all cards masked)
+		res, err := h.queryClient.Game(ctx, &pokertypes.QueryGameRequest{
+			GameId: gameID,
+		})
+		if err != nil {
+			log.Printf("[WS-Server] Error querying game for broadcast: %v", err)
+			return
+		}
+		gameData = res.Game
 	}
 
 	update := &GameUpdate{
 		GameID:    gameID,
 		Timestamp: time.Now(),
 		Event:     event,
-		Data:      json.RawMessage(res.Game),
+		Data:      json.RawMessage(gameData),
 	}
 
-	h.broadcast <- update
+	message, _ := json.Marshal(update)
+	select {
+	case client.send <- message:
+		// Message sent successfully
+	default:
+		log.Printf("[WS-Server] Failed to send update to client (channel full)")
+	}
 }
 
 func (c *Client) readPump() {
@@ -295,15 +407,33 @@ func (c *Client) readPump() {
 			break
 		}
 
+		// Log raw message for debugging
+		log.Printf("[WS-Server] 📥 Raw message received: %s", string(message))
+
 		var msg ClientMessage
 		if err := json.Unmarshal(message, &msg); err != nil {
 			log.Printf("[WS-Server] Error unmarshaling message: %v", err)
 			continue
 		}
 
+		log.Printf("[WS-Server] 📋 Parsed message: type=%s, game_id=%s, player_address=%s, timestamp=%d, has_signature=%v",
+			msg.Type, msg.GameID, msg.PlayerAddress, msg.Timestamp, msg.Signature != "")
+
 		switch msg.Type {
 		case "subscribe":
 			if msg.GameID != "" {
+				// Store authenticated player credentials for per-client card masking
+				if msg.PlayerAddress != "" {
+					c.mu.Lock()
+					c.playerId = msg.PlayerAddress
+					c.timestamp = msg.Timestamp
+					c.signature = msg.Signature
+					c.mu.Unlock()
+					log.Printf("[WS-Server] ✅ Client authenticated as player: %s (timestamp: %d, signature length: %d)",
+						msg.PlayerAddress, msg.Timestamp, len(msg.Signature))
+				} else {
+					log.Printf("[WS-Server] ⚠️ Subscribe without player_address - will use public query")
+				}
 				c.hub.subscribe <- &Subscription{
 					client: c,
 					gameID: msg.GameID,
