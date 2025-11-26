@@ -214,10 +214,10 @@ init_testnet_with_cli() {
     # Get the validator address
     local validator_addr=$(pokerchaind keys show validator -a --keyring-backend test --home "$node1_dir")
 
-    # Add genesis account with funds (including USDC for withdrawal testing!)
+    # Add genesis account with funds (STAKE only - USDC comes from bridge)
     echo ""
     echo "Adding genesis account with funds..."
-    pokerchaind genesis add-genesis-account "$validator_addr" 1000000000000stake,1000000000usdc --home "$node1_dir"
+    pokerchaind genesis add-genesis-account "$validator_addr" 1000000000000stake --home "$node1_dir"
 
     # Generate genesis transaction
     echo "Creating genesis transaction..."
