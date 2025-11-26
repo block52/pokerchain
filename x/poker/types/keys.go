@@ -32,3 +32,9 @@ var WithdrawalRequestsKey = collections.NewPrefix("withdrawal_requests")
 
 // WithdrawalNonceKey is the prefix for withdrawal nonce sequence
 var WithdrawalNonceKey = collections.NewPrefix("withdrawal_nonce")
+
+// LastDepositCheckTimeKey is the prefix to store the last deposit check timestamp
+var LastDepositCheckTimeKey = collections.NewPrefix("last_deposit_check_time")
+
+// ProcessedDepositIndicesKey is the prefix to store processed deposit indices with L1 block numbers
+var ProcessedDepositIndicesKey = collections.NewPrefix("processed_deposit_indices")

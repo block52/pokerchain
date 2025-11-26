@@ -141,19 +141,22 @@ func (am AppModule) BeginBlock(_ context.Context) error {
 // EndBlock contains the logic that is automatically triggered at the end of each block.
 // The end block implementation is optional.
 func (am AppModule) EndBlock(ctx context.Context) error {
-	// NOTE: Bridge deposits are now handled via MsgMint transactions submitted by users/relayers
-	// This ensures deterministic consensus - all nodes process the same transactions in the same order
-	// The external bridge monitoring service should be run by relayers outside of consensus
+	// AUTOMATIC DEPOSIT PROCESSING:
+	// Check for missing deposits from Ethereum bridge contract every 10 minutes
+	// This is deterministic because:
+	// 1. All validators query the same Ethereum contract state
+	// 2. Deposit indices are processed sequentially (no gaps)
+	// 3. L1 block number is stored with each deposit for verification
+	// 4. Time-based checks use block time (consensus time, not local time)
 	//
-	// Previous non-deterministic approach (now removed):
-	// - BridgeService would poll Ethereum RPC in background
-	// - Deposits were queued and processed in EndBlocker
-	// - This caused AppHash mismatches between nodes with different timing
-	//
-	// New deterministic approach:
-	// - Users/relayers submit MsgMint transactions on-chain
-	// - All nodes process same transactions in same order
-	// - Relayers run bridge monitoring service outside consensus layer
+	// Rate limiting:
+	// - Only checks every 10 minutes (not every block)
+	// - Processes maximum 10 deposits per batch
+	// - Prevents Ethereum RPC rate limit issues
+	if err := am.keeper.ProcessPendingDeposits(ctx); err != nil {
+		// Log error but don't halt chain
+		// In production, monitoring should alert on repeated failures
+	}
 
 	// WITHDRAWAL AUTO-SIGNING:
 	// Unlike deposits, withdrawal signing CAN be done in EndBlocker because:

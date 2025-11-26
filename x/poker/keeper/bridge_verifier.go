@@ -235,6 +235,64 @@ func (bv *BridgeVerifier) GetDepositByIndex(
 	}, nil
 }
 
+// GetHighestDepositIndex queries the Ethereum bridge contract for the total number of deposits
+// It calls the depositsCount() view function and returns the highest index (count - 1)
+// Returns 0 if no deposits exist, or if the count is 0
+func (bv *BridgeVerifier) GetHighestDepositIndex(ctx context.Context) (uint64, error) {
+	// ABI for depositsCount() function
+	// function depositsCount() external view returns (uint256)
+	depositsCountABI := `[{"inputs":[],"name":"deposits","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]`
+
+	// Parse ABI
+	parsedABI, err := abi.JSON(strings.NewReader(depositsCountABI))
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse ABI: %w", err)
+	}
+
+	// Pack function call data
+	data, err := parsedABI.Pack("depositsCount")
+	if err != nil {
+		return 0, fmt.Errorf("failed to pack function call: %w", err)
+	}
+
+	// Call contract
+	msg := ethereum.CallMsg{
+		To:   &bv.depositContract,
+		Data: data,
+	}
+
+	result, err := bv.ethClient.CallContract(ctx, msg, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to call depositsCount: %w", err)
+	}
+
+	// Unpack result
+	var count *big.Int
+	err = parsedABI.UnpackIntoInterface(&count, "depositsCount", result)
+	if err != nil {
+		return 0, fmt.Errorf("failed to unpack result: %w", err)
+	}
+
+	// If count is 0, no deposits exist
+	if count.Cmp(big.NewInt(0)) == 0 {
+		return 0, nil
+	}
+
+	// Return highest index (count - 1, since indices are 0-based)
+	highestIndex := new(big.Int).Sub(count, big.NewInt(1))
+	return highestIndex.Uint64(), nil
+}
+
+// GetEthereumBlockNumber queries the current Ethereum block number
+// This is used for deterministic storage of L1 block height with deposit data
+func (bv *BridgeVerifier) GetEthereumBlockNumber(ctx context.Context) (uint64, error) {
+	blockNumber, err := bv.ethClient.BlockNumber(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get Ethereum block number: %w", err)
+	}
+	return blockNumber, nil
+}
+
 // Close closes the Ethereum client connection
 func (bv *BridgeVerifier) Close() {
 	if bv.ethClient != nil {

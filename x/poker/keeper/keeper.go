@@ -31,6 +31,12 @@ type Keeper struct {
 	WithdrawalRequests collections.Map[string, types.WithdrawalRequest]
 	// WithdrawalNonce is a sequence for generating unique withdrawal IDs
 	WithdrawalNonce collections.Sequence
+	// LastDepositCheckTime stores the timestamp (Unix seconds) of the last deposit check
+	// Used to enforce 10-minute interval between automatic deposit processing
+	LastDepositCheckTime collections.Item[int64]
+	// ProcessedDepositIndices maps deposit index -> L1 block number for determinism
+	// Stores the Ethereum block number when each deposit was fetched
+	ProcessedDepositIndices collections.Map[uint64, uint64]
 
 	authKeeper    types.AuthKeeper
 	bankKeeper    types.BankKeeper
@@ -73,12 +79,14 @@ func NewKeeper(
 		stakingKeeper:       stakingKeeper,
 		ethRPCURL:           ethRPCURL,
 		depositContractAddr: depositContractAddr,
-		Params:             collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
-		ProcessedEthTxs:    collections.NewKeySet(sb, types.ProcessedEthTxsKey, "processed_eth_txs", collections.StringKey),
-		Games:              collections.NewMap(sb, types.GamesKey, "games", collections.StringKey, codec.CollValue[types.Game](cdc)),
-		GameStates:         collections.NewMap(sb, types.GameStatesKey, "game_states", collections.StringKey, codec.CollValue[types.TexasHoldemStateDTO](cdc)),
-		WithdrawalRequests: collections.NewMap(sb, types.WithdrawalRequestsKey, "withdrawal_requests", collections.StringKey, codec.CollValue[types.WithdrawalRequest](cdc)),
-		WithdrawalNonce:    collections.NewSequence(sb, types.WithdrawalNonceKey, "withdrawal_nonce"),
+		Params:                  collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
+		ProcessedEthTxs:         collections.NewKeySet(sb, types.ProcessedEthTxsKey, "processed_eth_txs", collections.StringKey),
+		Games:                   collections.NewMap(sb, types.GamesKey, "games", collections.StringKey, codec.CollValue[types.Game](cdc)),
+		GameStates:              collections.NewMap(sb, types.GameStatesKey, "game_states", collections.StringKey, codec.CollValue[types.TexasHoldemStateDTO](cdc)),
+		WithdrawalRequests:      collections.NewMap(sb, types.WithdrawalRequestsKey, "withdrawal_requests", collections.StringKey, codec.CollValue[types.WithdrawalRequest](cdc)),
+		WithdrawalNonce:         collections.NewSequence(sb, types.WithdrawalNonceKey, "withdrawal_nonce"),
+		LastDepositCheckTime:    collections.NewItem(sb, types.LastDepositCheckTimeKey, "last_deposit_check_time", collections.Int64Value),
+		ProcessedDepositIndices: collections.NewMap(sb, types.ProcessedDepositIndicesKey, "processed_deposit_indices", collections.Uint64Key, collections.Uint64Value),
 	}
 
 	schema, err := sb.Build()
