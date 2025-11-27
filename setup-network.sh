@@ -102,9 +102,16 @@ show_menu() {
     echo "   - Restarts chain from block 0"
     echo "   - ⚠️  Use when bug requires full chain restart"
     echo ""
-    echo -e "${GREEN}12)${NC} Exit"
+    echo -e "${GREEN}12)${NC} Deploy WebSocket Server"
+    echo "   Deploy real-time WebSocket server to remote node"
+    echo "   - Builds ws-server binary from cmd/ws-server"
+    echo "   - Uploads to remote server"
+    echo "   - Creates systemd service (poker-ws.service)"
+    echo "   - Required for real-time UI updates"
     echo ""
-    echo -n "Enter your choice [1-12]: "
+    echo -e "${GREEN}13)${NC} Exit"
+    echo ""
+    echo -n "Enter your choice [1-13]: "
 }
 
 # Check if script exists
@@ -665,12 +672,62 @@ verify_network() {
 
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+    # Test WebSocket server
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Testing WebSocket Server (port 8585)...${NC}"
+    echo ""
+
+    # Test HTTP health endpoint on port 8585
+    echo -n "WebSocket Health (HTTP :8585): "
+    local ws_health=$(curl -s --max-time 5 "http://$remote_node:8585/health" 2>/dev/null)
+    if [ -n "$ws_health" ]; then
+        echo -e "${GREEN}✅ Accessible${NC}"
+        # Parse health response
+        local ws_status=$(echo "$ws_health" | jq -r '.status' 2>/dev/null)
+        local ws_clients=$(echo "$ws_health" | jq -r '.clients' 2>/dev/null)
+        local ws_games=$(echo "$ws_health" | jq -r '.active_games' 2>/dev/null)
+        if [ "$ws_status" = "ok" ]; then
+            echo "  Status: $ws_status"
+            echo "  Connected clients: $ws_clients"
+            echo "  Active game subscriptions: $ws_games"
+        else
+            echo "  Response: $ws_health"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Not accessible (port 8585 may be closed or service not running)${NC}"
+    fi
+
+    # Test WSS via NGINX proxy
+    echo ""
+    echo -n "WebSocket via HTTPS (/ws): "
+    local wss_health=$(curl -s --max-time 5 "https://$remote_node/ws/health" 2>/dev/null)
+    if [ -n "$wss_health" ]; then
+        echo -e "${GREEN}✅ Accessible${NC}"
+        local wss_status=$(echo "$wss_health" | jq -r '.status' 2>/dev/null)
+        local wss_clients=$(echo "$wss_health" | jq -r '.clients' 2>/dev/null)
+        local wss_games=$(echo "$wss_health" | jq -r '.active_games' 2>/dev/null)
+        if [ "$wss_status" = "ok" ]; then
+            echo "  Status: $wss_status"
+            echo "  Connected clients: $wss_clients"
+            echo "  Active game subscriptions: $wss_games"
+        else
+            echo "  Response: $wss_health"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Not accessible (NGINX may not be proxying /ws)${NC}"
+    fi
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
     echo ""
     echo "Public Endpoints:"
     echo "  HTTP RPC:   http://$remote_node:$rpc_port"
     echo "  HTTP API:   http://$remote_node:$api_port"
     echo "  HTTPS RPC:  https://$remote_node/rpc"
     echo "  HTTPS API:  https://$remote_node/"
+    echo "  WebSocket:  ws://$remote_node:8585/ws"
+    echo "  WebSocket (SSL): wss://$remote_node/ws"
     echo ""
     echo "Test commands:"
     echo "  HTTP:"
@@ -679,6 +736,9 @@ verify_network() {
     echo "  HTTPS:"
     echo "    curl https://$remote_node/rpc/status"
     echo "    curl https://$remote_node/cosmos/base/tendermint/v1beta1/node_info"
+    echo "  WebSocket:"
+    echo "    curl http://$remote_node:8585/health"
+    echo "    curl https://$remote_node/ws/health"
     echo ""
 
     read -p "Press Enter to continue..."
@@ -1945,20 +2005,189 @@ reset_chain() {
     read -p "Press Enter to continue..."
 }
 
-# Deploy Remote PVM (option 11)
+# Deploy Remote PVM (option 10)
 deploy_remote_pvm() {
     print_header
     echo ""
     echo "Deploying Remote Poker VM"
     echo ""
-    
+
     if check_script "./deploy-pvm.sh"; then
         chmod +x ./deploy-pvm.sh
         ./deploy-pvm.sh
     else
         echo "Please ensure deploy-pvm.sh is in the current directory"
     fi
-    
+
+    read -p "Press Enter to continue..."
+}
+
+# Deploy WebSocket Server (option 12)
+deploy_websocket_server() {
+    print_header
+    echo ""
+    echo "Deploying WebSocket Server"
+    echo ""
+
+    # Get remote host details
+    echo -e "${BLUE}Enter the remote server details:${NC}"
+    echo ""
+    read -p "Remote host (e.g., node1.block52.xyz): " remote_host
+
+    if [ -z "$remote_host" ]; then
+        echo -e "${YELLOW}❌ Remote host cannot be empty${NC}"
+        read -p "Press Enter to continue..."
+        return
+    fi
+
+    read -p "Remote user (default: root): " remote_user
+    remote_user=${remote_user:-root}
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 1: Building ws-server binary${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Build the ws-server binary for Linux
+    echo "Building ws-server for Linux amd64..."
+    GOOS=linux GOARCH=amd64 go build -o ./build/ws-server-linux ./cmd/ws-server
+
+    if [ ! -f "./build/ws-server-linux" ]; then
+        echo -e "${YELLOW}❌ Failed to build ws-server binary${NC}"
+        read -p "Press Enter to continue..."
+        return
+    fi
+
+    echo -e "${GREEN}✓${NC} Binary built successfully: ./build/ws-server-linux"
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 2: Testing SSH connection${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    if ! ssh -o ConnectTimeout=10 -o BatchMode=yes "$remote_user@$remote_host" "echo 'SSH connection successful'" 2>/dev/null; then
+        echo -e "${YELLOW}❌ Cannot connect to $remote_user@$remote_host${NC}"
+        echo "Please ensure SSH key access is configured"
+        read -p "Press Enter to continue..."
+        return
+    fi
+
+    echo -e "${GREEN}✓${NC} SSH connection successful"
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 3: Uploading binary${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Upload the binary
+    echo "Uploading ws-server binary to $remote_host..."
+    scp ./build/ws-server-linux "$remote_user@$remote_host:/tmp/ws-server"
+
+    if [ $? -ne 0 ]; then
+        echo -e "${YELLOW}❌ Failed to upload binary${NC}"
+        read -p "Press Enter to continue..."
+        return
+    fi
+
+    echo -e "${GREEN}✓${NC} Binary uploaded"
+
+    # Move to /usr/local/bin and set permissions
+    echo "Installing binary to /usr/local/bin..."
+    ssh "$remote_user@$remote_host" "sudo mv /tmp/ws-server /usr/local/bin/ws-server && sudo chmod +x /usr/local/bin/ws-server"
+
+    echo -e "${GREEN}✓${NC} Binary installed to /usr/local/bin/ws-server"
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 4: Creating systemd service${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Create systemd service file
+    cat << 'SERVICEEOF' | ssh "$remote_user@$remote_host" "sudo tee /etc/systemd/system/poker-ws.service > /dev/null"
+[Unit]
+Description=Poker WebSocket Server
+After=network.target pokerchaind.service
+Wants=pokerchaind.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/ws-server
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+
+    echo -e "${GREEN}✓${NC} Systemd service file created"
+
+    # Reload systemd and enable service
+    echo "Enabling and starting service..."
+    ssh "$remote_user@$remote_host" "sudo systemctl daemon-reload && sudo systemctl enable poker-ws && sudo systemctl restart poker-ws"
+
+    echo -e "${GREEN}✓${NC} Service enabled and started"
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 5: Verifying deployment${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Wait a moment for service to start
+    sleep 2
+
+    # Check service status
+    echo "Checking service status..."
+    ssh "$remote_user@$remote_host" "sudo systemctl status poker-ws --no-pager -l" | head -20
+
+    echo ""
+
+    # Check if port 8585 is listening
+    echo "Checking if WebSocket server is listening on port 8585..."
+    if ssh "$remote_user@$remote_host" "ss -tlnp | grep -q ':8585'"; then
+        echo -e "${GREEN}✓${NC} WebSocket server is listening on port 8585"
+    else
+        echo -e "${YELLOW}⚠️${NC} Port 8585 not yet listening (service may still be starting)"
+    fi
+
+    # Test health endpoint
+    echo ""
+    echo "Testing health endpoint..."
+    local health_response=$(ssh "$remote_user@$remote_host" "curl -s http://localhost:8585/health 2>/dev/null")
+
+    if [ -n "$health_response" ]; then
+        echo -e "${GREEN}✓${NC} Health check response: $health_response"
+    else
+        echo -e "${YELLOW}⚠️${NC} Health endpoint not responding yet"
+    fi
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${GREEN}✅ WebSocket Server Deployment Complete!${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "Deployment Summary:"
+    echo "  Host:     $remote_host"
+    echo "  Binary:   /usr/local/bin/ws-server"
+    echo "  Service:  poker-ws.service"
+    echo "  Port:     8585"
+    echo ""
+    echo "Useful commands:"
+    echo "  Check status:  ssh $remote_user@$remote_host 'sudo systemctl status poker-ws'"
+    echo "  View logs:     ssh $remote_user@$remote_host 'sudo journalctl -u poker-ws -f'"
+    echo "  Restart:       ssh $remote_user@$remote_host 'sudo systemctl restart poker-ws'"
+    echo "  Health check:  curl http://$remote_host:8585/health"
+    echo ""
+    echo "⚠️  Note: Ensure port 8585 is open in firewall (or use NGINX proxy)"
+    echo ""
+
     read -p "Press Enter to continue..."
 }
 
@@ -2023,6 +2252,9 @@ main() {
                 reset_chain
                 ;;
             12)
+                deploy_websocket_server
+                ;;
+            13)
                 print_header
                 echo ""
                 echo "Thank you for using Pokerchain Network Setup!"
@@ -2031,7 +2263,7 @@ main() {
                 ;;
             *)
                 echo ""
-                echo -e "${YELLOW}Invalid option. Please choose 1-12.${NC}"
+                echo -e "${YELLOW}Invalid option. Please choose 1-13.${NC}"
                 sleep 2
                 ;;
         esac
