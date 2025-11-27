@@ -250,7 +250,7 @@ func (bv *BridgeVerifier) GetHighestDepositIndex(ctx context.Context) (uint64, e
 	}
 
 	// Pack function call data
-	data, err := parsedABI.Pack("depositsCount")
+	data, err := parsedABI.Pack("deposits")
 	if err != nil {
 		return 0, fmt.Errorf("failed to pack function call: %w", err)
 	}
@@ -263,12 +263,12 @@ func (bv *BridgeVerifier) GetHighestDepositIndex(ctx context.Context) (uint64, e
 
 	result, err := bv.ethClient.CallContract(ctx, msg, nil)
 	if err != nil {
-		return 0, fmt.Errorf("failed to call depositsCount: %w", err)
+		return 0, fmt.Errorf("failed to call deposits: %w", err)
 	}
 
 	// Unpack result
 	var count *big.Int
-	err = parsedABI.UnpackIntoInterface(&count, "depositsCount", result)
+	err = parsedABI.UnpackIntoInterface(&count, "deposits", result)
 	if err != nil {
 		return 0, fmt.Errorf("failed to unpack result: %w", err)
 	}
