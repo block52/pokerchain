@@ -235,22 +235,23 @@ func (bv *BridgeVerifier) GetDepositByIndex(
 	}, nil
 }
 
-// GetHighestDepositIndex queries the Ethereum bridge contract for the total number of deposits
-// It calls the depositsCount() view function and returns the highest index (count - 1)
-// Returns 0 if no deposits exist, or if the count is 0
+// GetHighestDepositIndex queries the Ethereum bridge contract for the next deposit index
+// It calls the depositIndex() view function which returns the next index to be used
+// Returns the highest valid index (depositIndex - 1)
+// Returns 0 if depositIndex is 0 or 1 (only index 0 exists)
 func (bv *BridgeVerifier) GetHighestDepositIndex(ctx context.Context) (uint64, error) {
-	// ABI for depositsCount() function
-	// function depositsCount() external view returns (uint256)
-	depositsCountABI := `[{"inputs":[],"name":"deposits","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]`
+	// ABI for depositIndex() function
+	// function depositIndex() external view returns (uint256)
+	depositIndexABI := `[{"inputs":[],"name":"depositIndex","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]`
 
 	// Parse ABI
-	parsedABI, err := abi.JSON(strings.NewReader(depositsCountABI))
+	parsedABI, err := abi.JSON(strings.NewReader(depositIndexABI))
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse ABI: %w", err)
 	}
 
 	// Pack function call data
-	data, err := parsedABI.Pack("deposits")
+	data, err := parsedABI.Pack("depositIndex")
 	if err != nil {
 		return 0, fmt.Errorf("failed to pack function call: %w", err)
 	}
@@ -263,23 +264,24 @@ func (bv *BridgeVerifier) GetHighestDepositIndex(ctx context.Context) (uint64, e
 
 	result, err := bv.ethClient.CallContract(ctx, msg, nil)
 	if err != nil {
-		return 0, fmt.Errorf("failed to call deposits: %w", err)
+		return 0, fmt.Errorf("failed to call depositIndex: %w", err)
 	}
 
 	// Unpack result
-	var count *big.Int
-	err = parsedABI.UnpackIntoInterface(&count, "deposits", result)
+	var nextIndex *big.Int
+	err = parsedABI.UnpackIntoInterface(&nextIndex, "depositIndex", result)
 	if err != nil {
 		return 0, fmt.Errorf("failed to unpack result: %w", err)
 	}
 
-	// If count is 0, no deposits exist
-	if count.Cmp(big.NewInt(0)) == 0 {
+	// If nextIndex is 0, no deposits exist yet
+	if nextIndex.Cmp(big.NewInt(0)) == 0 {
 		return 0, nil
 	}
 
-	// Return highest index (count - 1, since indices are 0-based)
-	highestIndex := new(big.Int).Sub(count, big.NewInt(1))
+	// Return highest valid index (nextIndex - 1, since depositIndex is the NEXT index to be used)
+	// For example: if depositIndex = 13, valid indices are 0-12, so highest = 12
+	highestIndex := new(big.Int).Sub(nextIndex, big.NewInt(1))
 	return highestIndex.Uint64(), nil
 }
 
