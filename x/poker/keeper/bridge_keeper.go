@@ -17,7 +17,7 @@ import (
 // Example: "b521a71964120e1857dc78a8511d4ac02528edaccfb2" (hex) → "b52..." (bech32)
 func normalizeRecipientAddress(recipient string) (string, error) {
 	// Check if it's already valid bech32 by attempting decode
-	hrp, decoded, err := bech32.DecodeAndConvert(recipient)
+	hrp, _, err := bech32.DecodeAndConvert(recipient)
 	if err == nil && hrp == "b52" {
 		// Already valid bech32 with correct prefix
 		return recipient, nil
