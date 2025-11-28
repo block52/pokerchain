@@ -23,13 +23,14 @@ func normalizeRecipientAddress(recipient string) (string, error) {
 		return recipient, nil
 	}
 
-	// Check if it's hex format: b52 + separator + hex characters
-	// Regex: b52 followed by hex characters (0-9a-f)
-	hexPattern := regexp.MustCompile(`^b52([0-9a-f]+)$`)
+	// Check if it's hex format: b52 + separator "1" + hex characters
+	// Regex: b52 + separator 1 + hex characters (0-9a-f)
+	// Example: b521a71964120e1857dc78a8511d4ac02528edaccfb2
+	hexPattern := regexp.MustCompile(`^b521([0-9a-f]+)$`)
 	matches := hexPattern.FindStringSubmatch(strings.ToLower(recipient))
 
 	if len(matches) == 2 {
-		// Extract hex part (without b52 prefix)
+		// Extract hex part (without b521 prefix)
 		hexData := matches[1]
 
 		// Decode hex to bytes
