@@ -236,7 +236,7 @@ setup_systemd_service() {
     
     ssh "$remote_user@$remote_host" bash << ENDSSH
         # Create systemd service file
-        cat > /etc/systemd/system/poker-vm.service << 'EOF'
+        cat > /etc/systemd/system/poker-vm.service << EOF
 [Unit]
 Description=Poker VM Docker Container
 After=docker.service
@@ -248,7 +248,7 @@ Restart=always
 RestartSec=5
 ExecStartPre=-/usr/bin/docker stop poker-vm
 ExecStartPre=-/usr/bin/docker rm poker-vm
-ExecStart=/usr/bin/docker run --name poker-vm --rm -p ${pvm_port}:3000 poker-vm:latest
+ExecStart=/usr/bin/docker run --name poker-vm --rm -p ${pvm_port}:8545 --network poker-vm_poker-network poker-vm:latest
 ExecStop=/usr/bin/docker stop poker-vm
 
 [Install]
