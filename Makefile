@@ -38,7 +38,7 @@ endif
 #     VERSION := $(BRANCH)-$(COMMIT)
 #   endif
 # endif
-VERSION := v0.1.10
+VERSION := v0.1.16
 
 # Update the ldflags with the app, client & server names
 ldflags = -X github.com/cosmos/cosmos-sdk/version.Name=$(APPNAME) \
