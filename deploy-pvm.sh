@@ -185,32 +185,89 @@ ENDSSH
     fi
 }
 
+# Build TypeScript
+build_typescript() {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 4: Building TypeScript...${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    ssh "$remote_user@$remote_host" bash << 'ENDSSH'
+        cd /root/poker-vm/pvm/ts
+
+        # Check if Node.js is installed
+        if ! command -v node &> /dev/null; then
+            echo "📦 Installing Node.js..."
+            curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+            apt-get install -y nodejs
+        fi
+
+        echo "Node.js version: $(node --version)"
+        echo "npm version: $(npm --version)"
+
+        # Install yarn if not available
+        if ! command -v yarn &> /dev/null; then
+            echo "📦 Installing Yarn..."
+            npm install -g yarn
+        fi
+
+        echo "Yarn version: $(yarn --version)"
+
+        # Install dependencies (including dev dependencies for tsc)
+        echo "📦 Installing dependencies..."
+        yarn install --ignore-engines
+
+        # Build TypeScript (using --ignore-engines to bypass strict node version check)
+        echo "🔨 Building TypeScript..."
+        yarn --ignore-engines build
+
+        if [ -d "dist" ]; then
+            echo "✅ TypeScript build successful"
+            ls -la dist/
+        else
+            echo "❌ TypeScript build failed - dist folder not found"
+            exit 1
+        fi
+ENDSSH
+
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}❌ Failed to build TypeScript${NC}"
+        exit 1
+    fi
+}
+
 # Build Docker image
 build_docker_image() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 4: Building Docker image...${NC}"
+    echo -e "${BLUE}Step 5: Building Docker image...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    
+
     ssh "$remote_user@$remote_host" bash << ENDSSH
         cd /root/poker-vm/pvm/ts
-        
+
         if [ ! -f "Dockerfile" ]; then
             echo "❌ Dockerfile not found in /root/poker-vm/pvm/ts"
             exit 1
         fi
-        
+
+        if [ ! -d "dist" ]; then
+            echo "❌ dist folder not found - TypeScript build may have failed"
+            exit 1
+        fi
+
         echo "🧹 Cleaning up old containers and images..."
         # Remove any orphaned containers
         docker ps -aq --filter "status=exited" --filter "status=dead" | xargs -r docker rm
-        
+
         # Prune orphaned images and containers
         docker system prune -f --filter "label!=keep" 2>/dev/null || true
-        
+
         echo "🐳 Building Docker image with --no-cache (this may take several minutes)..."
         docker build --no-cache -t poker-vm:latest .
-        
+
         if [ \$? -eq 0 ]; then
             echo "✅ Docker image built successfully"
             docker images | grep poker-vm
@@ -219,7 +276,7 @@ build_docker_image() {
             exit 1
         fi
 ENDSSH
-    
+
     if [ $? -ne 0 ]; then
         echo -e "${RED}❌ Failed to build Docker image${NC}"
         exit 1
@@ -230,11 +287,14 @@ ENDSSH
 setup_systemd_service() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 5: Setting up systemd service...${NC}"
+    echo -e "${BLUE}Step 6: Setting up systemd service...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
     ssh "$remote_user@$remote_host" bash << ENDSSH
+        # Create docker network if it doesn't exist
+        docker network create poker-network 2>/dev/null || true
+
         # Create systemd service file
         cat > /etc/systemd/system/poker-vm.service << EOF
 [Unit]
@@ -248,7 +308,7 @@ Restart=always
 RestartSec=5
 ExecStartPre=-/usr/bin/docker stop poker-vm
 ExecStartPre=-/usr/bin/docker rm poker-vm
-ExecStart=/usr/bin/docker run --name poker-vm --rm -p ${pvm_port}:8545 --network poker-vm_poker-network poker-vm:latest
+ExecStart=/usr/bin/docker run --name poker-vm --rm -p ${pvm_port}:8545 --network poker-network poker-vm:latest
 ExecStop=/usr/bin/docker stop poker-vm
 
 [Install]
@@ -389,6 +449,7 @@ main() {
     check_ssh
     install_docker
     clone_repository
+    build_typescript
     build_docker_image
     setup_systemd_service
     check_pvm_health
