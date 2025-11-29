@@ -672,36 +672,15 @@ verify_network() {
 
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-    # Test WebSocket server
+    # Test WebSocket server via HTTPS reverse proxy
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Testing WebSocket Server (port 8585)...${NC}"
+    echo -e "${BLUE}Testing WebSocket Server (via HTTPS reverse proxy)...${NC}"
     echo ""
 
-    # Test HTTP health endpoint on port 8585
-    echo -n "WebSocket Health (HTTP :8585): "
-    local ws_health=$(curl -s --max-time 5 "http://$remote_node:8585/health" 2>/dev/null)
-    if [ -n "$ws_health" ]; then
-        echo -e "${GREEN}✅ Accessible${NC}"
-        # Parse health response
-        local ws_status=$(echo "$ws_health" | jq -r '.status' 2>/dev/null)
-        local ws_clients=$(echo "$ws_health" | jq -r '.clients' 2>/dev/null)
-        local ws_games=$(echo "$ws_health" | jq -r '.active_games' 2>/dev/null)
-        if [ "$ws_status" = "ok" ]; then
-            echo "  Status: $ws_status"
-            echo "  Connected clients: $ws_clients"
-            echo "  Active game subscriptions: $ws_games"
-        else
-            echo "  Response: $ws_health"
-        fi
-    else
-        echo -e "${YELLOW}⚠️  Not accessible (port 8585 may be closed or service not running)${NC}"
-    fi
-
-    # Test WSS via NGINX proxy
-    echo ""
-    echo -n "WebSocket via HTTPS (/ws): "
-    local wss_health=$(curl -s --max-time 5 "https://$remote_node/ws/health" 2>/dev/null)
+    # Test WSS health via NGINX proxy at /ws-health
+    echo -n "WebSocket Health (wss://$remote_node/ws-health): "
+    local wss_health=$(curl -s --max-time 5 "https://$remote_node/ws-health" 2>/dev/null)
     if [ -n "$wss_health" ]; then
         echo -e "${GREEN}✅ Accessible${NC}"
         local wss_status=$(echo "$wss_health" | jq -r '.status' 2>/dev/null)
@@ -715,30 +694,39 @@ verify_network() {
             echo "  Response: $wss_health"
         fi
     else
-        echo -e "${YELLOW}⚠️  Not accessible (NGINX may not be proxying /ws)${NC}"
+        echo -e "${YELLOW}⚠️  Not accessible (NGINX may not be configured for /ws-health)${NC}"
+        echo "  Ensure NGINX has location /ws-health proxying to localhost:8585/health"
+    fi
+
+    # Test WebSocket endpoint accessibility (will return "Bad Request" which is expected for non-WS request)
+    echo ""
+    echo -n "WebSocket Endpoint (wss://$remote_node/ws): "
+    local ws_response=$(curl -s --max-time 5 -o /dev/null -w "%{http_code}" "https://$remote_node/ws" 2>/dev/null)
+    if [ "$ws_response" = "400" ]; then
+        echo -e "${GREEN}✅ Endpoint reachable (400 = WebSocket upgrade required)${NC}"
+    elif [ "$ws_response" = "101" ]; then
+        echo -e "${GREEN}✅ WebSocket upgrade successful${NC}"
+    elif [ "$ws_response" = "000" ]; then
+        echo -e "${YELLOW}⚠️  Connection failed${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Unexpected response: HTTP $ws_response${NC}"
     fi
 
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     echo ""
     echo "Public Endpoints:"
-    echo "  HTTP RPC:   http://$remote_node:$rpc_port"
-    echo "  HTTP API:   http://$remote_node:$api_port"
     echo "  HTTPS RPC:  https://$remote_node/rpc"
     echo "  HTTPS API:  https://$remote_node/"
-    echo "  WebSocket:  ws://$remote_node:8585/ws"
-    echo "  WebSocket (SSL): wss://$remote_node/ws"
+    echo "  WebSocket:  wss://$remote_node/ws"
+    echo "  WS Health:  https://$remote_node/ws-health"
     echo ""
     echo "Test commands:"
-    echo "  HTTP:"
-    echo "    curl http://$remote_node:$rpc_port/status"
-    echo "    curl http://$remote_node:$api_port/cosmos/base/tendermint/v1beta1/node_info"
     echo "  HTTPS:"
     echo "    curl https://$remote_node/rpc/status"
     echo "    curl https://$remote_node/cosmos/base/tendermint/v1beta1/node_info"
     echo "  WebSocket:"
-    echo "    curl http://$remote_node:8585/health"
-    echo "    curl https://$remote_node/ws/health"
+    echo "    curl https://$remote_node/ws-health"
     echo ""
 
     read -p "Press Enter to continue..."
