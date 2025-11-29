@@ -188,12 +188,18 @@ func maskOtherPlayersCards(gameState types.TexasHoldemStateDTO, playerAddress st
 		fmt.Printf("[CARD_MASK] Player %d: addr=%s, normalized=%s, isMatch=%v, hasCards=%v\n",
 			i, player.Address, normalizedPlayerAddress, isMatch, hasCards)
 
+		// Check if this player is showing their cards (visible to everyone)
+		isShowing := player.Status == types.StatusShowing
+
 		if isMatch {
 			foundMatch = true
 			// This is the requesting player - preserve their hole cards
 			if hasCards {
 				fmt.Printf("[CARD_MASK] ✅ SHOWING cards for requesting player: %v\n", *player.HoleCards)
 			}
+		} else if isShowing && hasCards {
+			// Player is showing their cards - don't mask them
+			fmt.Printf("[CARD_MASK] 👁️ Player showing cards publicly: %v\n", *player.HoleCards)
 		} else if hasCards {
 			// Mask other players' cards
 			maskedCards := make([]string, len(*player.HoleCards))

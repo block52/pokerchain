@@ -64,11 +64,15 @@ const (
 type PlayerStatus string
 
 const (
-	StatusActive       PlayerStatus = "active"
-	StatusFolded       PlayerStatus = "folded"
-	StatusAllIn        PlayerStatus = "all-in"
-	StatusSitOut       PlayerStatus = "sit-out"
-	StatusDisconnected PlayerStatus = "disconnected"
+	// Synced with poker-vm/sdk/src/types/game.ts PlayerStatus enum
+	StatusActive     PlayerStatus = "active"
+	StatusBusted     PlayerStatus = "busted"
+	StatusFolded     PlayerStatus = "folded"
+	StatusAllIn      PlayerStatus = "all-in"
+	StatusSeated     PlayerStatus = "seated"
+	StatusSittingOut PlayerStatus = "sitting-out"
+	StatusSittingIn  PlayerStatus = "sitting-in"
+	StatusShowing    PlayerStatus = "showing"
 )
 
 // GameOptionsDTO represents the game configuration options
