@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	errorsmod "cosmossdk.io/errors"
+	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/block52/pokerchain/x/poker/types"
 )
@@ -66,7 +67,10 @@ type JSONRPCResponse struct {
 }
 
 func (k msgServer) PerformAction(ctx context.Context, msg *types.MsgPerformAction) (*types.MsgPerformActionResponse, error) {
-	if _, err := k.addressCodec.StringToBytes(msg.Player); err != nil {
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+
+	playerAddr, err := k.addressCodec.StringToBytes(msg.Player)
+	if err != nil {
 		return nil, errorsmod.Wrap(err, "invalid player address")
 	}
 
@@ -76,9 +80,32 @@ func (k msgServer) PerformAction(ctx context.Context, msg *types.MsgPerformActio
 	}
 
 	// Check if the game exists
-	_, err := k.Games.Get(ctx, msg.GameId)
+	game, err := k.Games.Get(ctx, msg.GameId)
 	if err != nil {
 		return nil, errorsmod.Wrapf(types.ErrGameNotFound, "game not found: %s", msg.GameId)
+	}
+
+	// For "leave" action, get player's stack BEFORE calling game engine
+	var playerStack uint64 = 0
+	if msg.Action == string(Leave) {
+		gameState, err := k.GameStates.Get(ctx, msg.GameId)
+		if err != nil {
+			return nil, errorsmod.Wrap(err, "failed to get game state for leave action")
+		}
+		for _, player := range gameState.Players {
+			if player.Address == msg.Player {
+				stack, parseErr := strconv.ParseUint(player.Stack, 10, 64)
+				if parseErr != nil {
+					sdkCtx.Logger().Error("❌ Failed to parse player stack", "error", parseErr, "stack", player.Stack)
+					return nil, errorsmod.Wrap(parseErr, "failed to parse player stack")
+				}
+				playerStack = stack
+				sdkCtx.Logger().Info("💰 Player stack for leave",
+					"player", msg.Player,
+					"stack", playerStack)
+				break
+			}
+		}
 	}
 
 	// Make JSON-RPC call to game engine with game state
@@ -88,8 +115,52 @@ func (k msgServer) PerformAction(ctx context.Context, msg *types.MsgPerformActio
 		return nil, errorsmod.Wrap(err, "failed to call game engine")
 	}
 
-	// TODO: After successful engine call, we could fetch updated game state
-	// and save it back to the blockchain if needed
+	// Handle leave action: refund chips and update game player list
+	if msg.Action == string(Leave) {
+		// Credit the USDC balance back to the player
+		if playerStack > 0 {
+			refundCoin := sdk.NewCoin(types.TokenDenom, math.NewInt(int64(playerStack)))
+			sdkCtx.Logger().Info("💸 Refunding chips to player",
+				"player", msg.Player,
+				"amount", refundCoin.String())
+
+			if err := k.bankKeeper.SendCoinsFromModuleToAccount(
+				ctx,
+				types.ModuleName,
+				playerAddr,
+				sdk.NewCoins(refundCoin),
+			); err != nil {
+				sdkCtx.Logger().Error("❌ Failed to refund chips", "error", err)
+				return nil, errorsmod.Wrap(err, "failed to refund chips to player")
+			}
+			sdkCtx.Logger().Info("✅ Chips refunded successfully")
+		}
+
+		// Remove player from game's player list
+		updatedPlayers := make([]string, 0, len(game.Players)-1)
+		for _, p := range game.Players {
+			if p != msg.Player {
+				updatedPlayers = append(updatedPlayers, p)
+			}
+		}
+		game.Players = updatedPlayers
+
+		if err := k.Games.Set(ctx, msg.GameId, game); err != nil {
+			sdkCtx.Logger().Error("❌ Failed to update game player list", "error", err)
+			return nil, errorsmod.Wrap(err, "failed to update game player list")
+		}
+		sdkCtx.Logger().Info("✅ Player removed from game", "remainingPlayers", len(game.Players))
+
+		// Emit player_left_game event
+		sdkCtx.EventManager().EmitEvents(sdk.Events{
+			sdk.NewEvent(
+				"player_left_game",
+				sdk.NewAttribute("game_id", msg.GameId),
+				sdk.NewAttribute("player", msg.Player),
+				sdk.NewAttribute("refund_amount", fmt.Sprintf("%d", playerStack)),
+			),
+		})
+	}
 
 	return &types.MsgPerformActionResponse{}, nil
 }
