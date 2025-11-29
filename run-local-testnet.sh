@@ -207,21 +207,24 @@ init_testnet_with_cli() {
     local node1_dir="$(get_node_dir 1)"
     pokerchaind init node1 --chain-id "$CHAIN_ID" --home "$node1_dir" --default-denom stake
 
-    # Add a test key
-    echo "Creating test validator key..."
-    pokerchaind keys add validator --keyring-backend test --home "$node1_dir" 2>&1 | grep -E "address:|mnemonic:" || true
+    # Alice's mnemonic from config.yml (matching production)
+    local ALICE_MNEMONIC="cement shadow leave crash crisp aisle model hip lend february library ten cereal soul bind boil bargain barely rookie odor panda artwork damage reason"
 
-    # Get the validator address
-    local validator_addr=$(pokerchaind keys show validator -a --keyring-backend test --home "$node1_dir")
+    # Import Alice key (validator + faucet with 52M STAKE)
+    echo "Importing Alice key..."
+    echo "$ALICE_MNEMONIC" | pokerchaind keys add alice --recover --keyring-backend test --home "$node1_dir" 2>&1 | grep -E "address:" || true
+    local alice_addr=$(pokerchaind keys show alice -a --keyring-backend test --home "$node1_dir")
+    echo -e "  Alice address: ${GREEN}$alice_addr${NC}"
 
     # Add genesis account with funds (STAKE only - USDC comes from bridge)
     echo ""
     echo "Adding genesis account with funds..."
-    pokerchaind genesis add-genesis-account "$validator_addr" 1000000000000stake --home "$node1_dir"
+    echo "  Alice: 52,000,000 STAKE (validator + faucet)"
+    pokerchaind genesis add-genesis-account "$alice_addr" 52000000000000stake --home "$node1_dir"
 
-    # Generate genesis transaction
+    # Generate genesis transaction (Alice is validator)
     echo "Creating genesis transaction..."
-    pokerchaind genesis gentx validator 5000000000stake \
+    pokerchaind genesis gentx alice 5000000000stake \
         --chain-id "$CHAIN_ID" \
         --keyring-backend test \
         --home "$node1_dir"

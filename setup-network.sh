@@ -2026,7 +2026,155 @@ deploy_remote_pvm() {
 deploy_websocket_server() {
     print_header
     echo ""
-    echo "Deploying WebSocket Server"
+    echo -e "${BLUE}Deploy WebSocket Server${NC}"
+    echo ""
+    echo "Where do you want to run the WebSocket server?"
+    echo ""
+    echo -e "${GREEN}1)${NC} Local Development"
+    echo "   - Connects to local testnet (localhost:9090)"
+    echo "   - Runs in foreground for easy debugging"
+    echo "   - Perfect for testing with local chain"
+    echo ""
+    echo -e "${GREEN}2)${NC} Remote Production Server"
+    echo "   - Deploys to remote node via SSH"
+    echo "   - Creates systemd service"
+    echo "   - Connects to node's local gRPC"
+    echo ""
+    echo -e "${GREEN}3)${NC} Back to menu"
+    echo ""
+    read -p "Enter choice [1-3]: " deploy_choice
+
+    case $deploy_choice in
+        1)
+            deploy_websocket_server_local
+            ;;
+        2)
+            deploy_websocket_server_remote
+            ;;
+        3)
+            return
+            ;;
+        *)
+            echo -e "${YELLOW}Invalid choice${NC}"
+            read -p "Press Enter to continue..."
+            return
+            ;;
+    esac
+}
+
+# Deploy WebSocket Server Locally
+deploy_websocket_server_local() {
+    print_header
+    echo ""
+    echo -e "${BLUE}Local WebSocket Server${NC}"
+    echo ""
+
+    # Build for current OS
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 1: Building ws-server binary${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    local arch=$(uname -m)
+    if [ "$arch" = "x86_64" ]; then
+        arch="amd64"
+    elif [ "$arch" = "aarch64" ] || [ "$arch" = "arm64" ]; then
+        arch="arm64"
+    fi
+
+    echo "Building ws-server for $os/$arch..."
+    mkdir -p ./build
+    go build -o ./build/ws-server ./cmd/ws-server
+
+    if [ ! -f "./build/ws-server" ]; then
+        echo -e "${YELLOW}❌ Failed to build ws-server binary${NC}"
+        read -p "Press Enter to continue..."
+        return
+    fi
+
+    echo -e "${GREEN}✓${NC} Binary built successfully: ./build/ws-server"
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 2: Configuration${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Default local configuration
+    local grpc_url="localhost:9090"
+    local tendermint_ws="ws://localhost:26657/websocket"
+    local ws_port="8585"
+    local address_prefix="b52"
+
+    echo "Default configuration for local testnet:"
+    echo "  GRPC_URL:          $grpc_url"
+    echo "  TENDERMINT_WS_URL: $tendermint_ws"
+    echo "  WS_SERVER_PORT:    $ws_port"
+    echo "  ADDRESS_PREFIX:    $address_prefix"
+    echo ""
+
+    read -p "Use these defaults? (y/n): " use_defaults
+    if [[ ! "$use_defaults" =~ ^[Yy]$ ]]; then
+        echo ""
+        read -p "GRPC_URL [$grpc_url]: " custom_grpc
+        grpc_url=${custom_grpc:-$grpc_url}
+
+        read -p "TENDERMINT_WS_URL [$tendermint_ws]: " custom_tm
+        tendermint_ws=${custom_tm:-$tendermint_ws}
+
+        read -p "WS_SERVER_PORT [$ws_port]: " custom_port
+        ws_port=${custom_port:-$ws_port}
+    fi
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 3: Starting WebSocket Server${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Check if port is already in use and kill the process
+    local existing_pid=$(lsof -t -i :$ws_port 2>/dev/null)
+    if [ -n "$existing_pid" ]; then
+        echo -e "${YELLOW}Port $ws_port is already in use by PID $existing_pid${NC}"
+        echo "Killing existing process..."
+        kill $existing_pid 2>/dev/null
+        sleep 1
+        # Force kill if still running
+        if kill -0 $existing_pid 2>/dev/null; then
+            kill -9 $existing_pid 2>/dev/null
+        fi
+        echo -e "${GREEN}✓${NC} Killed process $existing_pid"
+        echo ""
+    fi
+
+    echo -e "${YELLOW}Starting ws-server in foreground...${NC}"
+    echo -e "${YELLOW}Press Ctrl+C to stop${NC}"
+    echo ""
+    echo "Endpoints:"
+    echo "  WebSocket: ws://localhost:$ws_port/ws"
+    echo "  Health:    http://localhost:$ws_port/health"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Run with environment variables
+    GRPC_URL="$grpc_url" \
+    TENDERMINT_WS_URL="$tendermint_ws" \
+    WS_SERVER_PORT=":$ws_port" \
+    ADDRESS_PREFIX="$address_prefix" \
+    ./build/ws-server
+
+    echo ""
+    echo "WebSocket server stopped."
+    read -p "Press Enter to continue..."
+}
+
+# Deploy WebSocket Server to Remote
+deploy_websocket_server_remote() {
+    print_header
+    echo ""
+    echo -e "${BLUE}Remote WebSocket Server Deployment${NC}"
     echo ""
 
     # Get remote host details
@@ -2051,6 +2199,7 @@ deploy_websocket_server() {
 
     # Build the ws-server binary for Linux
     echo "Building ws-server for Linux amd64..."
+    mkdir -p ./build
     GOOS=linux GOARCH=amd64 go build -o ./build/ws-server-linux ./cmd/ws-server
 
     if [ ! -f "./build/ws-server-linux" ]; then
@@ -2106,7 +2255,8 @@ deploy_websocket_server() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
-    # Create systemd service file
+    # Create systemd service file with environment variables
+    # The ws-server connects to the LOCAL pokerchain node's gRPC and Tendermint
     cat << 'SERVICEEOF' | ssh "$remote_user@$remote_host" "sudo tee /etc/systemd/system/poker-ws.service > /dev/null"
 [Unit]
 Description=Poker WebSocket Server
@@ -2116,6 +2266,15 @@ Wants=pokerchaind.service
 [Service]
 Type=simple
 User=root
+# Environment variables for ws-server configuration
+# GRPC_URL: Local gRPC endpoint (pokerchaind runs on 9090)
+Environment="GRPC_URL=localhost:9090"
+# TENDERMINT_WS_URL: Local Tendermint WebSocket for event subscriptions
+Environment="TENDERMINT_WS_URL=ws://localhost:26657/websocket"
+# WS_SERVER_PORT: Port for the WebSocket server to listen on
+Environment="WS_SERVER_PORT=:8585"
+# ADDRESS_PREFIX: Bech32 address prefix
+Environment="ADDRESS_PREFIX=b52"
 ExecStart=/usr/local/bin/ws-server
 Restart=always
 RestartSec=5
@@ -2167,6 +2326,50 @@ SERVICEEOF
     else
         echo -e "${YELLOW}⚠️${NC} Health endpoint not responding yet"
     fi
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 6: Updating NGINX to proxy /ws to port 8585${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Update NGINX config to point /ws to port 8585 (ws-server) instead of 8545 (old PVM)
+    echo "Checking NGINX configuration..."
+    local nginx_updated=false
+
+    # Check and update all site configs that have /ws pointing to wrong port
+    ssh "$remote_user@$remote_host" bash << 'NGINXEOF'
+        updated=false
+        for conf in /etc/nginx/sites-enabled/* /etc/nginx/sites-available/*; do
+            if [ -f "$conf" ] && grep -q "location /ws" "$conf" 2>/dev/null; then
+                # Check if it's pointing to old port 8545
+                if grep -q "proxy_pass http://127.0.0.1:8545" "$conf" 2>/dev/null; then
+                    echo "  Updating $conf: 8545 -> 8585"
+                    sed -i 's|proxy_pass http://127.0.0.1:8545[^;]*;|proxy_pass http://127.0.0.1:8585;|g' "$conf"
+                    updated=true
+                elif grep -q "proxy_pass http://127.0.0.1:8585" "$conf" 2>/dev/null; then
+                    echo "  $conf: Already configured for port 8585"
+                fi
+            fi
+        done
+
+        if [ "$updated" = true ]; then
+            echo ""
+            echo "Testing NGINX configuration..."
+            if nginx -t 2>&1 | grep -q "syntax is ok"; then
+                echo "Reloading NGINX..."
+                systemctl reload nginx
+                echo "NGINX_UPDATED=true"
+            else
+                echo "NGINX config test failed!"
+                nginx -t
+            fi
+        else
+            echo "NGINX_UPDATED=false"
+        fi
+NGINXEOF
+
+    echo -e "${GREEN}✓${NC} NGINX configuration updated"
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

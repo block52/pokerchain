@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -163,19 +164,49 @@ func maskOtherPlayersCards(gameState types.TexasHoldemStateDTO, playerAddress st
 	// Create a copy of the game state to avoid modifying the original
 	maskedState := gameState
 
+	// Normalize the requesting player address to lowercase for comparison
+	// Cosmos addresses are case-insensitive (bech32 standard uses lowercase)
+	normalizedRequestAddress := strings.ToLower(playerAddress)
+
+	// Debug logging for card masking
+	fmt.Printf("[CARD_MASK] Processing for player: %s (normalized: %s)\n", playerAddress, normalizedRequestAddress)
+	fmt.Printf("[CARD_MASK] Game has %d players\n", len(gameState.Players))
+
+	foundMatch := false
+
 	// Mask hole cards for all players except the requesting player
 	maskedPlayers := make([]types.PlayerDTO, len(gameState.Players))
 	for i, player := range gameState.Players {
 		maskedPlayers[i] = player
 
-		// If this is not the requesting player and they have hole cards, mask them
-		if player.Address != playerAddress && player.HoleCards != nil {
+		// Normalize player address for case-insensitive comparison
+		normalizedPlayerAddress := strings.ToLower(player.Address)
+
+		// Debug: log each player comparison
+		isMatch := normalizedPlayerAddress == normalizedRequestAddress
+		hasCards := player.HoleCards != nil && len(*player.HoleCards) > 0
+		fmt.Printf("[CARD_MASK] Player %d: addr=%s, normalized=%s, isMatch=%v, hasCards=%v\n",
+			i, player.Address, normalizedPlayerAddress, isMatch, hasCards)
+
+		if isMatch {
+			foundMatch = true
+			// This is the requesting player - preserve their hole cards
+			if hasCards {
+				fmt.Printf("[CARD_MASK] ✅ SHOWING cards for requesting player: %v\n", *player.HoleCards)
+			}
+		} else if hasCards {
+			// Mask other players' cards
 			maskedCards := make([]string, len(*player.HoleCards))
 			for j := range maskedCards {
 				maskedCards[j] = "X"
 			}
 			maskedPlayers[i].HoleCards = &maskedCards
+			fmt.Printf("[CARD_MASK] 🔒 MASKING cards for other player\n")
 		}
+	}
+
+	if !foundMatch && len(gameState.Players) > 0 {
+		fmt.Printf("[CARD_MASK] ⚠️ WARNING: Requesting player %s not found in game players!\n", normalizedRequestAddress)
 	}
 
 	maskedState.Players = maskedPlayers
