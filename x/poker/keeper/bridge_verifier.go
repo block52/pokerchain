@@ -174,16 +174,20 @@ func (bv *BridgeVerifier) parseRecipientFromTxData(txData []byte) (string, error
 
 // DepositData contains deposit information from Ethereum contract
 type DepositData struct {
-	Account string
-	Amount  *big.Int
-	Index   uint64
+	Account        string
+	Amount         *big.Int
+	Index          uint64
+	EthBlockHeight uint64 // The Ethereum block height used for the query
 }
 
 // GetDepositByIndex queries the Ethereum bridge contract for deposit data by index
-// It calls the deposits(uint256) view function and returns the account and amount
+// It calls the deposits(uint256) view function and returns the account and amount.
+// If ethBlockHeight is 0, it queries at the latest block and returns the block height used.
+// If ethBlockHeight is non-zero, it queries at that specific block for deterministic replay.
 func (bv *BridgeVerifier) GetDepositByIndex(
 	ctx context.Context,
 	depositIndex uint64,
+	ethBlockHeight uint64,
 ) (*DepositData, error) {
 	// ABI for deposits(uint256) function
 	// function deposits(uint256) external view returns (string memory account, uint256 amount)
@@ -207,9 +211,28 @@ func (bv *BridgeVerifier) GetDepositByIndex(
 		Data: data,
 	}
 
-	result, err := bv.ethClient.CallContract(ctx, msg, nil)
+	// Determine block number for query
+	var blockNum *big.Int
+	var queryBlockHeight uint64
+
+	if ethBlockHeight == 0 {
+		// Get current block number for deterministic storage
+		currentBlock, err := bv.ethClient.BlockNumber(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current block number: %w", err)
+		}
+		queryBlockHeight = currentBlock
+		blockNum = big.NewInt(int64(currentBlock))
+	} else {
+		// Use specified block height for deterministic replay
+		queryBlockHeight = ethBlockHeight
+		blockNum = big.NewInt(int64(ethBlockHeight))
+	}
+
+	// Call contract at specific block height
+	result, err := bv.ethClient.CallContract(ctx, msg, blockNum)
 	if err != nil {
-		return nil, fmt.Errorf("failed to call contract: %w", err)
+		return nil, fmt.Errorf("failed to call contract at block %d: %w", queryBlockHeight, err)
 	}
 
 	// Unpack result
@@ -225,13 +248,14 @@ func (bv *BridgeVerifier) GetDepositByIndex(
 
 	// Check if deposit exists (account will be empty if deposit doesn't exist)
 	if out.Account == "" {
-		return nil, fmt.Errorf("deposit index %d not found in contract", depositIndex)
+		return nil, fmt.Errorf("deposit index %d not found in contract at block %d", depositIndex, queryBlockHeight)
 	}
 
 	return &DepositData{
-		Account: out.Account,
-		Amount:  out.Amount,
-		Index:   depositIndex,
+		Account:        out.Account,
+		Amount:         out.Amount,
+		Index:          depositIndex,
+		EthBlockHeight: queryBlockHeight,
 	}, nil
 }
 

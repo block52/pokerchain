@@ -42,7 +42,7 @@ show_menu() {
     echo "   Deploy a read-only sync node to a remote Linux server"
     echo "   - Builds and uploads binary"
     echo "   - Configures systemd service"
-    echo "   - Connects to node1.block52.xyz as peer"
+    echo "   - Connects to node.texashodl.net as peer (configurable)"
     echo "   - Syncs blockchain data from the network"
     echo ""
     echo -e "${GREEN}3)${NC} Validator Node (additional validator)"
@@ -52,7 +52,7 @@ show_menu() {
     echo "   - Requires validator keys"
     echo ""
     echo -e "${GREEN}4)${NC} Verify Network Connectivity"
-    echo "   Test connectivity to node1.block52.xyz"
+    echo "   Test connectivity to network nodes"
     echo "   - Check RPC/API endpoints"
     echo "   - View network status"
     echo "   - Get node information"
@@ -109,9 +109,16 @@ show_menu() {
     echo "   - Creates systemd service (poker-ws.service)"
     echo "   - Required for real-time UI updates"
     echo ""
-    echo -e "${GREEN}13)${NC} Exit"
+    echo -e "${GREEN}13)${NC} Add Validator to Running Network"
+    echo "   Add a new validator to an already running network"
+    echo "   - Synced node becomes active validator"
+    echo "   - Transfer stake from existing validator"
+    echo "   - Submit create-validator transaction"
+    echo "   - Verify validator joins active set"
     echo ""
-    echo -n "Enter your choice [1-13]: "
+    echo -e "${GREEN}14)${NC} Exit"
+    echo ""
+    echo -n "Enter your choice [1-14]: "
 }
 
 # Check if script exists
@@ -162,40 +169,50 @@ setup_remote_sync() {
     echo ""
     echo "Deploying Remote Sync Node"
     echo ""
-    
+
     if check_script "./deploy-sync-node.sh"; then
         # Get remote host from user
         echo -e "${BLUE}Enter the remote server details:${NC}"
         echo ""
         read -p "Remote host (e.g., node2.example.com or 192.168.1.100): " remote_host
-        
+
         if [ -z "$remote_host" ]; then
             echo -e "${YELLOW}❌ Remote host cannot be empty${NC}"
             read -p "Press Enter to continue..."
             return
         fi
-        
+
         read -p "Remote user (default: root): " remote_user
         remote_user=${remote_user:-root}
-        
+
+        read -p "Sync from node (default: node.texashodl.net): " sync_node
+        sync_node=${sync_node:-node.texashodl.net}
+
+        # Check for self-sync
+        if [ "$remote_host" = "$sync_node" ]; then
+            echo -e "${YELLOW}❌ Cannot sync from self! Please use a different sync node.${NC}"
+            read -p "Press Enter to continue..."
+            return
+        fi
+
         echo ""
         echo "📋 Deployment Configuration:"
         echo "   Remote Host: $remote_host"
         echo "   Remote User: $remote_user"
-        echo "   Seed Node: node1.block52.xyz"
+        echo "   Sync From:   $sync_node"
         echo ""
         read -p "Continue with deployment? (y/n): " confirm
-        
+
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
             chmod +x ./deploy-sync-node.sh
-            ./deploy-sync-node.sh "$remote_host" "$remote_user"
+            ./deploy-sync-node.sh "$remote_host" "$remote_user" "$sync_node"
         else
             echo "Deployment cancelled."
         fi
     else
         echo "Please ensure deploy-sync-node.sh is in the current directory"
     fi
-    
+
     read -p "Press Enter to continue..."
 }
 
@@ -415,7 +432,7 @@ EOF
         # Set persistent peer to node0
         if [ -f "$PROD_DIR/node0/config/config.toml" ]; then
             NODE0_ID=$($CHAIN_BINARY comet show-node-id --home "$PROD_DIR/node0")
-            sed -i.bak "/^seeds = /a persistent_peers = \"${NODE0_ID}@node1.block52.xyz:26656\"" "$NODE_HOME/config/config.toml"
+            sed -i.bak "/^seeds = /a persistent_peers = \"${NODE0_ID}@node.texashodl.net:26656\"" "$NODE_HOME/config/config.toml"
             rm -f "$NODE_HOME/config/config.toml.bak"
             echo -e "${GREEN}✓ Configured peer connection to node0${NC}"
         fi
@@ -514,8 +531,8 @@ verify_network() {
     echo "Verifying Network Connectivity & Block Production"
     echo ""
 
-    read -p "Enter node to check (default: node1.block52.xyz): " remote_node
-    remote_node=${remote_node:-node1.block52.xyz}
+    read -p "Enter node to check (default: node.texashodl.net): " remote_node
+    remote_node=${remote_node:-node.texashodl.net}
 
     local rpc_port=26657
     local api_port=1317
@@ -2382,6 +2399,23 @@ NGINXEOF
     read -p "Press Enter to continue..."
 }
 
+# Add Validator to Running Network (option 13)
+add_validator_to_network() {
+    print_header
+    echo ""
+    echo "Add Validator to Running Network"
+    echo ""
+
+    if check_script "./add-validator.sh"; then
+        chmod +x ./add-validator.sh
+        ./add-validator.sh
+    else
+        echo "Please ensure add-validator.sh is in the current directory"
+    fi
+
+    read -p "Press Enter to continue..."
+}
+
 # Check dependencies
 check_dependencies() {
     local missing_deps=()
@@ -2446,6 +2480,9 @@ main() {
                 deploy_websocket_server
                 ;;
             13)
+                add_validator_to_network
+                ;;
+            14)
                 print_header
                 echo ""
                 echo "Thank you for using Pokerchain Network Setup!"
@@ -2454,7 +2491,7 @@ main() {
                 ;;
             *)
                 echo ""
-                echo -e "${YELLOW}Invalid option. Please choose 1-13.${NC}"
+                echo -e "${YELLOW}Invalid option. Please choose 1-14.${NC}"
                 sleep 2
                 ;;
         esac

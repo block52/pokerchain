@@ -2,7 +2,7 @@
 
 # Deploy Sync Node to Remote Server
 # Sets up a read-only sync node on a remote Linux server
-# Syncs from the production network (node1.block52.xyz)
+# Syncs from the production network (default: node.texashodl.net)
 #
 # Key features:
 # - Automatically removes any existing installations for clean deployment
@@ -18,8 +18,9 @@ set -e
 CHAIN_BINARY="pokerchaind"
 CHAIN_ID="pokerchain"
 NODE_HOME="$HOME/.pokerchain"
-SYNC_NODE="node1.block52.xyz"
-SYNC_NODE_RPC="http://node1.block52.xyz:26657"
+# Default sync node - can be overridden with 3rd argument
+SYNC_NODE="${3:-node.texashodl.net}"
+SYNC_NODE_RPC="https://${SYNC_NODE}/rpc"
 GITHUB_REPO="block52/pokerchain"
 BINARY_SOURCE=""  # Will be set to "local" or "github"
 
@@ -33,16 +34,33 @@ NC='\033[0m'
 
 # Get remote host and user
 if [ -z "$1" ]; then
-    echo -e "${RED}Usage: $0 <remote-host> [remote-user]${NC}"
+    echo -e "${RED}Usage: $0 <remote-host> [remote-user] [sync-node]${NC}"
+    echo ""
+    echo "Arguments:"
+    echo "  remote-host  Target server to deploy sync node to"
+    echo "  remote-user  SSH user (default: root)"
+    echo "  sync-node    Node to sync from (default: node.texashodl.net)"
     echo ""
     echo "Example:"
-    echo "  $0 node2.example.com root"
-    echo "  $0 192.168.1.100 ubuntu"
+    echo "  $0 node1.block52.xyz root                    # Sync from node.texashodl.net"
+    echo "  $0 node2.example.com root node.texashodl.net # Explicit sync node"
     exit 1
 fi
 
 REMOTE_HOST="$1"
 REMOTE_USER="${2:-root}"
+
+# Prevent syncing from self
+if [ "$REMOTE_HOST" = "$SYNC_NODE" ]; then
+    echo -e "${RED}Error: Cannot sync from self! Remote host and sync node are the same: $REMOTE_HOST${NC}"
+    echo "Please specify a different sync node as the 3rd argument."
+    exit 1
+fi
+
+echo -e "${CYAN}Sync Configuration:${NC}"
+echo "  Target Host: $REMOTE_HOST"
+echo "  Sync From:   $SYNC_NODE"
+echo ""
 
 # Ask user for binary source
 echo ""

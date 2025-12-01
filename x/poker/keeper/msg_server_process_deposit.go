@@ -22,6 +22,7 @@ func (k msgServer) ProcessDeposit(ctx context.Context, msg *types.MsgProcessDepo
 	logger.Info("🔷 Processing deposit by index",
 		"deposit_index", msg.DepositIndex,
 		"creator", msg.Creator,
+		"eth_block_height", msg.EthBlockHeight,
 	)
 
 	// Create bridge verifier to query Ethereum
@@ -33,13 +34,15 @@ func (k msgServer) ProcessDeposit(ctx context.Context, msg *types.MsgProcessDepo
 	defer verifier.Close()
 
 	// Query Ethereum contract for deposit data by index
-	// The deposit index from the UI matches the storage index directly (0, 1, 2, 3, ...)
+	// Use the specified eth_block_height for deterministic replay
+	// If eth_block_height is 0, GetDepositByIndex will use the current block and return it
 	logger.Info("🔍 Querying Ethereum contract for deposit",
 		"contract", k.depositContractAddr,
 		"deposit_index", msg.DepositIndex,
+		"eth_block_height", msg.EthBlockHeight,
 	)
 
-	depositData, err := verifier.GetDepositByIndex(ctx, msg.DepositIndex)
+	depositData, err := verifier.GetDepositByIndex(ctx, msg.DepositIndex, msg.EthBlockHeight)
 	if err != nil {
 		logger.Error("❌ Failed to query deposit from Ethereum", "error", err)
 		return nil, errorsmod.Wrap(err, "failed to query deposit from ethereum")
@@ -49,6 +52,7 @@ func (k msgServer) ProcessDeposit(ctx context.Context, msg *types.MsgProcessDepo
 		"account", depositData.Account,
 		"amount", depositData.Amount.String(),
 		"index", depositData.Index,
+		"eth_block_height", depositData.EthBlockHeight,
 	)
 
 	// Generate deterministic txHash from contract address + deposit index
@@ -96,12 +100,15 @@ func (k msgServer) ProcessDeposit(ctx context.Context, msg *types.MsgProcessDepo
 		"deposit_index", msg.DepositIndex,
 		"recipient", depositData.Account,
 		"amount", fmt.Sprintf("%d usdc", amount),
+		"eth_block_height", depositData.EthBlockHeight,
 	)
 
-	// Return success response
+	// Return success response with the Ethereum block height used
+	// This block height should be included in the transaction for deterministic replay
 	return &types.MsgProcessDepositResponse{
-		Recipient:    depositData.Account,
-		Amount:       fmt.Sprintf("%d usdc", amount),
-		DepositIndex: msg.DepositIndex,
+		Recipient:      depositData.Account,
+		Amount:         fmt.Sprintf("%d usdc", amount),
+		DepositIndex:   msg.DepositIndex,
+		EthBlockHeight: depositData.EthBlockHeight,
 	}, nil
 }
