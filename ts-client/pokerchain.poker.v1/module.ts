@@ -149,6 +149,7 @@ function getStructure(template) {
 	}
 	return structure
 }
+// Gasless transactions - chain has minimum-gas-prices = "0.0stake"
 const defaultFee = {
   amount: [],
   gas: "200000",
