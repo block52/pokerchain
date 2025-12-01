@@ -45,11 +45,12 @@ show_menu() {
     echo "   - Connects to node.texashodl.net as peer (configurable)"
     echo "   - Syncs blockchain data from the network"
     echo ""
-    echo -e "${GREEN}3)${NC} Validator Node (additional validator)"
+    echo -e "${GREEN}3)${NC} Validator Node (setup & add to network)"
     echo "   Sets up a new validator node to join the network"
-    echo "   - Participates in consensus"
-    echo "   - Creates and signs blocks"
-    echo "   - Requires validator keys"
+    echo "   - Creates node configuration and validator keys"
+    echo "   - Optionally deploys to remote server"
+    echo "   - Optionally submits create-validator transaction"
+    echo "   - Participates in consensus and creates blocks"
     echo ""
     echo -e "${GREEN}4)${NC} Verify Network Connectivity"
     echo "   Test connectivity to network nodes"
@@ -109,16 +110,9 @@ show_menu() {
     echo "   - Creates systemd service (poker-ws.service)"
     echo "   - Required for real-time UI updates"
     echo ""
-    echo -e "${GREEN}13)${NC} Add Validator to Running Network"
-    echo "   Add a new validator to an already running network"
-    echo "   - Synced node becomes active validator"
-    echo "   - Transfer stake from existing validator"
-    echo "   - Submit create-validator transaction"
-    echo "   - Verify validator joins active set"
+    echo -e "${GREEN}13)${NC} Exit"
     echo ""
-    echo -e "${GREEN}14)${NC} Exit"
-    echo ""
-    echo -n "Enter your choice [1-14]: "
+    echo -n "Enter your choice [1-13]: "
 }
 
 # Check if script exists
@@ -520,7 +514,32 @@ EOF
     echo ""
     echo "⚠️  IMPORTANT: Keep $MNEMONICS_BACKUP secure!"
     echo ""
-    
+
+    # Step 6: Add validator to network (optional)
+    echo -e "${BLUE}Step 6: Add Validator to Network (Optional)${NC}"
+    echo ""
+    echo "Once the node is synced, you can submit a create-validator transaction"
+    echo "to make it an active validator in the network."
+    echo ""
+    read -p "Add this node as a validator now? (y/n): " ADD_VALIDATOR
+
+    if [[ "$ADD_VALIDATOR" =~ ^[Yy]$ ]]; then
+        if check_script "./add-validator.sh"; then
+            chmod +x ./add-validator.sh
+            # Pass the node host as an environment hint
+            export VALIDATOR_HOST="$NODE_HOST"
+            export VALIDATOR_USER="${REMOTE_USER:-root}"
+            ./add-validator.sh
+        else
+            echo "Please ensure add-validator.sh is in the current directory"
+            echo "You can run it later with: ./add-validator.sh"
+        fi
+    else
+        echo ""
+        echo "You can add this node as a validator later by running:"
+        echo "  ./add-validator.sh"
+    fi
+
     read -p "Press Enter to continue..."
 }
 
@@ -2399,23 +2418,6 @@ NGINXEOF
     read -p "Press Enter to continue..."
 }
 
-# Add Validator to Running Network (option 13)
-add_validator_to_network() {
-    print_header
-    echo ""
-    echo "Add Validator to Running Network"
-    echo ""
-
-    if check_script "./add-validator.sh"; then
-        chmod +x ./add-validator.sh
-        ./add-validator.sh
-    else
-        echo "Please ensure add-validator.sh is in the current directory"
-    fi
-
-    read -p "Press Enter to continue..."
-}
-
 # Check dependencies
 check_dependencies() {
     local missing_deps=()
@@ -2480,9 +2482,6 @@ main() {
                 deploy_websocket_server
                 ;;
             13)
-                add_validator_to_network
-                ;;
-            14)
                 print_header
                 echo ""
                 echo "Thank you for using Pokerchain Network Setup!"
@@ -2491,7 +2490,7 @@ main() {
                 ;;
             *)
                 echo ""
-                echo -e "${YELLOW}Invalid option. Please choose 1-14.${NC}"
+                echo -e "${YELLOW}Invalid option. Please choose 1-13.${NC}"
                 sleep 2
                 ;;
         esac
