@@ -150,9 +150,10 @@ function getStructure(template) {
 	return structure
 }
 // Gasless transactions - chain has minimum-gas-prices = "0.0stake"
+// Note: Poker actions require ~203,000 gas, so 250,000 provides safety margin
 const defaultFee = {
   amount: [],
-  gas: "200000",
+  gas: "250000",
 };
 
 interface TxClientOptions {

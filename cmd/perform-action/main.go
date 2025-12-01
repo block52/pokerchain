@@ -156,7 +156,8 @@ func main() {
 	}
 
 	// Gasless transactions - chain has minimum-gas-prices = "0.0stake"
-	txBuilder.SetGasLimit(200_000)
+	// Note: Poker actions require ~203,000 gas, so 250,000 provides safety margin
+	txBuilder.SetGasLimit(250_000)
 	txBuilder.SetFeeAmount(sdk.NewCoins()) // No fees required
 
 	// Sign the transaction
