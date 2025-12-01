@@ -28,7 +28,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	"cosmossdk.io/math"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/std"
@@ -780,9 +779,9 @@ func (cli *PokerCLI) broadcastTx(msg sdk.Msg) (string, error) {
 		return "", fmt.Errorf("error setting messages: %w", err)
 	}
 
-	// Set gas and fees
-	txBuilder.SetGasLimit(300_000)
-	txBuilder.SetFeeAmount(sdk.NewCoins(sdk.NewCoin("stake", math.NewInt(300))))
+	// Gasless transactions - chain has minimum-gas-prices = "0.0stake"
+	txBuilder.SetGasLimit(200_000)
+	txBuilder.SetFeeAmount(sdk.NewCoins()) // No fees required
 
 	// Sign the transaction
 	sigV2 := signing.SignatureV2{
