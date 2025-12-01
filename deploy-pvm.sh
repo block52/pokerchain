@@ -185,42 +185,119 @@ ENDSSH
     fi
 }
 
-# Build TypeScript
-build_typescript() {
+# Setup Node.js 22.12 using nvm
+setup_nodejs() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 4: Building TypeScript...${NC}"
+    echo -e "${BLUE}Step 4: Setting up Node.js 22.12 via nvm...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
     ssh "$remote_user@$remote_host" bash << 'ENDSSH'
-        cd /root/poker-vm/pvm/ts
+        set -e
 
-        # Check if Node.js is installed
-        if ! command -v node &> /dev/null; then
-            echo "📦 Installing Node.js..."
-            curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-            apt-get install -y nodejs
+        REQUIRED_NODE_VERSION="22.12.0"
+
+        # Check current Node.js version
+        if command -v node &> /dev/null; then
+            CURRENT_VERSION=$(node --version | sed 's/v//')
+            echo "Current Node.js version: $CURRENT_VERSION"
+
+            # Check if it's exactly 22.12.x
+            if [[ "$CURRENT_VERSION" == 22.12.* ]]; then
+                echo "✅ Node.js 22.12.x is already installed"
+                exit 0
+            else
+                echo "⚠️  Wrong Node.js version ($CURRENT_VERSION), need 22.12.x"
+            fi
         fi
 
+        # Install nvm if not present
+        export NVM_DIR="$HOME/.nvm"
+        if [ ! -d "$NVM_DIR" ]; then
+            echo "📦 Installing nvm..."
+            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+        fi
+
+        # Load nvm
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+        # Install Node.js 22.12
+        echo "📦 Installing Node.js $REQUIRED_NODE_VERSION via nvm..."
+        nvm install $REQUIRED_NODE_VERSION
+        nvm use $REQUIRED_NODE_VERSION
+        nvm alias default $REQUIRED_NODE_VERSION
+
+        # Verify installation
         echo "Node.js version: $(node --version)"
         echo "npm version: $(npm --version)"
 
-        # Install yarn if not available
+        # Create symlinks for system-wide access (for Docker builds)
+        NODE_PATH=$(which node)
+        NPM_PATH=$(which npm)
+
+        echo "Creating system symlinks..."
+        ln -sf "$NODE_PATH" /usr/local/bin/node
+        ln -sf "$NPM_PATH" /usr/local/bin/npm
+
+        # Install yarn globally
         if ! command -v yarn &> /dev/null; then
             echo "📦 Installing Yarn..."
             npm install -g yarn
         fi
 
+        YARN_PATH=$(which yarn)
+        ln -sf "$YARN_PATH" /usr/local/bin/yarn
+
+        echo "✅ Node.js $REQUIRED_NODE_VERSION setup complete"
+        echo "   node: $(node --version)"
+        echo "   npm: $(npm --version)"
+        echo "   yarn: $(yarn --version)"
+ENDSSH
+
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}❌ Failed to setup Node.js${NC}"
+        exit 1
+    fi
+}
+
+# Build TypeScript
+build_typescript() {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 5: Building TypeScript...${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    ssh "$remote_user@$remote_host" bash << 'ENDSSH'
+        set -e
+
+        # Load nvm to ensure correct Node version
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+        # Verify Node.js version
+        echo "Using Node.js: $(node --version)"
+
+        # Check it's 22.12.x
+        NODE_VERSION=$(node --version | sed 's/v//')
+        if [[ ! "$NODE_VERSION" == 22.12.* ]]; then
+            echo "❌ Wrong Node.js version: $NODE_VERSION (expected 22.12.x)"
+            echo "   Run 'nvm use 22.12.0' to switch versions"
+            exit 1
+        fi
+
+        cd /root/poker-vm/pvm/ts
+
         echo "Yarn version: $(yarn --version)"
 
-        # Install dependencies (including dev dependencies for tsc)
+        # Install dependencies
         echo "📦 Installing dependencies..."
-        yarn install --ignore-engines
+        yarn install
 
-        # Build TypeScript (using --ignore-engines to bypass strict node version check)
+        # Build TypeScript
         echo "🔨 Building TypeScript..."
-        yarn --ignore-engines build
+        yarn build
 
         if [ -d "dist" ]; then
             echo "✅ TypeScript build successful"
@@ -241,7 +318,7 @@ ENDSSH
 build_docker_image() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 5: Building Docker image...${NC}"
+    echo -e "${BLUE}Step 6: Building Docker image...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
@@ -287,7 +364,7 @@ ENDSSH
 setup_systemd_service() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 6: Setting up systemd service...${NC}"
+    echo -e "${BLUE}Step 7: Setting up systemd service...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -449,6 +526,7 @@ main() {
     check_ssh
     install_docker
     clone_repository
+    setup_nodejs
     build_typescript
     build_docker_image
     setup_systemd_service
