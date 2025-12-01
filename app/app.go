@@ -45,6 +45,11 @@ import (
 	ibctransferkeeper "github.com/cosmos/ibc-go/v10/modules/apps/transfer/keeper"
 	ibckeeper "github.com/cosmos/ibc-go/v10/modules/core/keeper"
 
+	feegrantkeeper "cosmossdk.io/x/feegrant/keeper"
+
+	authante "github.com/cosmos/cosmos-sdk/x/auth/ante"
+
+	pokerante "github.com/block52/pokerchain/app/ante"
 	"github.com/block52/pokerchain/docs"
 	pokermodulekeeper "github.com/block52/pokerchain/x/poker/keeper"
 )
@@ -90,6 +95,7 @@ type App struct {
 	AuthzKeeper           authzkeeper.Keeper
 	ConsensusParamsKeeper consensuskeeper.Keeper
 	CircuitBreakerKeeper  circuitkeeper.Keeper
+	FeegrantKeeper        feegrantkeeper.Keeper
 	ParamsKeeper          paramskeeper.Keeper
 
 	// ibc keepers
@@ -177,6 +183,7 @@ func New(
 		&app.AuthzKeeper,
 		&app.ConsensusParamsKeeper,
 		&app.CircuitBreakerKeeper,
+		&app.FeegrantKeeper,
 		&app.ParamsKeeper,
 		&app.PokerKeeper,
 	); err != nil {
@@ -186,6 +193,23 @@ func New(
 	// add to default baseapp options
 	// enable optimistic execution
 	baseAppOptions = append(baseAppOptions, baseapp.SetOptimisticExecution())
+
+	// Set custom ante handler with poker gasless support
+	anteHandler, err := pokerante.NewAnteHandler(
+		pokerante.HandlerOptions{
+			HandlerOptions: authante.HandlerOptions{
+				AccountKeeper:   app.AuthKeeper,
+				BankKeeper:      app.BankKeeper,
+				FeegrantKeeper:  app.FeegrantKeeper,
+				SignModeHandler: app.txConfig.SignModeHandler(),
+			},
+			CircuitKeeper: &app.CircuitBreakerKeeper,
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+	baseAppOptions = append(baseAppOptions, func(ba *baseapp.BaseApp) { ba.SetAnteHandler(anteHandler) })
 
 	// build app
 	app.App = appBuilder.Build(db, traceStore, baseAppOptions...)
