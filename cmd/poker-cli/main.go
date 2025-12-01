@@ -105,7 +105,7 @@ func (cli *PokerCLI) showWelcomeMenu() {
 		fmt.Println("Goodbye! 👋")
 		os.Exit(0)
 	default:
-		fmt.Println("Invalid option. Please try again.\n")
+		fmt.Println("Invalid option. Please try again.")
 	}
 }
 
@@ -152,12 +152,12 @@ func (cli *PokerCLI) showMainMenu() {
 			cli.grpcConn.Close()
 			cli.grpcConn = nil
 		}
-		fmt.Println("✓ Seed phrase cleared.\n")
+		fmt.Println("✓ Seed phrase cleared.")
 	case "9":
 		fmt.Println("Goodbye! 👋")
 		os.Exit(0)
 	default:
-		fmt.Println("Invalid option. Please try again.\n")
+		fmt.Println("Invalid option. Please try again.")
 	}
 }
 
@@ -168,7 +168,7 @@ func (cli *PokerCLI) importSeedPhrase() {
 	mnemonic := cli.readLine()
 
 	if !bip39.IsMnemonicValid(mnemonic) {
-		fmt.Println("❌ Invalid seed phrase. Please try again.\n")
+		fmt.Println("❌ Invalid seed phrase. Please try again.")
 		return
 	}
 
@@ -314,7 +314,7 @@ func (cli *PokerCLI) joinTable() {
 
 	seat := cli.readUint64("Seat number (1-9): ")
 	if seat < 1 || seat > 9 {
-		fmt.Println("❌ Invalid seat number. Must be between 1 and 9.\n")
+		fmt.Println("❌ Invalid seat number. Must be between 1 and 9.")
 		return
 	}
 	buyIn := cli.readUint64("Buy-in amount (uusdc, e.g., 500000000 = 500 USDC): ")
