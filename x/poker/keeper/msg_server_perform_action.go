@@ -349,8 +349,18 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 			return fmt.Errorf("failed to unmarshal updated game state: %v", err)
 		}
 
-		// Store the updated game state
-		if err := k.GameStates.Set(ctx, gameId, updatedGameState); err != nil {
+		// Sign the game state with validator's Ethereum private key
+		// This creates a signature that can be verified on Ethereum for slashing proofs
+		// Read-only validators will skip signing and return the unsigned state
+		signedGameState, err := k.Keeper.SignGameState(ctx, &updatedGameState, gameId)
+		if err != nil {
+			// Log error but don't fail the transaction - signing is optional
+			sdkCtx.Logger().Error("⚠️  Failed to sign game state", "error", err, "gameId", gameId)
+			signedGameState = &updatedGameState // Use unsigned state on error
+		}
+
+		// Store the signed game state
+		if err := k.GameStates.Set(ctx, gameId, *signedGameState); err != nil {
 			return fmt.Errorf("failed to store updated game state: %w", err)
 		}
 

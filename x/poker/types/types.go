@@ -157,6 +157,16 @@ type TexasHoldemStateDTO struct {
 	Winners         []WinnerDTO      `json:"winners"`
 	Results         []ResultDTO      `json:"results"`
 	Signature       string           `json:"signature"`
+
+	// Validator Ethereum Signature fields (for slashing proof)
+	// ValidatorSignature is the Ethereum signature from the validator who processed this action
+	// Format: 65 bytes (r, s, v) hex-encoded with 0x prefix
+	// This can be verified on Ethereum to slash dishonest validators
+	ValidatorSignature string `json:"validatorSignature,omitempty"`
+
+	// ValidatorAddress is the Ethereum address of the signing validator
+	// Used to identify which validator signed this response
+	ValidatorAddress string `json:"validatorAddress,omitempty"`
 }
 
 // Game represents a poker game
