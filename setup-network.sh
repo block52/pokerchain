@@ -103,16 +103,9 @@ show_menu() {
     echo "   - Restarts chain from block 0"
     echo "   - ⚠️  Use when bug requires full chain restart"
     echo ""
-    echo -e "${GREEN}12)${NC} Deploy WebSocket Server"
-    echo "   Deploy real-time WebSocket server to remote node"
-    echo "   - Builds ws-server binary from cmd/ws-server"
-    echo "   - Uploads to remote server"
-    echo "   - Creates systemd service (poker-ws.service)"
-    echo "   - Required for real-time UI updates"
+    echo -e "${GREEN}12)${NC} Exit"
     echo ""
-    echo -e "${GREEN}13)${NC} Exit"
-    echo ""
-    echo -n "Enter your choice [1-13]: "
+    echo -n "Enter your choice [1-12]: "
 }
 
 # Check if script exists
@@ -2479,9 +2472,6 @@ main() {
                 reset_chain
                 ;;
             12)
-                deploy_websocket_server
-                ;;
-            13)
                 print_header
                 echo ""
                 echo "Thank you for using Pokerchain Network Setup!"
@@ -2490,7 +2480,7 @@ main() {
                 ;;
             *)
                 echo ""
-                echo -e "${YELLOW}Invalid option. Please choose 1-13.${NC}"
+                echo -e "${YELLOW}Invalid option. Please choose 1-12.${NC}"
                 sleep 2
                 ;;
         esac
