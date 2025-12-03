@@ -1156,69 +1156,35 @@ EOF
             ;;
     esac
     
-    # Now ask what to do with the new binary
+    # Automatically replace binary and restart service
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}After Download - Choose Action${NC}"
+    echo -e "${BLUE}Replacing Binary and Restarting Service${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "  1) Replace binary only"
-    echo "  2) Replace binary and restart service"
-    echo "  3) Cancel"
+    echo "Replacing binary on remote..."
+
+    if ! ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind.new $remote_bin_path && sudo chmod +x $remote_bin_path"; then
+        echo -e "${YELLOW}❌ Failed to replace binary${NC}"
+        read -p "Press Enter to continue..."
+        return
+    fi
+
+    echo -e "${GREEN}✅ Binary updated on remote${NC}"
     echo ""
-    read -p "Enter choice [1-3]: " action_choice
-    
-    case $action_choice in
-        1)
-            echo ""
-            echo "Replacing binary on remote..."
-            
-            if ! ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind.new $remote_bin_path && sudo chmod +x $remote_bin_path"; then
-                echo -e "${YELLOW}❌ Failed to replace binary${NC}"
-                read -p "Press Enter to continue..."
-                return
-            fi
-            
-            echo -e "${GREEN}✅ Binary updated on remote${NC}"
-            echo ""
-            echo "⚠️  Remember to restart pokerchaind service manually:"
-            echo "  ssh $remote_user@$remote_host 'sudo systemctl restart pokerchaind'"
-            ;;
-            
-        2)
-            echo ""
-            echo "Replacing binary on remote..."
-            
-            if ! ssh "$remote_user@$remote_host" "sudo mv /tmp/pokerchaind.new $remote_bin_path && sudo chmod +x $remote_bin_path"; then
-                echo -e "${YELLOW}❌ Failed to replace binary${NC}"
-                read -p "Press Enter to continue..."
-                return
-            fi
-            
-            echo -e "${GREEN}✅ Binary updated on remote${NC}"
-            echo ""
-            echo "Restarting pokerchaind service..."
-            
-            if ! ssh "$remote_user@$remote_host" "sudo systemctl restart pokerchaind"; then
-                echo -e "${YELLOW}❌ Failed to restart service${NC}"
-                read -p "Press Enter to continue..."
-                return
-            fi
-            
-            echo -e "${GREEN}✅ Service restarted${NC}"
-            echo ""
-            echo "Checking service status..."
-            sleep 2
-            ssh "$remote_user@$remote_host" "sudo systemctl status pokerchaind --no-pager | head -20"
-            ;;
-            
-        *)
-            echo "Update cancelled."
-            echo ""
-            echo "Cleaning up temporary files on remote..."
-            ssh "$remote_user@$remote_host" "rm -f /tmp/pokerchaind.new"
-            ;;
-    esac
+    echo "Restarting pokerchaind service..."
+
+    if ! ssh "$remote_user@$remote_host" "sudo systemctl restart pokerchaind"; then
+        echo -e "${YELLOW}❌ Failed to restart service${NC}"
+        read -p "Press Enter to continue..."
+        return
+    fi
+
+    echo -e "${GREEN}✅ Service restarted${NC}"
+    echo ""
+    echo "Checking service status..."
+    sleep 2
+    ssh "$remote_user@$remote_host" "sudo systemctl status pokerchaind --no-pager | head -20"
     
     read -p "Press Enter to continue..."
 }

@@ -142,21 +142,24 @@ type ResultDTO struct {
 
 // TexasHoldemStateDTO represents the complete game state
 type TexasHoldemStateDTO struct {
-	Type            GameType         `json:"type"`
-	Address         string           `json:"address"`
-	GameOptions     GameOptionsDTO   `json:"gameOptions"`
-	Players         []PlayerDTO      `json:"players"`
-	CommunityCards  []string         `json:"communityCards"`
-	Deck            string           `json:"deck"`
-	Pots            []string         `json:"pots"`
-	NextToAct       int              `json:"nextToAct"`
-	PreviousActions []ActionDTO      `json:"previousActions"`
-	ActionCount     int              `json:"actionCount"`
-	HandNumber      int              `json:"handNumber"`
-	Round           TexasHoldemRound `json:"round"`
-	Winners         []WinnerDTO      `json:"winners"`
-	Results         []ResultDTO      `json:"results"`
-	Signature       string           `json:"signature"`
+	Type               GameType         `json:"type"`
+	Address            string           `json:"address"`
+	GameOptions        GameOptionsDTO   `json:"gameOptions"`
+	Dealer             int              `json:"dealer"`
+	SmallBlindPosition int              `json:"smallBlindPosition"`
+	BigBlindPosition   int              `json:"bigBlindPosition"`
+	Players            []PlayerDTO      `json:"players"`
+	CommunityCards     []string         `json:"communityCards"`
+	Deck               string           `json:"deck"`
+	Pots               []string         `json:"pots"`
+	NextToAct          int              `json:"nextToAct"`
+	PreviousActions    []ActionDTO      `json:"previousActions"`
+	ActionCount        int              `json:"actionCount"`
+	HandNumber         int              `json:"handNumber"`
+	Round              TexasHoldemRound `json:"round"`
+	Winners            []WinnerDTO      `json:"winners"`
+	Results            []ResultDTO      `json:"results"`
+	Signature          string           `json:"signature"`
 }
 
 // Game represents a poker game
