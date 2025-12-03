@@ -85,6 +85,20 @@ type ClientMessage struct {
 	PlayerAddress string `json:"player_address,omitempty"` // For authenticated subscriptions
 	Timestamp     int64  `json:"timestamp,omitempty"`      // Unix timestamp for signature verification
 	Signature     string `json:"signature,omitempty"`      // Ethereum personal_sign signature
+
+	// Action relay fields - for optimistic updates
+	Action string `json:"action,omitempty"` // "fold", "call", "raise", "check", "bet", "all_in"
+	Amount string `json:"amount,omitempty"` // For raise/bet actions (as string to handle big numbers)
+	Seat   int    `json:"seat,omitempty"`   // For join actions
+}
+
+// PendingAction represents an action that has been accepted by mempool but not yet confirmed
+type PendingAction struct {
+	GameID string `json:"game_id"`
+	Actor  string `json:"actor"`
+	Action string `json:"action"`
+	Amount string `json:"amount,omitempty"`
+	TxHash string `json:"tx_hash,omitempty"`
 }
 
 // TendermintEventResponse represents the structure of a Tendermint WebSocket event
@@ -386,6 +400,124 @@ func (h *Hub) sendPersonalizedUpdate(client *Client, gameID string, event string
 	}
 }
 
+// handleAction processes an action message from a client and broadcasts pending state
+// This enables optimistic updates - all subscribers see the action immediately
+func (h *Hub) handleAction(client *Client, msg ClientMessage) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Get player address from client auth or message
+	client.mu.RLock()
+	playerAddress := client.playerId
+	client.mu.RUnlock()
+
+	if playerAddress == "" {
+		playerAddress = msg.PlayerAddress
+	}
+
+	if playerAddress == "" {
+		log.Printf("[WS-Server] ❌ Action rejected: no player address")
+		client.sendError("No player address provided")
+		return
+	}
+
+	log.Printf("[WS-Server] 🚀 Broadcasting action to chain: game=%s, player=%s, action=%s, amount=%s",
+		msg.GameID, playerAddress, msg.Action, msg.Amount)
+
+	// TODO: In a full implementation, we would:
+	// 1. Build the MsgPerformAction transaction
+	// 2. Sign it (requires access to player's private key or pre-signed TX from client)
+	// 3. Broadcast using broadcast_tx_sync
+	//
+	// For now, we implement a simpler approach:
+	// The client sends a pre-signed TX, or we just broadcast the pending state
+	// and let the existing TX flow handle the actual blockchain transaction.
+	//
+	// This allows the UI to immediately see "pending" state while the normal
+	// transaction flow continues in parallel.
+
+	// Broadcast pending state immediately to all subscribers
+	pendingAction := &PendingAction{
+		GameID: msg.GameID,
+		Actor:  playerAddress,
+		Action: msg.Action,
+		Amount: msg.Amount,
+	}
+
+	h.broadcastPendingState(ctx, pendingAction)
+
+	// Send acknowledgment to the acting client
+	ack := map[string]interface{}{
+		"event":   "action_accepted",
+		"game_id": msg.GameID,
+		"action":  msg.Action,
+		"status":  "pending",
+	}
+	ackBytes, _ := json.Marshal(ack)
+	select {
+	case client.send <- ackBytes:
+		log.Printf("[WS-Server] ✅ Action acknowledged to client")
+	default:
+		log.Printf("[WS-Server] ⚠️ Failed to send ack (channel full)")
+	}
+}
+
+// broadcastPendingState sends a pending action notification to all game subscribers
+func (h *Hub) broadcastPendingState(ctx context.Context, pending *PendingAction) {
+	h.mu.RLock()
+	clients, exists := h.games[pending.GameID]
+	if !exists || len(clients) == 0 {
+		h.mu.RUnlock()
+		log.Printf("[WS-Server] No subscribers for pending state: game=%s", pending.GameID)
+		return
+	}
+
+	// Make a copy of client pointers
+	clientList := make([]*Client, 0, len(clients))
+	for client := range clients {
+		clientList = append(clientList, client)
+	}
+	h.mu.RUnlock()
+
+	// Create pending update message
+	pendingData, _ := json.Marshal(pending)
+	update := &GameUpdate{
+		GameID:    pending.GameID,
+		Timestamp: time.Now(),
+		Event:     "pending",
+		Data:      pendingData,
+	}
+
+	message, _ := json.Marshal(update)
+
+	// Broadcast to all subscribers
+	for _, client := range clientList {
+		select {
+		case client.send <- message:
+			// Sent successfully
+		default:
+			log.Printf("[WS-Server] Failed to send pending state to client (channel full)")
+		}
+	}
+
+	log.Printf("[WS-Server] 📢 Broadcasted pending action to %d clients: game=%s, action=%s",
+		len(clientList), pending.GameID, pending.Action)
+}
+
+// sendError sends an error message to the client
+func (c *Client) sendError(message string) {
+	errorMsg := map[string]interface{}{
+		"event":   "error",
+		"message": message,
+	}
+	errorBytes, _ := json.Marshal(errorMsg)
+	select {
+	case c.send <- errorBytes:
+	default:
+		log.Printf("[WS-Server] Failed to send error to client (channel full)")
+	}
+}
+
 func (c *Client) readPump() {
 	defer func() {
 		c.hub.unregister <- c
@@ -450,6 +582,17 @@ func (c *Client) readPump() {
 			pong := map[string]string{"type": "pong"}
 			pongBytes, _ := json.Marshal(pong)
 			c.send <- pongBytes
+
+		case "action":
+			// Handle action relay for optimistic updates
+			if msg.GameID != "" && msg.Action != "" {
+				log.Printf("[WS-Server] 🎯 Action received: game=%s, action=%s, amount=%s, player=%s",
+					msg.GameID, msg.Action, msg.Amount, msg.PlayerAddress)
+				go c.hub.handleAction(c, msg)
+			} else {
+				log.Printf("[WS-Server] ⚠️ Invalid action message: missing game_id or action")
+				c.sendError("Invalid action message: missing game_id or action")
+			}
 		}
 	}
 }
