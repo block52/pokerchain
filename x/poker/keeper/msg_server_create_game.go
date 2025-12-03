@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strconv"
-	"time"
 
 	errorsmod "cosmossdk.io/errors"
 	"cosmossdk.io/math"
@@ -61,7 +60,8 @@ func (k msgServer) CreateGame(ctx context.Context, msg *types.MsgCreateGame) (*t
 	}
 
 	// Create game state
-	now := time.Now()
+	// Use block time for deterministic timestamps across all validators
+	now := sdkCtx.BlockTime()
 	game := types.Game{
 		GameId:     gameId,
 		Creator:    msg.Creator,
