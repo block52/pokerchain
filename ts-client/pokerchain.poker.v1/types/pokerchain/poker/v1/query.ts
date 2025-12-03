@@ -66,10 +66,26 @@ export interface QueryLegalActionsResponse {
 /** QueryGameStateRequest defines the QueryGameStateRequest message. */
 export interface QueryGameStateRequest {
   gameId: string;
+  /** Cosmos address of the requesting player */
+  playerAddress: string;
+  /** Unix timestamp in seconds */
+  timestamp: Long;
+  /** Signature of the timestamp signed by the player's private key */
+  signature: string;
 }
 
 /** QueryGameStateResponse defines the QueryGameStateResponse message. */
 export interface QueryGameStateResponse {
+  gameState: string;
+}
+
+/** QueryGameStatePublicRequest defines the QueryGameStatePublicRequest message. */
+export interface QueryGameStatePublicRequest {
+  gameId: string;
+}
+
+/** QueryGameStatePublicResponse defines the QueryGameStatePublicResponse message. */
+export interface QueryGameStatePublicResponse {
   gameState: string;
 }
 
@@ -677,13 +693,22 @@ export const QueryLegalActionsResponse: MessageFns<QueryLegalActionsResponse> = 
 };
 
 function createBaseQueryGameStateRequest(): QueryGameStateRequest {
-  return { gameId: "" };
+  return { gameId: "", playerAddress: "", timestamp: Long.ZERO, signature: "" };
 }
 
 export const QueryGameStateRequest: MessageFns<QueryGameStateRequest> = {
   encode(message: QueryGameStateRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.gameId !== "") {
       writer.uint32(10).string(message.gameId);
+    }
+    if (message.playerAddress !== "") {
+      writer.uint32(18).string(message.playerAddress);
+    }
+    if (!message.timestamp.equals(Long.ZERO)) {
+      writer.uint32(24).int64(message.timestamp.toString());
+    }
+    if (message.signature !== "") {
+      writer.uint32(34).string(message.signature);
     }
     return writer;
   },
@@ -703,6 +728,30 @@ export const QueryGameStateRequest: MessageFns<QueryGameStateRequest> = {
           message.gameId = reader.string();
           continue;
         }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.playerAddress = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.timestamp = Long.fromString(reader.int64().toString());
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.signature = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -713,13 +762,27 @@ export const QueryGameStateRequest: MessageFns<QueryGameStateRequest> = {
   },
 
   fromJSON(object: any): QueryGameStateRequest {
-    return { gameId: isSet(object.gameId) ? globalThis.String(object.gameId) : "" };
+    return {
+      gameId: isSet(object.gameId) ? globalThis.String(object.gameId) : "",
+      playerAddress: isSet(object.playerAddress) ? globalThis.String(object.playerAddress) : "",
+      timestamp: isSet(object.timestamp) ? Long.fromValue(object.timestamp) : Long.ZERO,
+      signature: isSet(object.signature) ? globalThis.String(object.signature) : "",
+    };
   },
 
   toJSON(message: QueryGameStateRequest): unknown {
     const obj: any = {};
     if (message.gameId !== "") {
       obj.gameId = message.gameId;
+    }
+    if (message.playerAddress !== "") {
+      obj.playerAddress = message.playerAddress;
+    }
+    if (!message.timestamp.equals(Long.ZERO)) {
+      obj.timestamp = (message.timestamp || Long.ZERO).toString();
+    }
+    if (message.signature !== "") {
+      obj.signature = message.signature;
     }
     return obj;
   },
@@ -730,6 +793,11 @@ export const QueryGameStateRequest: MessageFns<QueryGameStateRequest> = {
   fromPartial<I extends Exact<DeepPartial<QueryGameStateRequest>, I>>(object: I): QueryGameStateRequest {
     const message = createBaseQueryGameStateRequest();
     message.gameId = object.gameId ?? "";
+    message.playerAddress = object.playerAddress ?? "";
+    message.timestamp = (object.timestamp !== undefined && object.timestamp !== null)
+      ? Long.fromValue(object.timestamp)
+      : Long.ZERO;
+    message.signature = object.signature ?? "";
     return message;
   },
 };
@@ -787,6 +855,122 @@ export const QueryGameStateResponse: MessageFns<QueryGameStateResponse> = {
   },
   fromPartial<I extends Exact<DeepPartial<QueryGameStateResponse>, I>>(object: I): QueryGameStateResponse {
     const message = createBaseQueryGameStateResponse();
+    message.gameState = object.gameState ?? "";
+    return message;
+  },
+};
+
+function createBaseQueryGameStatePublicRequest(): QueryGameStatePublicRequest {
+  return { gameId: "" };
+}
+
+export const QueryGameStatePublicRequest: MessageFns<QueryGameStatePublicRequest> = {
+  encode(message: QueryGameStatePublicRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.gameId !== "") {
+      writer.uint32(10).string(message.gameId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QueryGameStatePublicRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseQueryGameStatePublicRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.gameId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryGameStatePublicRequest {
+    return { gameId: isSet(object.gameId) ? globalThis.String(object.gameId) : "" };
+  },
+
+  toJSON(message: QueryGameStatePublicRequest): unknown {
+    const obj: any = {};
+    if (message.gameId !== "") {
+      obj.gameId = message.gameId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<QueryGameStatePublicRequest>, I>>(base?: I): QueryGameStatePublicRequest {
+    return QueryGameStatePublicRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<QueryGameStatePublicRequest>, I>>(object: I): QueryGameStatePublicRequest {
+    const message = createBaseQueryGameStatePublicRequest();
+    message.gameId = object.gameId ?? "";
+    return message;
+  },
+};
+
+function createBaseQueryGameStatePublicResponse(): QueryGameStatePublicResponse {
+  return { gameState: "" };
+}
+
+export const QueryGameStatePublicResponse: MessageFns<QueryGameStatePublicResponse> = {
+  encode(message: QueryGameStatePublicResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.gameState !== "") {
+      writer.uint32(10).string(message.gameState);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): QueryGameStatePublicResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseQueryGameStatePublicResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.gameState = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): QueryGameStatePublicResponse {
+    return { gameState: isSet(object.gameState) ? globalThis.String(object.gameState) : "" };
+  },
+
+  toJSON(message: QueryGameStatePublicResponse): unknown {
+    const obj: any = {};
+    if (message.gameState !== "") {
+      obj.gameState = message.gameState;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<QueryGameStatePublicResponse>, I>>(base?: I): QueryGameStatePublicResponse {
+    return QueryGameStatePublicResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<QueryGameStatePublicResponse>, I>>(object: I): QueryGameStatePublicResponse {
+    const message = createBaseQueryGameStatePublicResponse();
     message.gameState = object.gameState ?? "";
     return message;
   },
@@ -1216,8 +1400,10 @@ export interface Query {
   PlayerGames(request: QueryPlayerGamesRequest): Promise<QueryPlayerGamesResponse>;
   /** LegalActions Queries a list of LegalActions items. */
   LegalActions(request: QueryLegalActionsRequest): Promise<QueryLegalActionsResponse>;
-  /** GameState Queries the detailed game state for a game. */
+  /** GameState Queries the detailed game state for a game (authenticated, shows your cards). */
   GameState(request: QueryGameStateRequest): Promise<QueryGameStateResponse>;
+  /** GameStatePublic Queries the public game state (unauthenticated, all cards masked). */
+  GameStatePublic(request: QueryGameStatePublicRequest): Promise<QueryGameStatePublicResponse>;
   /** IsTxProcessed checks if an Ethereum transaction hash has been processed */
   IsTxProcessed(request: QueryIsTxProcessedRequest): Promise<QueryIsTxProcessedResponse>;
   /** GetWithdrawalRequest queries a specific withdrawal request by nonce */
@@ -1239,6 +1425,7 @@ export class QueryClientImpl implements Query {
     this.PlayerGames = this.PlayerGames.bind(this);
     this.LegalActions = this.LegalActions.bind(this);
     this.GameState = this.GameState.bind(this);
+    this.GameStatePublic = this.GameStatePublic.bind(this);
     this.IsTxProcessed = this.IsTxProcessed.bind(this);
     this.GetWithdrawalRequest = this.GetWithdrawalRequest.bind(this);
     this.ListWithdrawalRequests = this.ListWithdrawalRequests.bind(this);
@@ -1277,6 +1464,12 @@ export class QueryClientImpl implements Query {
     const data = QueryGameStateRequest.encode(request).finish();
     const promise = this.rpc.request(this.service, "GameState", data);
     return promise.then((data) => QueryGameStateResponse.decode(new BinaryReader(data)));
+  }
+
+  GameStatePublic(request: QueryGameStatePublicRequest): Promise<QueryGameStatePublicResponse> {
+    const data = QueryGameStatePublicRequest.encode(request).finish();
+    const promise = this.rpc.request(this.service, "GameStatePublic", data);
+    return promise.then((data) => QueryGameStatePublicResponse.decode(new BinaryReader(data)));
   }
 
   IsTxProcessed(request: QueryIsTxProcessedRequest): Promise<QueryIsTxProcessedResponse> {
