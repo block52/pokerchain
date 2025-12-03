@@ -14,7 +14,7 @@ import { ChainInfo } from "@keplr-wallet/types";
 
 const defaultFee = {
   amount: [],
-  gas: "200000",
+  gas: "1000000",
 };
 
 export class IgniteClient extends EventEmitter {
