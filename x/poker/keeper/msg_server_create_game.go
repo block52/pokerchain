@@ -60,22 +60,32 @@ func (k msgServer) CreateGame(ctx context.Context, msg *types.MsgCreateGame) (*t
 		return nil, errorsmod.Wrapf(types.ErrInvalidRequest, "game with ID %s already exists", gameId)
 	}
 
+	// Determine rake owner (defaults to creator if not specified)
+	rakeOwner := msg.RakeOwner
+	if rakeOwner == "" {
+		rakeOwner = msg.Creator
+	}
+
 	// Create game state
 	now := time.Now()
 	game := types.Game{
-		GameId:     gameId,
-		Creator:    msg.Creator,
-		MinBuyIn:   msg.MinBuyIn,
-		MaxBuyIn:   msg.MaxBuyIn,
-		MinPlayers: msg.MinPlayers,
-		MaxPlayers: msg.MaxPlayers,
-		SmallBlind: msg.SmallBlind,
-		BigBlind:   msg.BigBlind,
-		Timeout:    msg.Timeout,
-		GameType:   msg.GameType,
-		Players:    []string{}, // Empty initially, players join separately
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		GameId:            gameId,
+		Creator:           msg.Creator,
+		MinBuyIn:          msg.MinBuyIn,
+		MaxBuyIn:          msg.MaxBuyIn,
+		MinPlayers:        msg.MinPlayers,
+		MaxPlayers:        msg.MaxPlayers,
+		SmallBlind:        msg.SmallBlind,
+		BigBlind:          msg.BigBlind,
+		Timeout:           msg.Timeout,
+		GameType:          msg.GameType,
+		Players:           []string{}, // Empty initially, players join separately
+		CreatedAt:         now,
+		UpdatedAt:         now,
+		RakeFreeThreshold: msg.RakeFreeThreshold,
+		RakePercentage:    msg.RakePercentage,
+		RakeCap:           msg.RakeCap,
+		RakeOwner:         rakeOwner,
 	}
 
 	// Store game in keeper
@@ -110,6 +120,20 @@ func (k msgServer) CreateGame(ctx context.Context, msg *types.MsgCreateGame) (*t
 		return nil, errorsmod.Wrap(err, "failed to initialize deck")
 	}
 
+	// Build rake config if rake is enabled (rakePercentage > 0)
+	var rakeConfig *types.RakeConfigDTO
+	if msg.RakePercentage > 0 {
+		rakeFreeThresholdStr := fmt.Sprintf("%d", msg.RakeFreeThreshold)
+		rakeCapStr := fmt.Sprintf("%d", msg.RakeCap)
+		rakePercentageInt := int(msg.RakePercentage)
+		rakeConfig = &types.RakeConfigDTO{
+			RakeFreeThreshold: rakeFreeThresholdStr,
+			RakePercentage:    rakePercentageInt,
+			RakeCap:           rakeCapStr,
+			Owner:             rakeOwner,
+		}
+	}
+
 	defaultGameState := types.TexasHoldemStateDTO{
 		Type:        types.GameTypeTexasHoldem,
 		Address:     gameId,
@@ -124,6 +148,8 @@ func (k msgServer) CreateGame(ctx context.Context, msg *types.MsgCreateGame) (*t
 			MinPlayers: &minPlayersInt,
 			MaxPlayers: &maxPlayersInt,
 			Type:       &gameType,
+			Rake:       rakeConfig,
+			Owner:      &rakeOwner,
 		},
 		Players:         []types.PlayerDTO{},
 		CommunityCards:  []string{},

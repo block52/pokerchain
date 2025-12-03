@@ -75,6 +75,15 @@ const (
 	StatusShowing    PlayerStatus = "showing"
 )
 
+// RakeConfigDTO represents the rake configuration for a game
+// Matches the SDK RakeConfigDTO structure
+type RakeConfigDTO struct {
+	RakeFreeThreshold string `json:"rakeFreeThreshold"` // Pot threshold below which no rake is taken (in micro-units)
+	RakePercentage    int    `json:"rakePercentage"`    // Percentage of pot taken as rake (0-100, e.g., 5 = 5%)
+	RakeCap           string `json:"rakeCap"`           // Maximum rake amount per hand (in micro-units)
+	Owner             string `json:"owner,omitempty"`   // Address that receives the rake
+}
+
 // GameOptionsDTO represents the game configuration options
 type GameOptionsDTO struct {
 	MinBuyIn     *string                `json:"minBuyIn,omitempty"`
@@ -85,6 +94,8 @@ type GameOptionsDTO struct {
 	BigBlind     *string                `json:"bigBlind,omitempty"`
 	Timeout      *int                   `json:"timeout,omitempty"`
 	Type         *GameType              `json:"type,omitempty"`
+	Rake         *RakeConfigDTO         `json:"rake,omitempty"`         // Optional rake configuration
+	Owner        *string                `json:"owner,omitempty"`        // Table owner who collects rake fees
 	OtherOptions map[string]interface{} `json:"otherOptions,omitempty"`
 }
 
@@ -164,19 +175,24 @@ type TexasHoldemStateDTO struct {
 
 // Game represents a poker game
 type Game struct {
-	GameId     string    `json:"gameId"`
-	Creator    string    `json:"creator"`
-	MinBuyIn   uint64    `json:"minBuyIn"`
-	MaxBuyIn   uint64    `json:"maxBuyIn"`
-	MinPlayers int64     `json:"minPlayers"`
-	MaxPlayers int64     `json:"maxPlayers"`
-	SmallBlind uint64    `json:"smallBlind"`
-	BigBlind   uint64    `json:"bigBlind"`
-	Timeout    int64     `json:"timeout"`
-	GameType   string    `json:"gameType"`
-	Players    []string  `json:"players"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	GameId            string    `json:"gameId"`
+	Creator           string    `json:"creator"`
+	MinBuyIn          uint64    `json:"minBuyIn"`
+	MaxBuyIn          uint64    `json:"maxBuyIn"`
+	MinPlayers        int64     `json:"minPlayers"`
+	MaxPlayers        int64     `json:"maxPlayers"`
+	SmallBlind        uint64    `json:"smallBlind"`
+	BigBlind          uint64    `json:"bigBlind"`
+	Timeout           int64     `json:"timeout"`
+	GameType          string    `json:"gameType"`
+	Players           []string  `json:"players"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
+	// Rake configuration (optional)
+	RakeFreeThreshold uint64 `json:"rakeFreeThreshold,omitempty"` // Pot threshold below which no rake is taken
+	RakePercentage    uint32 `json:"rakePercentage,omitempty"`    // Percentage of pot taken as rake (0-100)
+	RakeCap           uint64 `json:"rakeCap,omitempty"`           // Maximum rake per hand
+	RakeOwner         string `json:"rakeOwner,omitempty"`         // Address receiving rake (defaults to creator)
 }
 
 // Marshal implements the protobuf marshaling interface
