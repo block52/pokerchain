@@ -2,7 +2,7 @@
 
 **Related PR:** https://github.com/block52/pokerchain/pull/40
 **Date:** 2025-12-03
-**Status:** Planning
+**Status:** In Progress
 
 ---
 
@@ -10,7 +10,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        PRODUCTION SERVER                         │
+│                   PRODUCTION SERVER (node.hodle.net)            │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                   │
 │   ┌──────────────────┐         ┌──────────────────────────┐     │
@@ -36,9 +36,9 @@
 | Component | Path | Lines | Deployed |
 |-----------|------|-------|----------|
 | Package (reusable) | `pkg/wsserver/server.go` | ~800 | No |
-| Standalone binary | `cmd/ws-server/main.go` | ~900 | **Yes** |
+| Standalone binary | `cmd/ws-server/main.go` | ~900 | **Yes** (on node.hodle.net) |
 
-Both have identical logic duplicated - this is the problem we're solving.
+Both have identical logic - the package is now the canonical implementation.
 
 ---
 
@@ -46,7 +46,7 @@ Both have identical logic duplicated - this is the problem we're solving.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        PRODUCTION SERVER                         │
+│                   PRODUCTION SERVER (node.hodle.net)            │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                   │
 │   ┌────────────────────────────────────────────────────────┐    │
@@ -76,61 +76,45 @@ Both have identical logic duplicated - this is the problem we're solving.
 2. **Shared resources** - Can share gRPC connection, less overhead
 3. **Atomic startup** - WebSocket starts when node is ready
 4. **Simpler deployment** - No separate poker-ws.service needed
-5. **Single source of truth** - Only `pkg/wsserver` implementation
+5. **Single source of truth** - Only `pkg/wsserver` implementation runs
 
 ---
 
 ## Migration Steps
 
-### Phase 1: Consolidate Implementations
+### Phase 1: Consolidate Implementations ✅
 
 - [x] Ensure `pkg/wsserver/server.go` has all features from `cmd/ws-server/main.go`
 - [x] Add `Start(cfg Config)` function to package
 - [x] Add `StartAsync(cfg Config)` function for goroutine startup
 - [x] Add optimistic updates (action relay) to package
-- [ ] Verify protocol.go constants are complete
+- [x] Add protocol.go constants
 
-### Phase 2: Embed WebSocket Server in Node
+### Phase 2: Embed WebSocket Server in Node ⏳
 
-- [ ] Add wsserver config to `app/app.go` or `cmd/pokerchaind/cmd/root.go`
-- [ ] Start WebSocket server when node starts (use `StartAsync`)
-- [ ] Read config from environment variables or config file
+- [ ] Add wsserver startup in `app/app.go` RegisterAPIRoutes
+- [ ] Read config from environment variables
+- [ ] Only start if `WS_ENABLED=true`
 - [ ] Test embedded startup locally
 
-**Option A: Start in RegisterAPIRoutes (Recommended)**
-```go
-// app/app.go
-func (app *App) RegisterAPIRoutes(apiSvr *api.Server, apiConfig config.APIConfig) {
-    app.App.RegisterAPIRoutes(apiSvr, apiConfig)
+### Phase 3: Production Cutover ⏳
 
-    // Start embedded WebSocket server
-    wsConfig := wsserver.Config{
-        Port:            os.Getenv("WS_SERVER_PORT"),
-        TendermintWSURL: "ws://localhost:26657/websocket",
-        GRPCAddress:     "localhost:9090",
-    }
-    wsserver.StartAsync(wsConfig)
-}
-```
+**CRITICAL ORDER OF OPERATIONS:**
+1. FIRST: Stop poker-ws.service on node.hodle.net
+2. THEN: Deploy new pokerchaind with embedded wsserver
+3. VERIFY: WebSocket health check passes
 
-**Option B: Add custom start command hook**
-```go
-// cmd/pokerchaind/cmd/start.go (new file)
-// Add PreRun hook to start WebSocket server
-```
+- [ ] Stop poker-ws.service on node.hodle.net
+- [ ] Deploy updated pokerchaind binary
+- [ ] Set WS_ENABLED=true in pokerchaind.service
+- [ ] Restart pokerchaind
+- [ ] Verify WebSocket health
 
-### Phase 3: Update Deployment
+### Phase 4: Cleanup ⏳
 
-- [ ] Remove `poker-ws.service` from systemd
-- [ ] Update `setup-network.sh` option 12 (remove or repurpose)
-- [ ] Update NGINX config if needed (should still proxy to 8585)
-- [ ] Update documentation
-
-### Phase 4: Deprecate Standalone Binary
-
-- [ ] Delete `cmd/ws-server/main.go` or mark as deprecated
-- [ ] Remove build step for ws-server from deployment scripts
-- [ ] Update CI/CD if applicable
+- [ ] Disable poker-ws.service permanently
+- [ ] Update `setup-network.sh` option 12 documentation
+- [ ] Keep `cmd/ws-server/main.go` for local development/testing
 
 ---
 
@@ -139,56 +123,59 @@ func (app *App) RegisterAPIRoutes(apiSvr *api.Server, apiConfig config.APIConfig
 | File | Action |
 |------|--------|
 | `app/app.go` | Add wsserver startup in RegisterAPIRoutes |
-| `setup-network.sh` | Remove/update option 12 |
-| `cmd/ws-server/main.go` | DELETE (after migration) |
-| `cmd/ws-server/README.md` | DELETE |
+| `setup-network.sh` | Update option 12 docs (not remove) |
+| `cmd/ws-server/main.go` | **KEEP** (useful for local dev) |
+| `cmd/ws-server/README.md` | Update to note embedded is preferred |
 | `WEBSOCKET_QUICKSTART.md` | Update documentation |
 
 ---
 
-## Production Cutover Checklist
+## Production Cutover Checklist (node.hodle.net)
 
-### Before Migration
+### CRITICAL: Order of Operations
 
-- [ ] Notify team of planned migration window
-- [ ] Backup current configuration
-- [ ] Document current poker-ws.service settings
+⚠️ **You MUST stop the standalone poker-ws.service BEFORE starting the embedded version!**
 
-### Migration Steps
+Both cannot run on port 8585 simultaneously.
+
+### Step-by-Step
 
 ```bash
 # 1. SSH to production server
-ssh root@node1.block52.xyz
+ssh root@node.hodle.net
 
-# 2. Stop the standalone WebSocket service
+# 2. FIRST: Stop the standalone WebSocket service
 sudo systemctl stop poker-ws
 sudo systemctl disable poker-ws
 
-# 3. Verify it's stopped
+# 3. Verify it's stopped (IMPORTANT!)
 sudo systemctl status poker-ws  # Should show "inactive"
+lsof -i :8585                   # Should show nothing
 
-# 4. Update pokerchaind binary (with embedded wsserver)
-# (Use setup-network.sh option 9 to update binary)
+# 4. Upload new pokerchaind binary (with embedded wsserver)
+# Use setup-network.sh option 9 or manual upload
 
 # 5. Set environment variables in pokerchaind.service
 sudo systemctl edit pokerchaind
 # Add under [Service]:
-# Environment="WS_SERVER_PORT=:8585"
 # Environment="WS_ENABLED=true"
+# Environment="WS_SERVER_PORT=:8585"
 
 # 6. Restart pokerchaind
 sudo systemctl restart pokerchaind
 
-# 7. Verify WebSocket is running
+# 7. Wait a few seconds for startup
+sleep 5
+
+# 8. Verify WebSocket is running
 curl http://localhost:8585/health
 # Should return: {"status":"ok",...}
 
-# 8. Test from external
-curl https://node1.block52.xyz/ws-health
+# 9. Test from external
+curl https://node.hodle.net/ws-health
 
-# 9. If successful, remove old service file
-sudo rm /etc/systemd/system/poker-ws.service
-sudo systemctl daemon-reload
+# 10. Check logs for any issues
+sudo journalctl -u pokerchaind -f --since "5 minutes ago"
 ```
 
 ### Rollback Plan
@@ -196,15 +183,22 @@ sudo systemctl daemon-reload
 If embedded approach fails:
 
 ```bash
-# Re-enable standalone service
-sudo systemctl enable poker-ws
-sudo systemctl start poker-ws
+# 1. Stop pokerchaind
+sudo systemctl stop pokerchaind
 
-# Remove WS_ENABLED from pokerchaind.service
+# 2. Remove WS_ENABLED from pokerchaind.service
 sudo systemctl edit pokerchaind
 # Remove the WS_* environment variables
 
-sudo systemctl restart pokerchaind
+# 3. Re-enable standalone service
+sudo systemctl enable poker-ws
+sudo systemctl start poker-ws
+
+# 4. Restart pokerchaind (without embedded ws)
+sudo systemctl start pokerchaind
+
+# 5. Verify standalone WS is working
+curl http://localhost:8585/health
 ```
 
 ---
@@ -247,8 +241,8 @@ WantedBy=multi-user.target
 
 | Risk | Mitigation |
 |------|------------|
+| Port 8585 conflict | Stop poker-ws.service FIRST before deploying |
 | Node crash affects WebSocket | Monitor both endpoints, rollback if issues |
-| Port conflict | Use same port (8585), no change needed |
 | Config mismatch | Copy env vars from poker-ws.service |
 | Memory increase | Minimal - wsserver is lightweight |
 
@@ -259,16 +253,24 @@ WantedBy=multi-user.target
 | Phase | Tasks | Status |
 |-------|-------|--------|
 | Phase 1 | Consolidate implementations | ✅ Done |
-| Phase 2 | Embed in node | ⏳ To Do |
-| Phase 3 | Update deployment | ⏳ To Do |
-| Phase 4 | Deprecate standalone | ⏳ To Do |
-| Cutover | Production migration | ⏳ To Do |
+| Phase 2 | Embed in node | ⏳ In Progress |
+| Phase 3 | Production cutover | ⏳ To Do |
+| Phase 4 | Cleanup & docs | ⏳ To Do |
+
+---
+
+## Manual Todo
+
+- [ ] **BEFORE DEPLOY**: SSH to node.hodle.net and run `sudo systemctl stop poker-ws`
+- [ ] Verify port 8585 is free: `lsof -i :8585` should return nothing
+- [ ] Deploy new binary
+- [ ] Test health endpoint
 
 ---
 
 ## Notes
 
-- The standalone `cmd/ws-server/main.go` was the production server
-- `pkg/wsserver/server.go` was created but never deployed
-- Both now have optimistic updates feature
-- This migration unifies them and simplifies architecture
+- `cmd/ws-server/main.go` is kept for local development and testing
+- Production will use the embedded `pkg/wsserver` going forward
+- NGINX config remains unchanged (still proxies to :8585)
+- The key is stopping the old service BEFORE starting the new embedded one

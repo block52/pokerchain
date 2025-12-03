@@ -2,6 +2,7 @@ package app
 
 import (
 	"io"
+	"os"
 
 	clienthelpers "cosmossdk.io/client/v2/helpers"
 	"cosmossdk.io/core/appmodule"
@@ -51,6 +52,7 @@ import (
 
 	pokerante "github.com/block52/pokerchain/app/ante"
 	"github.com/block52/pokerchain/docs"
+	"github.com/block52/pokerchain/pkg/wsserver"
 	pokermodulekeeper "github.com/block52/pokerchain/x/poker/keeper"
 )
 
@@ -372,6 +374,25 @@ func (app *App) RegisterAPIRoutes(apiSvr *api.Server, apiConfig config.APIConfig
 
 	// register app's OpenAPI routes.
 	docs.RegisterOpenAPIService(Name, apiSvr.Router)
+
+	// Start embedded WebSocket server if enabled
+	// Set WS_ENABLED=true in environment to enable
+	if os.Getenv("WS_ENABLED") == "true" {
+		wsConfig := wsserver.Config{
+			Port:            getEnvOrDefault("WS_SERVER_PORT", ":8585"),
+			TendermintWSURL: getEnvOrDefault("WS_TENDERMINT_URL", "ws://localhost:26657/websocket"),
+			GRPCAddress:     getEnvOrDefault("WS_GRPC_ADDRESS", "localhost:9090"),
+		}
+		wsserver.StartAsync(wsConfig)
+	}
+}
+
+// getEnvOrDefault returns the environment variable value or a default
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 // GetMaccPerms returns a copy of the module account permissions
