@@ -119,6 +119,11 @@ message MsgCreateGame {
   uint64 big_blind = 7;
   int64 timeout = 8;
   string game_type = 9;
+  // Optional rake configuration
+  uint64 rake_free_threshold = 10;  // Pot threshold below which no rake is taken (in micro-units)
+  uint32 rake_percentage = 11;       // Percentage of pot taken as rake (0-100, e.g., 5 = 5%)
+  uint64 rake_cap = 12;              // Maximum rake amount per hand (in micro-units)
+  string rake_owner = 13;            // Address that receives the rake (defaults to creator if empty)
 }
 
 // MsgCreateGameResponse defines the MsgCreateGameResponse message.

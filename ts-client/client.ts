@@ -12,11 +12,9 @@ import { IgntModule } from "./modules";
 import { EventEmitter } from "events";
 import { ChainInfo } from "@keplr-wallet/types";
 
-// Gasless transactions - chain has minimum-gas-prices = "0.0stake"
-// Note: Poker actions require ~203,000 gas, so 250,000 provides safety margin
 const defaultFee = {
   amount: [],
-  gas: "250000",
+  gas: "1000000",
 };
 
 export class IgniteClient extends EventEmitter {

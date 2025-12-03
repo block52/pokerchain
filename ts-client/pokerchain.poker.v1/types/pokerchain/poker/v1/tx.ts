@@ -37,6 +37,14 @@ export interface MsgCreateGame {
   bigBlind: Long;
   timeout: Long;
   gameType: string;
+  /** Optional rake configuration */
+  rakeFreeThreshold: Long;
+  /** Percentage of pot taken as rake (0-100, e.g., 5 = 5%) */
+  rakePercentage: number;
+  /** Maximum rake amount per hand (in micro-units) */
+  rakeCap: Long;
+  /** Address that receives the rake (defaults to creator if empty) */
+  rakeOwner: string;
 }
 
 /** MsgCreateGameResponse defines the MsgCreateGameResponse message. */
@@ -114,10 +122,17 @@ export interface MsgBurnResponse {
 /**
  * MsgProcessDeposit defines the MsgProcessDeposit message.
  * Processes an Ethereum deposit by querying the bridge contract for the deposit index.
+ * The eth_block_height ensures deterministic replay - all validators query at the same block.
  */
 export interface MsgProcessDeposit {
   creator: string;
   depositIndex: Long;
+  /**
+   * Ethereum block height at which to query the deposit data.
+   * This ensures deterministic replay across all validators.
+   * If 0, the current block height will be fetched and stored.
+   */
+  ethBlockHeight: Long;
 }
 
 /** MsgProcessDepositResponse defines the MsgProcessDepositResponse message. */
@@ -125,6 +140,8 @@ export interface MsgProcessDepositResponse {
   recipient: string;
   amount: string;
   depositIndex: Long;
+  /** The Ethereum block height used to query the deposit data. */
+  ethBlockHeight: Long;
 }
 
 /**
@@ -298,6 +315,10 @@ function createBaseMsgCreateGame(): MsgCreateGame {
     bigBlind: Long.UZERO,
     timeout: Long.ZERO,
     gameType: "",
+    rakeFreeThreshold: Long.UZERO,
+    rakePercentage: 0,
+    rakeCap: Long.UZERO,
+    rakeOwner: "",
   };
 }
 
@@ -329,6 +350,18 @@ export const MsgCreateGame: MessageFns<MsgCreateGame> = {
     }
     if (message.gameType !== "") {
       writer.uint32(74).string(message.gameType);
+    }
+    if (!message.rakeFreeThreshold.equals(Long.UZERO)) {
+      writer.uint32(80).uint64(message.rakeFreeThreshold.toString());
+    }
+    if (message.rakePercentage !== 0) {
+      writer.uint32(88).uint32(message.rakePercentage);
+    }
+    if (!message.rakeCap.equals(Long.UZERO)) {
+      writer.uint32(96).uint64(message.rakeCap.toString());
+    }
+    if (message.rakeOwner !== "") {
+      writer.uint32(106).string(message.rakeOwner);
     }
     return writer;
   },
@@ -412,6 +445,38 @@ export const MsgCreateGame: MessageFns<MsgCreateGame> = {
           message.gameType = reader.string();
           continue;
         }
+        case 10: {
+          if (tag !== 80) {
+            break;
+          }
+
+          message.rakeFreeThreshold = Long.fromString(reader.uint64().toString(), true);
+          continue;
+        }
+        case 11: {
+          if (tag !== 88) {
+            break;
+          }
+
+          message.rakePercentage = reader.uint32();
+          continue;
+        }
+        case 12: {
+          if (tag !== 96) {
+            break;
+          }
+
+          message.rakeCap = Long.fromString(reader.uint64().toString(), true);
+          continue;
+        }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          message.rakeOwner = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -432,6 +497,10 @@ export const MsgCreateGame: MessageFns<MsgCreateGame> = {
       bigBlind: isSet(object.bigBlind) ? Long.fromValue(object.bigBlind) : Long.UZERO,
       timeout: isSet(object.timeout) ? Long.fromValue(object.timeout) : Long.ZERO,
       gameType: isSet(object.gameType) ? globalThis.String(object.gameType) : "",
+      rakeFreeThreshold: isSet(object.rakeFreeThreshold) ? Long.fromValue(object.rakeFreeThreshold) : Long.UZERO,
+      rakePercentage: isSet(object.rakePercentage) ? globalThis.Number(object.rakePercentage) : 0,
+      rakeCap: isSet(object.rakeCap) ? Long.fromValue(object.rakeCap) : Long.UZERO,
+      rakeOwner: isSet(object.rakeOwner) ? globalThis.String(object.rakeOwner) : "",
     };
   },
 
@@ -464,6 +533,18 @@ export const MsgCreateGame: MessageFns<MsgCreateGame> = {
     if (message.gameType !== "") {
       obj.gameType = message.gameType;
     }
+    if (!message.rakeFreeThreshold.equals(Long.UZERO)) {
+      obj.rakeFreeThreshold = (message.rakeFreeThreshold || Long.UZERO).toString();
+    }
+    if (message.rakePercentage !== 0) {
+      obj.rakePercentage = Math.round(message.rakePercentage);
+    }
+    if (!message.rakeCap.equals(Long.UZERO)) {
+      obj.rakeCap = (message.rakeCap || Long.UZERO).toString();
+    }
+    if (message.rakeOwner !== "") {
+      obj.rakeOwner = message.rakeOwner;
+    }
     return obj;
   },
 
@@ -495,6 +576,14 @@ export const MsgCreateGame: MessageFns<MsgCreateGame> = {
       ? Long.fromValue(object.timeout)
       : Long.ZERO;
     message.gameType = object.gameType ?? "";
+    message.rakeFreeThreshold = (object.rakeFreeThreshold !== undefined && object.rakeFreeThreshold !== null)
+      ? Long.fromValue(object.rakeFreeThreshold)
+      : Long.UZERO;
+    message.rakePercentage = object.rakePercentage ?? 0;
+    message.rakeCap = (object.rakeCap !== undefined && object.rakeCap !== null)
+      ? Long.fromValue(object.rakeCap)
+      : Long.UZERO;
+    message.rakeOwner = object.rakeOwner ?? "";
     return message;
   },
 };
@@ -1393,7 +1482,7 @@ export const MsgBurnResponse: MessageFns<MsgBurnResponse> = {
 };
 
 function createBaseMsgProcessDeposit(): MsgProcessDeposit {
-  return { creator: "", depositIndex: Long.UZERO };
+  return { creator: "", depositIndex: Long.UZERO, ethBlockHeight: Long.UZERO };
 }
 
 export const MsgProcessDeposit: MessageFns<MsgProcessDeposit> = {
@@ -1403,6 +1492,9 @@ export const MsgProcessDeposit: MessageFns<MsgProcessDeposit> = {
     }
     if (!message.depositIndex.equals(Long.UZERO)) {
       writer.uint32(16).uint64(message.depositIndex.toString());
+    }
+    if (!message.ethBlockHeight.equals(Long.UZERO)) {
+      writer.uint32(24).uint64(message.ethBlockHeight.toString());
     }
     return writer;
   },
@@ -1430,6 +1522,14 @@ export const MsgProcessDeposit: MessageFns<MsgProcessDeposit> = {
           message.depositIndex = Long.fromString(reader.uint64().toString(), true);
           continue;
         }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.ethBlockHeight = Long.fromString(reader.uint64().toString(), true);
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1443,6 +1543,7 @@ export const MsgProcessDeposit: MessageFns<MsgProcessDeposit> = {
     return {
       creator: isSet(object.creator) ? globalThis.String(object.creator) : "",
       depositIndex: isSet(object.depositIndex) ? Long.fromValue(object.depositIndex) : Long.UZERO,
+      ethBlockHeight: isSet(object.ethBlockHeight) ? Long.fromValue(object.ethBlockHeight) : Long.UZERO,
     };
   },
 
@@ -1453,6 +1554,9 @@ export const MsgProcessDeposit: MessageFns<MsgProcessDeposit> = {
     }
     if (!message.depositIndex.equals(Long.UZERO)) {
       obj.depositIndex = (message.depositIndex || Long.UZERO).toString();
+    }
+    if (!message.ethBlockHeight.equals(Long.UZERO)) {
+      obj.ethBlockHeight = (message.ethBlockHeight || Long.UZERO).toString();
     }
     return obj;
   },
@@ -1466,12 +1570,15 @@ export const MsgProcessDeposit: MessageFns<MsgProcessDeposit> = {
     message.depositIndex = (object.depositIndex !== undefined && object.depositIndex !== null)
       ? Long.fromValue(object.depositIndex)
       : Long.UZERO;
+    message.ethBlockHeight = (object.ethBlockHeight !== undefined && object.ethBlockHeight !== null)
+      ? Long.fromValue(object.ethBlockHeight)
+      : Long.UZERO;
     return message;
   },
 };
 
 function createBaseMsgProcessDepositResponse(): MsgProcessDepositResponse {
-  return { recipient: "", amount: "", depositIndex: Long.UZERO };
+  return { recipient: "", amount: "", depositIndex: Long.UZERO, ethBlockHeight: Long.UZERO };
 }
 
 export const MsgProcessDepositResponse: MessageFns<MsgProcessDepositResponse> = {
@@ -1484,6 +1591,9 @@ export const MsgProcessDepositResponse: MessageFns<MsgProcessDepositResponse> = 
     }
     if (!message.depositIndex.equals(Long.UZERO)) {
       writer.uint32(24).uint64(message.depositIndex.toString());
+    }
+    if (!message.ethBlockHeight.equals(Long.UZERO)) {
+      writer.uint32(32).uint64(message.ethBlockHeight.toString());
     }
     return writer;
   },
@@ -1519,6 +1629,14 @@ export const MsgProcessDepositResponse: MessageFns<MsgProcessDepositResponse> = 
           message.depositIndex = Long.fromString(reader.uint64().toString(), true);
           continue;
         }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.ethBlockHeight = Long.fromString(reader.uint64().toString(), true);
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1533,6 +1651,7 @@ export const MsgProcessDepositResponse: MessageFns<MsgProcessDepositResponse> = 
       recipient: isSet(object.recipient) ? globalThis.String(object.recipient) : "",
       amount: isSet(object.amount) ? globalThis.String(object.amount) : "",
       depositIndex: isSet(object.depositIndex) ? Long.fromValue(object.depositIndex) : Long.UZERO,
+      ethBlockHeight: isSet(object.ethBlockHeight) ? Long.fromValue(object.ethBlockHeight) : Long.UZERO,
     };
   },
 
@@ -1547,6 +1666,9 @@ export const MsgProcessDepositResponse: MessageFns<MsgProcessDepositResponse> = 
     if (!message.depositIndex.equals(Long.UZERO)) {
       obj.depositIndex = (message.depositIndex || Long.UZERO).toString();
     }
+    if (!message.ethBlockHeight.equals(Long.UZERO)) {
+      obj.ethBlockHeight = (message.ethBlockHeight || Long.UZERO).toString();
+    }
     return obj;
   },
 
@@ -1559,6 +1681,9 @@ export const MsgProcessDepositResponse: MessageFns<MsgProcessDepositResponse> = 
     message.amount = object.amount ?? "";
     message.depositIndex = (object.depositIndex !== undefined && object.depositIndex !== null)
       ? Long.fromValue(object.depositIndex)
+      : Long.UZERO;
+    message.ethBlockHeight = (object.ethBlockHeight !== undefined && object.ethBlockHeight !== null)
+      ? Long.fromValue(object.ethBlockHeight)
       : Long.UZERO;
     return message;
   },

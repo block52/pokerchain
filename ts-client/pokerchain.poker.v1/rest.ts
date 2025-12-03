@@ -5,6 +5,7 @@ import { QueryListGamesResponse } from "./types/pokerchain/poker/v1/query";
 import { QueryPlayerGamesResponse } from "./types/pokerchain/poker/v1/query";
 import { QueryLegalActionsResponse } from "./types/pokerchain/poker/v1/query";
 import { QueryGameStateResponse } from "./types/pokerchain/poker/v1/query";
+import { QueryGameStatePublicResponse } from "./types/pokerchain/poker/v1/query";
 import { QueryIsTxProcessedResponse } from "./types/pokerchain/poker/v1/query";
 import { QueryGetWithdrawalRequestResponse } from "./types/pokerchain/poker/v1/query";
 import { QueryListWithdrawalRequestsResponse } from "./types/pokerchain/poker/v1/query";
@@ -15,6 +16,7 @@ import { QueryListGamesRequest } from "./types/pokerchain/poker/v1/query";
 import { QueryPlayerGamesRequest } from "./types/pokerchain/poker/v1/query";
 import { QueryLegalActionsRequest } from "./types/pokerchain/poker/v1/query";
 import { QueryGameStateRequest } from "./types/pokerchain/poker/v1/query";
+import { QueryGameStatePublicRequest } from "./types/pokerchain/poker/v1/query";
 import { QueryIsTxProcessedRequest } from "./types/pokerchain/poker/v1/query";
 import { QueryGetWithdrawalRequestRequest } from "./types/pokerchain/poker/v1/query";
 import { QueryListWithdrawalRequestsRequest } from "./types/pokerchain/poker/v1/query";
@@ -311,11 +313,30 @@ export class Api<SecurityDataType extends unknown> extends HttpClient<SecurityDa
    * @request GET:/block52/pokerchain/poker/v1/game_state/{game_id}
    */
   queryGameState = (game_id: string,
-    query?: Record<string, any>,
+    query?: Omit<FlattenObject<SnakeCasedPropertiesDeep<ChangeProtoToJSPrimitives<QueryGameStateRequest>>>,"game_id">,
     params: RequestParams = {},
   ) =>
     this.request<SnakeCasedPropertiesDeep<ChangeProtoToJSPrimitives<QueryGameStateResponse>>>({
       path: `/block52/pokerchain/poker/v1/game_state/${game_id}`,
+      method: "GET",
+      query: query,
+      format: "json",
+      ...params,
+    });
+  
+  /**
+   * QueryGameStatePublic
+   *
+   * @tags Query
+   * @name queryGameStatePublic
+   * @request GET:/block52/pokerchain/poker/v1/game_state_public/{game_id}
+   */
+  queryGameStatePublic = (game_id: string,
+    query?: Record<string, any>,
+    params: RequestParams = {},
+  ) =>
+    this.request<SnakeCasedPropertiesDeep<ChangeProtoToJSPrimitives<QueryGameStatePublicResponse>>>({
+      path: `/block52/pokerchain/poker/v1/game_state_public/${game_id}`,
       method: "GET",
       query: query,
       format: "json",
