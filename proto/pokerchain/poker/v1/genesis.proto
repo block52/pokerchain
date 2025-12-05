@@ -19,6 +19,13 @@ message WithdrawalRequest {
   int64 completed_at = 8;        // Block time when withdrawal was completed on Base (0 if not completed)
 }
 
+// DepositSyncState tracks the state of automatic deposit synchronization.
+// This is used by validators to process deposits in EndBlock deterministically.
+message DepositSyncState {
+  uint64 last_processed_index = 1;  // Last deposit index that was processed
+  uint64 last_eth_block_height = 2; // Ethereum block height used for the last query (for determinism)
+}
+
 // GenesisState defines the poker module's genesis state.
 message GenesisState {
   // params defines all the parameters of the module.
@@ -35,4 +42,7 @@ message GenesisState {
 
   // Withdrawal nonce counter - increments for each new withdrawal
   uint64 withdrawal_nonce = 4;
+
+  // Deposit sync state - tracks automatic deposit synchronization
+  DepositSyncState deposit_sync_state = 5;
 }

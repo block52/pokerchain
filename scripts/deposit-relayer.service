@@ -1,0 +1,20 @@
+[Unit]
+Description=Pokerchain Deposit Relayer
+After=network.target pokerchaind.service
+Wants=pokerchaind.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+Environment="ETH_RPC_URL=https://mainnet.base.org"
+Environment="DEPOSIT_CONTRACT=0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"
+Environment="COSMOS_CHAIN_ID=pokerchain"
+Environment="COSMOS_NODE=http://localhost:26657"
+Environment="RELAYER_KEY=relayer"
+ExecStart=/usr/local/bin/deposit-relayer
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

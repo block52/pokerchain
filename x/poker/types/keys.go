@@ -32,3 +32,9 @@ var WithdrawalRequestsKey = collections.NewPrefix("withdrawal_requests")
 
 // WithdrawalNonceKey is the prefix for withdrawal nonce sequence
 var WithdrawalNonceKey = collections.NewPrefix("withdrawal_nonce")
+
+// LastProcessedDepositIndexKey is the prefix for the last processed deposit index
+var LastProcessedDepositIndexKey = collections.NewPrefix("last_processed_deposit_index")
+
+// LastEthBlockHeightKey is the prefix for the last Ethereum block height used
+var LastEthBlockHeightKey = collections.NewPrefix("last_eth_block_height")
