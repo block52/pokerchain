@@ -31,6 +31,10 @@ type Keeper struct {
 	WithdrawalRequests collections.Map[string, types.WithdrawalRequest]
 	// WithdrawalNonce is a sequence for generating unique withdrawal IDs
 	WithdrawalNonce collections.Sequence
+	// LastProcessedDepositIndex tracks the last processed deposit index for auto-sync
+	LastProcessedDepositIndex collections.Sequence
+	// LastEthBlockHeight tracks the Ethereum block height used for deterministic queries
+	LastEthBlockHeight collections.Sequence
 
 	authKeeper    types.AuthKeeper
 	bankKeeper    types.BankKeeper
@@ -77,8 +81,10 @@ func NewKeeper(
 		ProcessedEthTxs:    collections.NewKeySet(sb, types.ProcessedEthTxsKey, "processed_eth_txs", collections.StringKey),
 		Games:              collections.NewMap(sb, types.GamesKey, "games", collections.StringKey, codec.CollValue[types.Game](cdc)),
 		GameStates:         collections.NewMap(sb, types.GameStatesKey, "game_states", collections.StringKey, codec.CollValue[types.TexasHoldemStateDTO](cdc)),
-		WithdrawalRequests: collections.NewMap(sb, types.WithdrawalRequestsKey, "withdrawal_requests", collections.StringKey, codec.CollValue[types.WithdrawalRequest](cdc)),
-		WithdrawalNonce:    collections.NewSequence(sb, types.WithdrawalNonceKey, "withdrawal_nonce"),
+		WithdrawalRequests:        collections.NewMap(sb, types.WithdrawalRequestsKey, "withdrawal_requests", collections.StringKey, codec.CollValue[types.WithdrawalRequest](cdc)),
+		WithdrawalNonce:           collections.NewSequence(sb, types.WithdrawalNonceKey, "withdrawal_nonce"),
+		LastProcessedDepositIndex: collections.NewSequence(sb, types.LastProcessedDepositIndexKey, "last_processed_deposit_index"),
+		LastEthBlockHeight:        collections.NewSequence(sb, types.LastEthBlockHeightKey, "last_eth_block_height"),
 	}
 
 	schema, err := sb.Build()
