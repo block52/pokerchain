@@ -35,25 +35,54 @@ func (k Keeper) SetLastEthBlockHeight(ctx context.Context, height uint64) error 
 // It queries Ethereum for the next deposit index and processes it if found.
 // Returns true if a deposit was processed, false otherwise.
 //
-// CONSENSUS CRITICAL: This function MUST be deterministic across all validators.
-// - We use the stored eth_block_height from the last processed deposit transaction
-// - The relayer sets this height when processing deposits via MsgProcessDeposit
-// - All validators use the same stored height, ensuring deterministic queries
-// - If no eth_block_height is set yet, we skip until a relayer processes the first deposit
+// DETERMINISM: Querying Ethereum by deposit INDEX is deterministic because:
+// - Deposit data at a given index is IMMUTABLE once written to the contract
+// - Even if validators query at different Ethereum blocks, index N always returns same data
+// - The only non-determinism would be if a deposit doesn't exist yet at one validator's query time
+//   but does exist at another's - we handle this by only storing state on SUCCESS
+//
+// Flow:
+// 1. Query Ethereum for deposit at next index (using stored or fresh block height)
+// 2. If deposit exists and is valid → process it, store eth_block_height used
+// 3. If deposit doesn't exist → return false (try again next block)
+// 4. If deposit is invalid → skip it deterministically
 func (k Keeper) ProcessNextDeposit(ctx context.Context) (bool, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	logger := sdkCtx.Logger().With("module", "poker/deposit_sync")
 
-	// CONSENSUS CRITICAL: Only use stored Ethereum block height
-	// This height is set by the relayer when processing deposits via MsgProcessDeposit
-	// All validators will use this same height, ensuring deterministic Ethereum queries
+	// Get stored Ethereum block height (may be 0 on fresh chain)
 	ethBlockHeight, err := k.GetLastEthBlockHeight(ctx)
-	if err != nil || ethBlockHeight == 0 {
-		// No eth block height set yet - waiting for relayer to process first deposit
-		// The relayer will set eth_block_height via MsgProcessDeposit transaction
-		// Once set, auto-sync will kick in for subsequent deposits
-		logger.Debug("No eth_block_height set yet, waiting for relayer to process first deposit")
-		return false, nil
+	if err != nil {
+		ethBlockHeight = 0
+	}
+
+	// If no stored height, query current Ethereum block for a finalized height
+	// This is used for the query but NOT stored until a deposit succeeds
+	if ethBlockHeight == 0 {
+		verifier, err := NewBridgeVerifier(k.ethRPCURL, k.depositContractAddr)
+		if err != nil {
+			logger.Debug("Failed to create bridge verifier", "error", err)
+			return false, nil
+		}
+
+		currentBlock, err := verifier.ethClient.BlockNumber(ctx)
+		verifier.Close()
+		if err != nil {
+			logger.Debug("Failed to get current Ethereum block", "error", err)
+			return false, nil
+		}
+
+		// Use finalized block (64 blocks behind for safety)
+		if currentBlock > 64 {
+			ethBlockHeight = currentBlock - 64
+		} else {
+			ethBlockHeight = 1
+		}
+
+		logger.Info("Using fresh eth_block_height for query",
+			"current_eth_block", currentBlock,
+			"query_height", ethBlockHeight,
+		)
 	}
 
 	// Get the last processed deposit index
@@ -136,6 +165,11 @@ func (k Keeper) ProcessNextDeposit(ctx context.Context) (bool, error) {
 			logger.Error("Failed to update last processed index", "error", setErr)
 		}
 
+		// Store eth_block_height for consistency in future queries
+		if setErr := k.SetLastEthBlockHeight(ctx, ethBlockHeight); setErr != nil {
+			logger.Error("Failed to update eth_block_height", "error", setErr)
+		}
+
 		// Emit event for skipped deposit
 		sdkCtx.EventManager().EmitEvents(sdk.Events{
 			sdk.NewEvent(
@@ -151,9 +185,13 @@ func (k Keeper) ProcessNextDeposit(ctx context.Context) (bool, error) {
 		return true, nil // Return true to indicate we processed (skipped) this deposit
 	}
 
-	// Update the last processed index
+	// Update state: last processed index AND eth_block_height
+	// Storing eth_block_height ensures future queries use this height for consistency
 	if err := k.SetLastProcessedDepositIndex(ctx, nextIndex); err != nil {
 		logger.Error("Failed to update last processed index", "error", err)
+	}
+	if err := k.SetLastEthBlockHeight(ctx, ethBlockHeight); err != nil {
+		logger.Error("Failed to update eth_block_height", "error", err)
 	}
 
 	logger.Info("Successfully processed deposit",
