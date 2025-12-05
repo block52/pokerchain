@@ -84,6 +84,14 @@ service Msg {
     option (google.api.http).post = "/block52/pokerchain/poker/v1/sign_withdrawal";
     option (google.api.http).body = "*";
   }
+
+  // UpdateEthBlockHeight defines the UpdateEthBlockHeight RPC.
+  // Updates the Ethereum block height used for deterministic deposit queries.
+  // This must be called via a transaction to ensure all validators use the same height.
+  rpc UpdateEthBlockHeight(MsgUpdateEthBlockHeight) returns (MsgUpdateEthBlockHeightResponse) {
+    option (google.api.http).post = "/block52/pokerchain/poker/v1/update_eth_block_height";
+    option (google.api.http).body = "*";
+  }
 }
 
 // MsgUpdateParams is the Msg/UpdateParams request type.
@@ -247,4 +255,19 @@ message MsgSignWithdrawal {
 // MsgSignWithdrawalResponse defines the MsgSignWithdrawalResponse message.
 message MsgSignWithdrawalResponse {
   bytes signature = 1;  // The generated Ethereum signature (65 bytes)
+}
+
+// MsgUpdateEthBlockHeight defines the MsgUpdateEthBlockHeight message.
+// Updates the Ethereum block height used for deterministic deposit queries.
+// This is CONSENSUS CRITICAL - all validators must use the same height when querying deposits.
+message MsgUpdateEthBlockHeight {
+  option (cosmos.msg.v1.signer) = "authority";
+  string authority = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];  // Authority address (gov or admin)
+  uint64 eth_block_height = 2;  // The finalized Ethereum block height to use for deposit queries
+}
+
+// MsgUpdateEthBlockHeightResponse defines the MsgUpdateEthBlockHeightResponse message.
+message MsgUpdateEthBlockHeightResponse {
+  uint64 old_height = 1;  // The previous Ethereum block height
+  uint64 new_height = 2;  // The new Ethereum block height
 }

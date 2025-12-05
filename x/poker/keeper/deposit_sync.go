@@ -34,9 +34,25 @@ func (k Keeper) SetLastEthBlockHeight(ctx context.Context, height uint64) error 
 // ProcessNextDeposit attempts to process the next deposit in the queue.
 // It queries Ethereum for the next deposit index and processes it if found.
 // Returns true if a deposit was processed, false otherwise.
+//
+// CONSENSUS CRITICAL: This function MUST be deterministic across all validators.
+// - We NEVER query Ethereum block height dynamically during EndBlock
+// - The eth_block_height must be set via UpdateEthBlockHeight (governance/relayer tx)
+// - If no eth_block_height is set, we skip deposit processing until one is set
 func (k Keeper) ProcessNextDeposit(ctx context.Context) (bool, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	logger := sdkCtx.Logger().With("module", "poker/deposit_sync")
+
+	// CONSENSUS CRITICAL: Only use stored Ethereum block height
+	// DO NOT query Ethereum dynamically - this causes non-determinism!
+	ethBlockHeight, err := k.GetLastEthBlockHeight(ctx)
+	if err != nil || ethBlockHeight == 0 {
+		// No eth block height set yet - skip deposit processing
+		// The eth_block_height must be set via a transaction (UpdateEthBlockHeight)
+		// to ensure all validators use the same height
+		logger.Debug("No eth_block_height set, skipping deposit sync (requires UpdateEthBlockHeight tx)")
+		return false, nil
+	}
 
 	// Get the last processed deposit index
 	lastIndex, err := k.GetLastProcessedDepositIndex(ctx)
@@ -46,38 +62,6 @@ func (k Keeper) ProcessNextDeposit(ctx context.Context) (bool, error) {
 	}
 
 	nextIndex := lastIndex + 1
-
-	// Get the Ethereum block height to use for the query
-	// We use a finalized block height that's agreed upon by consensus
-	ethBlockHeight, err := k.GetLastEthBlockHeight(ctx)
-	if err != nil || ethBlockHeight == 0 {
-		// Query current Ethereum block and use a finalized height (current - 64 blocks for safety)
-		verifier, err := NewBridgeVerifier(k.ethRPCURL, k.depositContractAddr)
-		if err != nil {
-			logger.Error("Failed to create bridge verifier", "error", err)
-			return false, nil // Don't halt chain, just skip this block
-		}
-		defer verifier.Close()
-
-		currentBlock, err := verifier.ethClient.BlockNumber(ctx)
-		if err != nil {
-			logger.Error("Failed to get current Ethereum block", "error", err)
-			return false, nil
-		}
-
-		// Use a finalized block height (64 blocks behind for safety)
-		// This ensures all validators query at the same height
-		if currentBlock > 64 {
-			ethBlockHeight = currentBlock - 64
-		} else {
-			ethBlockHeight = currentBlock
-		}
-
-		// Store this height so all future queries in this round use the same height
-		if err := k.SetLastEthBlockHeight(ctx, ethBlockHeight); err != nil {
-			logger.Error("Failed to set last eth block height", "error", err)
-		}
-	}
 
 	logger.Info("Checking for next deposit",
 		"next_index", nextIndex,
@@ -131,8 +115,38 @@ func (k Keeper) ProcessNextDeposit(ctx context.Context) (bool, error) {
 	// Process the deposit
 	err = k.ProcessBridgeDeposit(ctx, ethTxHash, depositData.Account, amount, depositData.Index)
 	if err != nil {
-		logger.Error("Failed to process bridge deposit", "error", err)
-		return false, nil // Don't halt chain
+		// CONSENSUS CRITICAL: If processing fails (e.g., invalid address), we MUST
+		// skip this deposit deterministically to avoid retrying forever.
+		// All validators will see the same deposit data and make the same decision.
+		logger.Error("Failed to process bridge deposit, marking as skipped",
+			"error", err,
+			"index", nextIndex,
+			"account", depositData.Account,
+		)
+
+		// Mark the tx hash as processed to prevent retries
+		if setErr := k.ProcessedEthTxs.Set(sdkCtx, ethTxHash); setErr != nil {
+			logger.Error("Failed to mark skipped deposit", "error", setErr)
+		}
+
+		// Update the last processed index to move past this deposit
+		if setErr := k.SetLastProcessedDepositIndex(ctx, nextIndex); setErr != nil {
+			logger.Error("Failed to update last processed index", "error", setErr)
+		}
+
+		// Emit event for skipped deposit
+		sdkCtx.EventManager().EmitEvents(sdk.Events{
+			sdk.NewEvent(
+				"deposit_skipped",
+				sdk.NewAttribute("deposit_index", fmt.Sprintf("%d", nextIndex)),
+				sdk.NewAttribute("recipient", depositData.Account),
+				sdk.NewAttribute("amount", fmt.Sprintf("%d", amount)),
+				sdk.NewAttribute("reason", err.Error()),
+				sdk.NewAttribute("eth_block_height", fmt.Sprintf("%d", ethBlockHeight)),
+			),
+		})
+
+		return true, nil // Return true to indicate we processed (skipped) this deposit
 	}
 
 	// Update the last processed index
@@ -159,6 +173,38 @@ func (k Keeper) ProcessNextDeposit(ctx context.Context) (bool, error) {
 	})
 
 	return true, nil
+}
+
+// UpdateEthBlockHeight updates the Ethereum block height used for deposit queries.
+// This MUST be called via a transaction to ensure all validators update at the same time.
+// The height should be a finalized Ethereum block (at least 64 blocks behind current).
+func (k Keeper) UpdateEthBlockHeight(ctx context.Context, height uint64) error {
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	logger := sdkCtx.Logger().With("module", "poker/deposit_sync")
+
+	// Get current height for logging
+	currentHeight, _ := k.GetLastEthBlockHeight(ctx)
+
+	// Update the height
+	if err := k.SetLastEthBlockHeight(ctx, height); err != nil {
+		return err
+	}
+
+	logger.Info("Updated eth_block_height",
+		"old_height", currentHeight,
+		"new_height", height,
+	)
+
+	// Emit event
+	sdkCtx.EventManager().EmitEvents(sdk.Events{
+		sdk.NewEvent(
+			"eth_block_height_updated",
+			sdk.NewAttribute("old_height", fmt.Sprintf("%d", currentHeight)),
+			sdk.NewAttribute("new_height", fmt.Sprintf("%d", height)),
+		),
+	})
+
+	return nil
 }
 
 // GetDepositContractCount queries the Ethereum contract for the total deposit count

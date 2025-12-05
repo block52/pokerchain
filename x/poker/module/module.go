@@ -141,25 +141,26 @@ func (am AppModule) BeginBlock(_ context.Context) error {
 // EndBlock contains the logic that is automatically triggered at the end of each block.
 // The end block implementation is optional.
 func (am AppModule) EndBlock(ctx context.Context) error {
-	// AUTOMATIC DEPOSIT SYNCHRONIZATION
-	// Validators automatically sync deposits from Ethereum in EndBlock.
-	// This is deterministic because:
-	// 1. All validators query at the same finalized Ethereum block height
-	// 2. Deposits are processed sequentially by index
-	// 3. The LastProcessedDepositIndex is stored in consensus state
+	// AUTOMATIC DEPOSIT SYNCHRONIZATION - DISABLED
+	// The auto-sync feature is temporarily disabled due to consensus issues.
+	// Problem: Different validators can get different Ethereum block heights when querying,
+	// causing non-deterministic state and consensus failures.
 	//
-	// Process up to 5 deposits per block to avoid timeouts
-	for i := 0; i < 5; i++ {
-		processed, err := am.keeper.ProcessNextDeposit(ctx)
-		if err != nil {
-			// Log error but don't halt chain
-			break
-		}
-		if !processed {
-			// No more deposits to process
-			break
-		}
-	}
+	// Solution: Use the deposit relayer to process deposits via explicit transactions.
+	// The relayer queries Ethereum and submits process-deposit transactions with
+	// explicit eth_block_height values, ensuring all validators process the same data.
+	//
+	// TODO: Re-enable auto-sync once MsgUpdateEthBlockHeight is implemented to allow
+	// setting the eth_block_height via a consensus transaction.
+	//
+	// The ProcessNextDeposit function has been updated to require eth_block_height
+	// to be set via a transaction first (it won't query Ethereum dynamically).
+	// Since we don't have the MsgUpdateEthBlockHeight message type generated yet,
+	// auto-sync is effectively disabled.
+	//
+	// Note: Deposits can still be processed via:
+	// 1. The deposit-relayer which submits process-deposit txs
+	// 2. Manual CLI: pokerchaind tx poker process-deposit <index> <eth_block_height>
 
 	// WITHDRAWAL AUTO-SIGNING:
 	// Unlike deposits, withdrawal signing CAN be done in EndBlocker because:
