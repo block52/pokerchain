@@ -56,33 +56,19 @@ func (k Keeper) ProcessNextDeposit(ctx context.Context) (bool, error) {
 		ethBlockHeight = 0
 	}
 
-	// If no stored height, query current Ethereum block for a finalized height
-	// This is used for the query but NOT stored until a deposit succeeds
+	// CONSENSUS CRITICAL: If no eth_block_height is set, we MUST wait for a relayer
+	// to set it via MsgProcessDeposit. Querying Ethereum for "current" block in EndBlock
+	// is NON-DETERMINISTIC because validators can get different block heights at
+	// slightly different times, causing AppHash mismatches and consensus failures.
+	//
+	// The relayer should:
+	// 1. Query Ethereum for deposits
+	// 2. Submit MsgProcessDeposit with a specific eth_block_height
+	// 3. This stores the eth_block_height in consensus state
+	// 4. All subsequent auto-syncs use that stored height
 	if ethBlockHeight == 0 {
-		verifier, err := NewBridgeVerifier(k.ethRPCURL, k.depositContractAddr)
-		if err != nil {
-			logger.Debug("Failed to create bridge verifier", "error", err)
-			return false, nil
-		}
-
-		currentBlock, err := verifier.ethClient.BlockNumber(ctx)
-		verifier.Close()
-		if err != nil {
-			logger.Debug("Failed to get current Ethereum block", "error", err)
-			return false, nil
-		}
-
-		// Use finalized block (64 blocks behind for safety)
-		if currentBlock > 64 {
-			ethBlockHeight = currentBlock - 64
-		} else {
-			ethBlockHeight = 1
-		}
-
-		logger.Info("Using fresh eth_block_height for query",
-			"current_eth_block", currentBlock,
-			"query_height", ethBlockHeight,
-		)
+		logger.Debug("No eth_block_height set, waiting for relayer to bootstrap via MsgProcessDeposit")
+		return false, nil
 	}
 
 	// Get the last processed deposit index
