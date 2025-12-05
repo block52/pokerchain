@@ -36,21 +36,23 @@ func (k Keeper) SetLastEthBlockHeight(ctx context.Context, height uint64) error 
 // Returns true if a deposit was processed, false otherwise.
 //
 // CONSENSUS CRITICAL: This function MUST be deterministic across all validators.
-// - We NEVER query Ethereum block height dynamically during EndBlock
-// - The eth_block_height must be set via UpdateEthBlockHeight (governance/relayer tx)
-// - If no eth_block_height is set, we skip deposit processing until one is set
+// - We use the stored eth_block_height from the last processed deposit transaction
+// - The relayer sets this height when processing deposits via MsgProcessDeposit
+// - All validators use the same stored height, ensuring deterministic queries
+// - If no eth_block_height is set yet, we skip until a relayer processes the first deposit
 func (k Keeper) ProcessNextDeposit(ctx context.Context) (bool, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	logger := sdkCtx.Logger().With("module", "poker/deposit_sync")
 
 	// CONSENSUS CRITICAL: Only use stored Ethereum block height
-	// DO NOT query Ethereum dynamically - this causes non-determinism!
+	// This height is set by the relayer when processing deposits via MsgProcessDeposit
+	// All validators will use this same height, ensuring deterministic Ethereum queries
 	ethBlockHeight, err := k.GetLastEthBlockHeight(ctx)
 	if err != nil || ethBlockHeight == 0 {
-		// No eth block height set yet - skip deposit processing
-		// The eth_block_height must be set via a transaction (UpdateEthBlockHeight)
-		// to ensure all validators use the same height
-		logger.Debug("No eth_block_height set, skipping deposit sync (requires UpdateEthBlockHeight tx)")
+		// No eth block height set yet - waiting for relayer to process first deposit
+		// The relayer will set eth_block_height via MsgProcessDeposit transaction
+		// Once set, auto-sync will kick in for subsequent deposits
+		logger.Debug("No eth_block_height set yet, waiting for relayer to process first deposit")
 		return false, nil
 	}
 

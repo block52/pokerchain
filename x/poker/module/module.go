@@ -141,26 +141,37 @@ func (am AppModule) BeginBlock(_ context.Context) error {
 // EndBlock contains the logic that is automatically triggered at the end of each block.
 // The end block implementation is optional.
 func (am AppModule) EndBlock(ctx context.Context) error {
-	// AUTOMATIC DEPOSIT SYNCHRONIZATION - DISABLED
-	// The auto-sync feature is temporarily disabled due to consensus issues.
-	// Problem: Different validators can get different Ethereum block heights when querying,
-	// causing non-deterministic state and consensus failures.
+	// AUTOMATIC DEPOSIT SYNCHRONIZATION
+	// Validators automatically sync deposits from Ethereum in EndBlock.
 	//
-	// Solution: Use the deposit relayer to process deposits via explicit transactions.
-	// The relayer queries Ethereum and submits process-deposit transactions with
-	// explicit eth_block_height values, ensuring all validators process the same data.
+	// This is DETERMINISTIC because:
+	// 1. The eth_block_height is stored in consensus state (set by relayer via MsgProcessDeposit)
+	// 2. All validators query Ethereum at the SAME stored block height
+	// 3. Deposits are processed sequentially by index
+	// 4. The LastProcessedDepositIndex tracks progress in consensus state
 	//
-	// TODO: Re-enable auto-sync once MsgUpdateEthBlockHeight is implemented to allow
-	// setting the eth_block_height via a consensus transaction.
+	// Flow:
+	// 1. Relayer detects new deposit on Ethereum
+	// 2. Relayer submits MsgProcessDeposit with current eth_block_height
+	// 3. MsgProcessDeposit stores the eth_block_height in state
+	// 4. EndBlock auto-sync uses that stored height for subsequent deposits
+	// 5. All validators query at the same height = deterministic results
 	//
-	// The ProcessNextDeposit function has been updated to require eth_block_height
-	// to be set via a transaction first (it won't query Ethereum dynamically).
-	// Since we don't have the MsgUpdateEthBlockHeight message type generated yet,
-	// auto-sync is effectively disabled.
+	// If no eth_block_height is set yet (fresh chain), auto-sync waits for relayer
+	// to process the first deposit, which will set the initial height.
 	//
-	// Note: Deposits can still be processed via:
-	// 1. The deposit-relayer which submits process-deposit txs
-	// 2. Manual CLI: pokerchaind tx poker process-deposit <index> <eth_block_height>
+	// Process up to 5 deposits per block to avoid timeouts
+	for i := 0; i < 5; i++ {
+		processed, err := am.keeper.ProcessNextDeposit(ctx)
+		if err != nil {
+			// Log error but don't halt chain
+			break
+		}
+		if !processed {
+			// No more deposits to process (or no eth_block_height set yet)
+			break
+		}
+	}
 
 	// WITHDRAWAL AUTO-SIGNING:
 	// Unlike deposits, withdrawal signing CAN be done in EndBlocker because:

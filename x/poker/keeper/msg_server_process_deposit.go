@@ -111,6 +111,22 @@ func (k msgServer) ProcessDeposit(ctx context.Context, msg *types.MsgProcessDepo
 		"eth_block_height", depositData.EthBlockHeight,
 	)
 
+	// CRITICAL: Store the eth_block_height and last processed deposit index
+	// This allows EndBlock auto-sync to use the same height for deterministic queries
+	if err := k.SetLastEthBlockHeight(ctx, msg.EthBlockHeight); err != nil {
+		logger.Error("❌ Failed to store eth_block_height", "error", err)
+		// Don't fail the tx, deposit was processed successfully
+	}
+	if err := k.SetLastProcessedDepositIndex(ctx, msg.DepositIndex); err != nil {
+		logger.Error("❌ Failed to store last processed deposit index", "error", err)
+		// Don't fail the tx, deposit was processed successfully
+	}
+
+	logger.Info("📝 Stored eth_block_height and deposit index for auto-sync",
+		"eth_block_height", msg.EthBlockHeight,
+		"last_processed_index", msg.DepositIndex,
+	)
+
 	// Return success response with the Ethereum block height used
 	// This block height should be included in the transaction for deterministic replay
 	return &types.MsgProcessDepositResponse{
