@@ -25,6 +25,15 @@ func (k msgServer) ProcessDeposit(ctx context.Context, msg *types.MsgProcessDepo
 		"eth_block_height", msg.EthBlockHeight,
 	)
 
+	// CONSENSUS CRITICAL: eth_block_height MUST be specified for deterministic replay
+	// If eth_block_height is 0, different validators would query Ethereum at different
+	// block heights, resulting in different responses and consensus failure.
+	// The deposit relayer must always specify the Ethereum block height.
+	if msg.EthBlockHeight == 0 {
+		logger.Error("❌ eth_block_height is required for deterministic consensus")
+		return nil, errorsmod.Wrapf(types.ErrInvalidRequest, "eth_block_height must be specified (got 0) - relayer must provide the Ethereum block height for deterministic replay")
+	}
+
 	// Create bridge verifier to query Ethereum
 	verifier, err := NewBridgeVerifier(k.ethRPCURL, k.depositContractAddr)
 	if err != nil {
@@ -33,9 +42,8 @@ func (k msgServer) ProcessDeposit(ctx context.Context, msg *types.MsgProcessDepo
 	}
 	defer verifier.Close()
 
-	// Query Ethereum contract for deposit data by index
-	// Use the specified eth_block_height for deterministic replay
-	// If eth_block_height is 0, GetDepositByIndex will use the current block and return it
+	// Query Ethereum contract for deposit data by index at the specified block height
+	// This ensures all validators query at the same Ethereum block for consensus
 	logger.Info("🔍 Querying Ethereum contract for deposit",
 		"contract", k.depositContractAddr,
 		"deposit_index", msg.DepositIndex,
