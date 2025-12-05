@@ -1,49 +1,69 @@
 # Bridge Architecture & Deposit Synchronization
 
-This document explains how the Ethereum-Cosmos bridge works, including the deposit relayer and automatic synchronization mechanism.
+This document explains how the Ethereum-Cosmos bridge works, including the automatic deposit synchronization mechanism.
 
 ## Overview
 
-The bridge enables USDC transfers from Base (Ethereum L2) to Pokerchain (Cosmos). It uses a hybrid approach:
-1. **Deposit Relayer** - External service that monitors Ethereum and submits the first deposit
-2. **Auto-Sync** - Validators automatically process subsequent deposits in EndBlock
+The bridge enables USDC transfers from Base (Ethereum L2) to Pokerchain (Cosmos). Validators automatically sync deposits from Ethereum in every block - no external relayer required.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                          BRIDGE ARCHITECTURE                                 │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-┌──────────────────┐         ┌──────────────────┐         ┌──────────────────┐
-│   BASE CHAIN     │         │  DEPOSIT RELAYER │         │   POKERCHAIN     │
-│   (Ethereum L2)  │         │   (Off-chain)    │         │   (Cosmos SDK)   │
-└────────┬─────────┘         └────────┬─────────┘         └────────┬─────────┘
-         │                            │                            │
-         │  1. User deposits USDC     │                            │
-         │  ───────────────────────►  │                            │
-         │  CosmosBridge.deposit()    │                            │
-         │                            │                            │
-         │  2. Emits Deposited event  │                            │
-         │  ◄───────────────────────  │                            │
-         │                            │                            │
-         │                            │  3. Detects event          │
-         │  ─────────────────────────►│                            │
-         │                            │                            │
-         │                            │  4. Submits MsgProcessDeposit
-         │                            │  ─────────────────────────►│
-         │                            │  (with eth_block_height)   │
-         │                            │                            │
-         │                            │                            │  5. Stores:
-         │                            │                            │  - eth_block_height
-         │                            │                            │  - last_processed_index
-         │                            │                            │  - Mints USDC to user
-         │                            │                            │
-         │                            │                            │  6. EndBlock Auto-Sync
-         │  ◄──────────────────────────────────────────────────────│
-         │  Query deposits at stored eth_block_height              │
-         │  ──────────────────────────────────────────────────────►│
-         │                            │                            │  7. Process next deposits
-         │                            │                            │
-         ▼                            ▼                            ▼
+┌──────────────────────────────────────┐         ┌────────────────────────────┐
+│            BASE CHAIN                 │         │        POKERCHAIN          │
+│          (Ethereum L2)                │         │       (Cosmos SDK)         │
+└──────────────────┬───────────────────┘         └─────────────┬──────────────┘
+                   │                                           │
+                   │  1. User deposits USDC                    │
+                   │  CosmosBridge.depositUnderlying()         │
+                   │                                           │
+                   │  2. Contract stores deposit:              │
+                   │     deposits[index] = {account, amount}   │
+                   │                                           │
+                   │                                           │  3. EndBlock runs
+                   │                                           │     ProcessNextDeposit()
+                   │                                           │
+                   │  4. Validator queries contract            │
+                   │  ◄────────────────────────────────────────│
+                   │  deposits(nextIndex)                      │
+                   │  ────────────────────────────────────────►│
+                   │                                           │
+                   │                                           │  5. If deposit found:
+                   │                                           │     - Mint USDC to user
+                   │                                           │     - Store eth_block_height
+                   │                                           │     - Increment index
+                   │                                           │
+                   │                                           │  6. All validators do same
+                   │                                           │     = CONSENSUS
+                   ▼                                           ▼
+```
+
+## Key Insight: Index-Based Queries are Deterministic
+
+The bridge works because **deposit data is immutable once written**:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     WHY THIS IS DETERMINISTIC                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Ethereum Contract State:                                                    │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  deposits[1] = {account: "b52abc...", amount: 1000000}  ← IMMUTABLE │    │
+│  │  deposits[2] = {account: "b52def...", amount: 2000000}  ← IMMUTABLE │    │
+│  │  deposits[3] = {account: "b52ghi...", amount: 500000}   ← IMMUTABLE │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+│  When validators query deposits(2):                                          │
+│  - Validator A queries at block 39060000 → {b52def, 2000000}                │
+│  - Validator B queries at block 39060005 → {b52def, 2000000}  ← SAME!       │
+│  - Validator C queries at block 39060010 → {b52def, 2000000}  ← SAME!       │
+│                                                                              │
+│  The data at index N never changes, so all validators get identical results │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Components
@@ -53,294 +73,297 @@ The bridge enables USDC transfers from Base (Ethereum L2) to Pokerchain (Cosmos)
 **Address**: `0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B`
 
 The Solidity contract on Base that:
-- Accepts USDC deposits from users
-- Stores deposit data: `mapping(uint256 => Deposit) public deposits`
+- Accepts USDC deposits from users via `depositUnderlying(amount, cosmosAddress)`
+- Stores deposit data in a mapping: `mapping(uint256 => Deposit) public deposits`
+- Auto-increments deposit index for each new deposit
 - Emits `Deposited(string account, uint256 amount, uint256 index)` events
-- Tracks deposit count with auto-incrementing index
 
 ```solidity
 struct Deposit {
     string account;   // Cosmos bech32 address (b52...)
     uint256 amount;   // USDC amount in microunits (6 decimals)
 }
+
+// Key property: Once written, deposit data NEVER changes
+// This enables deterministic cross-chain queries
 ```
 
-### 2. Deposit Relayer (`cmd/deposit-relayer/`)
+### 2. Poker Module (`x/poker/`)
 
-An off-chain Go service that:
-- Polls Base chain for `Deposited` events
-- Submits `MsgProcessDeposit` transactions to Pokerchain
-- Provides the initial `eth_block_height` for deterministic queries
+The Cosmos SDK module that automatically syncs deposits:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     DEPOSIT RELAYER                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
-│  │  ETH Client  │───►│ Event Parser │───►│  TX Builder  │       │
-│  │  (Base RPC)  │    │              │    │              │       │
-│  └──────────────┘    └──────────────┘    └──────┬───────┘       │
-│         │                                        │               │
-│         │ FilterLogs(Deposited)                  │ pokerchaind   │
-│         ▼                                        ▼ tx poker      │
-│  ┌──────────────┐                        ┌──────────────┐       │
-│  │ Block Range  │                        │ process-deposit     │
-│  │  Tracker     │                        │ <index>       │       │
-│  └──────────────┘                        │ <eth_height>  │       │
-│                                          └──────────────┘       │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           POKER MODULE                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                            KEEPER                                       │ │
+│  ├────────────────────────────────────────────────────────────────────────┤ │
+│  │                                                                         │ │
+│  │  State (Collections):                                                   │ │
+│  │  ┌───────────────────────────────────────────────────────────────────┐ │ │
+│  │  │ LastProcessedDepositIndex  Sequence[uint64]  → Current: 18        │ │ │
+│  │  │ LastEthBlockHeight         Sequence[uint64]  → Current: 39063051  │ │ │
+│  │  │ ProcessedEthTxs            KeySet[string]    → Processed tx hashes│ │ │
+│  │  └───────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                         │ │
+│  │  Config (from app.toml):                                                │ │
+│  │  ┌───────────────────────────────────────────────────────────────────┐ │ │
+│  │  │ ethRPCURL           = "https://base-mainnet.g.alchemy.com/..."    │ │ │
+│  │  │ depositContractAddr = "0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"│ │ │
+│  │  └───────────────────────────────────────────────────────────────────┘ │ │
+│  │                                                                         │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  ┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐  │
+│  │   module.go         │  │  deposit_sync.go    │  │  bridge_verifier.go │  │
+│  │   EndBlock()        │  │  ProcessNextDeposit │  │  GetDepositByIndex  │  │
+│  │   ───────────────►  │  │  ───────────────►   │  │  ───────────────►   │  │
+│  │   Calls sync loop   │  │  Main sync logic    │  │  Ethereum RPC call  │  │
+│  └─────────────────────┘  └─────────────────────┘  └─────────────────────┘  │
+│                                    │                                         │
+│                                    ▼                                         │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                        bridge_keeper.go                                 │ │
+│  │                      ProcessBridgeDeposit()                             │ │
+│  │                    (Mints USDC, marks as processed)                     │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Configuration** (environment variables):
-```bash
-ETH_RPC_URL=https://mainnet.base.org
-DEPOSIT_CONTRACT=0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B
-COSMOS_NODE=http://localhost:26657
-COSMOS_CHAIN_ID=pokerchain
-RELAYER_KEY=relayer  # Key name in keyring
-```
-
-### 3. Poker Module (`x/poker/`)
-
-The Cosmos SDK module that handles deposits:
+## Auto-Sync Flow (Every Block)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      POKER MODULE                                │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │                      KEEPER                                 │ │
-│  ├────────────────────────────────────────────────────────────┤ │
-│  │                                                             │ │
-│  │  Collections (State Storage):                               │ │
-│  │  ┌─────────────────────────────────────────────────────┐   │ │
-│  │  │ LastProcessedDepositIndex  Sequence[uint64]         │   │ │
-│  │  │ LastEthBlockHeight         Sequence[uint64]         │   │ │
-│  │  │ ProcessedEthTxs            KeySet[string]           │   │ │
-│  │  └─────────────────────────────────────────────────────┘   │ │
-│  │                                                             │ │
-│  │  Bridge Configuration:                                      │ │
-│  │  ┌─────────────────────────────────────────────────────┐   │ │
-│  │  │ ethRPCURL              string                       │   │ │
-│  │  │ depositContractAddr    string                       │   │ │
-│  │  └─────────────────────────────────────────────────────┘   │ │
-│  │                                                             │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                                                                  │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────┐ │
-│  │ msg_server_      │  │ deposit_sync.go  │  │ bridge_        │ │
-│  │ process_deposit  │  │ (EndBlock sync)  │  │ verifier.go    │ │
-│  └────────┬─────────┘  └────────┬─────────┘  └───────┬────────┘ │
-│           │                     │                     │          │
-│           │ MsgProcessDeposit   │ ProcessNextDeposit  │ Query    │
-│           ▼                     ▼                     ▼ Ethereum │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                    bridge_keeper.go                          ││
-│  │                  ProcessBridgeDeposit()                      ││
-│  │              (Mints USDC, marks as processed)                ││
-│  └─────────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         EndBlock → ProcessNextDeposit()                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  for i := 0; i < 5; i++ {    // Process up to 5 deposits per block    │ │
+│  │      processed := ProcessNextDeposit()                                  │ │
+│  │      if !processed { break }                                            │ │
+│  │  }                                                                      │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                      ProcessNextDeposit()                               │ │
+│  ├────────────────────────────────────────────────────────────────────────┤ │
+│  │                                                                         │ │
+│  │  1. GET ETH BLOCK HEIGHT                                                │ │
+│  │     ┌─────────────────────────────────────────────────────────────┐    │ │
+│  │     │ ethBlockHeight = GetLastEthBlockHeight()                    │    │ │
+│  │     │                                                              │    │ │
+│  │     │ if ethBlockHeight == 0 {                                    │    │ │
+│  │     │     // First run: query current Ethereum block              │    │ │
+│  │     │     currentBlock = ethClient.BlockNumber()                  │    │ │
+│  │     │     ethBlockHeight = currentBlock - 64  // Finalized        │    │ │
+│  │     │     // Don't store yet - only store on successful process   │    │ │
+│  │     │ }                                                            │    │ │
+│  │     └─────────────────────────────────────────────────────────────┘    │ │
+│  │                                                                         │ │
+│  │  2. GET NEXT INDEX                                                      │ │
+│  │     ┌─────────────────────────────────────────────────────────────┐    │ │
+│  │     │ lastIndex = GetLastProcessedDepositIndex()  // e.g., 18     │    │ │
+│  │     │ nextIndex = lastIndex + 1                   // e.g., 19     │    │ │
+│  │     └─────────────────────────────────────────────────────────────┘    │ │
+│  │                                                                         │ │
+│  │  3. QUERY ETHEREUM                                                      │ │
+│  │     ┌─────────────────────────────────────────────────────────────┐    │ │
+│  │     │ depositData = verifier.GetDepositByIndex(19, ethBlockHeight)│    │ │
+│  │     │                                                              │    │ │
+│  │     │ // eth_call to contract: deposits(19)                       │    │ │
+│  │     │ // Returns: {account: "b52xyz...", amount: 1000000}         │    │ │
+│  │     └─────────────────────────────────────────────────────────────┘    │ │
+│  │                                                                         │ │
+│  │  4. PROCESS RESULT                                                      │ │
+│  │     ┌─────────────────────────────────────────────────────────────┐    │ │
+│  │     │ IF deposit NOT found (index doesn't exist yet):             │    │ │
+│  │     │     return false  // Try again next block                   │    │ │
+│  │     │                                                              │    │ │
+│  │     │ IF deposit found but INVALID (bad address):                 │    │ │
+│  │     │     - Mark as processed (skip it)                           │    │ │
+│  │     │     - Store eth_block_height                                │    │ │
+│  │     │     - Increment LastProcessedDepositIndex                   │    │ │
+│  │     │     - Emit "deposit_skipped" event                          │    │ │
+│  │     │     return true                                              │    │ │
+│  │     │                                                              │    │ │
+│  │     │ IF deposit found and VALID:                                 │    │ │
+│  │     │     - Mint USDC to recipient                                │    │ │
+│  │     │     - Mark txHash as processed                              │    │ │
+│  │     │     - Store eth_block_height                                │    │ │
+│  │     │     - Increment LastProcessedDepositIndex                   │    │ │
+│  │     │     - Emit "deposit_synced" event                           │    │ │
+│  │     │     return true                                              │    │ │
+│  │     └─────────────────────────────────────────────────────────────┘    │ │
+│  │                                                                         │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Deposit Flow (Detailed)
+## Consensus Guarantee
 
-### Step 1: User Deposits on Base
-
-```
-User                    CosmosBridge Contract
-  │                            │
-  │ depositUnderlying(         │
-  │   1000000,                 │  (1 USDC = 1,000,000 microunits)
-  │   "b52abc..."              │  (Cosmos address)
-  │ )                          │
-  │ ──────────────────────────►│
-  │                            │
-  │                            │ deposits[1] = {
-  │                            │   account: "b52abc...",
-  │                            │   amount: 1000000
-  │                            │ }
-  │                            │
-  │                            │ emit Deposited(
-  │                            │   "b52abc...",
-  │                            │   1000000,
-  │                            │   1  // index
-  │                            │ )
-  │ ◄──────────────────────────│
-  │  (tx receipt)              │
-```
-
-### Step 2: Relayer Detects & Submits
+All validators produce identical state because:
 
 ```
-Deposit Relayer                           Pokerchain
-      │                                        │
-      │ (Polling every 15s)                    │
-      │ eth.FilterLogs({                       │
-      │   topics: [Deposited],                 │
-      │   fromBlock: lastProcessed             │
-      │ })                                     │
-      │                                        │
-      │ Found: index=1, block=39060000         │
-      │                                        │
-      │ pokerchaind tx poker process-deposit   │
-      │   1                    (deposit index) │
-      │   39060000             (eth_block_height)
-      │ ──────────────────────────────────────►│
-      │                                        │
-      │                                        │ MsgProcessDeposit {
-      │                                        │   deposit_index: 1,
-      │                                        │   eth_block_height: 39060000
-      │                                        │ }
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         CONSENSUS MECHANISM                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  STATE ONLY CHANGES WHEN DEPOSIT IS FOUND                                    │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                                                                         │ │
+│  │  Validator A                  Validator B                Validator C    │ │
+│  │       │                            │                          │         │ │
+│  │       │ Query deposits(19)         │ Query deposits(19)       │ Query   │ │
+│  │       ▼                            ▼                          ▼         │ │
+│  │                                                                         │ │
+│  │  CASE 1: Deposit 19 doesn't exist yet                                   │ │
+│  │  ──────────────────────────────────────────────────────────────────     │ │
+│  │       │                            │                          │         │ │
+│  │       │ return false               │ return false             │ return  │ │
+│  │       │ (no state change)          │ (no state change)        │ false   │ │
+│  │       │                            │                          │         │ │
+│  │       ▼                            ▼                          ▼         │ │
+│  │    NO STATE CHANGE             NO STATE CHANGE           NO STATE CHANGE│ │
+│  │                            ✅ CONSENSUS                                 │ │
+│  │                                                                         │ │
+│  │  CASE 2: Deposit 19 exists                                              │ │
+│  │  ──────────────────────────────────────────────────────────────────     │ │
+│  │       │                            │                          │         │ │
+│  │       │ Got: {b52xyz, 1000000}     │ Got: {b52xyz, 1000000}   │ Got:    │ │
+│  │       │      ▲                     │      ▲                   │ same    │ │
+│  │       │      │                     │      │                   │         │ │
+│  │       │      └─────────────────────┴──────┴───────────────────┘         │ │
+│  │       │              SAME DATA (immutable on Ethereum)                  │ │
+│  │       │                            │                          │         │ │
+│  │       │ Process deposit            │ Process deposit          │ Process │ │
+│  │       │ Mint 1 USDC to b52xyz      │ Mint 1 USDC to b52xyz    │ same    │ │
+│  │       │ Store eth_block_height     │ Store eth_block_height   │ same    │ │
+│  │       │ Set index = 19             │ Set index = 19           │ same    │ │
+│  │       ▼                            ▼                          ▼         │ │
+│  │    SAME STATE                  SAME STATE                SAME STATE     │ │
+│  │                            ✅ CONSENSUS                                 │ │
+│  │                                                                         │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Step 3: Pokerchain Processes Deposit
+## Deposit Processing Example
+
+When a user deposits 1 USDC:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                   MsgProcessDeposit Handler                      │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  1. Validate eth_block_height != 0 (required for determinism)   │
-│                                                                  │
-│  2. Create BridgeVerifier and query Ethereum:                    │
-│     ┌───────────────────────────────────────────────────────┐   │
-│     │ verifier.GetDepositByIndex(1, 39060000)               │   │
-│     │   → CallContract(deposits(1), block=39060000)         │   │
-│     │   → Returns: {account: "b52abc...", amount: 1000000}  │   │
-│     └───────────────────────────────────────────────────────┘   │
-│                                                                  │
-│  3. Generate deterministic txHash:                               │
-│     sha256("0xcc391c8f...14FE5B-1") → "0x753cb5fb..."           │
-│                                                                  │
-│  4. Check not already processed:                                 │
-│     ProcessedEthTxs.Has("0x753cb5fb...") → false                │
-│                                                                  │
-│  5. Process deposit:                                             │
-│     ProcessBridgeDeposit(txHash, "b52abc...", 1000000, 1)       │
-│       → Mint 1000000 usdc to b52abc...                          │
-│       → Mark txHash as processed                                 │
-│                                                                  │
-│  6. CRITICAL: Store state for auto-sync:                         │
-│     ┌───────────────────────────────────────────────────────┐   │
-│     │ SetLastEthBlockHeight(39060000)     ← All validators  │   │
-│     │ SetLastProcessedDepositIndex(1)        will use this  │   │
-│     └───────────────────────────────────────────────────────┘   │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Step 4: Auto-Sync in EndBlock
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    EndBlock (Every Block)                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  for i := 0; i < 5; i++ {  // Process up to 5 per block         │
-│      ProcessNextDeposit()                                        │
-│  }                                                               │
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │              ProcessNextDeposit()                            ││
-│  ├─────────────────────────────────────────────────────────────┤│
-│  │                                                              ││
-│  │  1. Get stored eth_block_height:                             ││
-│  │     height = GetLastEthBlockHeight() → 39060000              ││
-│  │     (If 0, skip - waiting for relayer)                       ││
-│  │                                                              ││
-│  │  2. Get next index to process:                               ││
-│  │     lastIndex = GetLastProcessedDepositIndex() → 1           ││
-│  │     nextIndex = lastIndex + 1 → 2                            ││
-│  │                                                              ││
-│  │  3. Query Ethereum at STORED height (deterministic!):        ││
-│  │     ┌─────────────────────────────────────────────────────┐ ││
-│  │     │ verifier.GetDepositByIndex(2, 39060000)             │ ││
-│  │     │                              ▲                      │ ││
-│  │     │                              │                      │ ││
-│  │     │        Same height for ALL validators = CONSENSUS   │ ││
-│  │     └─────────────────────────────────────────────────────┘ ││
-│  │                                                              ││
-│  │  4. If deposit found:                                        ││
-│  │     - Process it (mint USDC)                                 ││
-│  │     - Update LastProcessedDepositIndex = 2                   ││
-│  │     - Return true (continue loop)                            ││
-│  │                                                              ││
-│  │  5. If deposit NOT found or invalid:                         ││
-│  │     - Mark as skipped (if invalid address)                   ││
-│  │     - Return false (stop loop)                               ││
-│  │                                                              ││
-│  └─────────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## Determinism Guarantee
-
-The key insight is that **all validators must produce identical state**. This is achieved by:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    DETERMINISM MECHANISM                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  PROBLEM: Validators query Ethereum at different times           │
-│           → Different block heights → Different results          │
-│           → Consensus failure (AppHash mismatch)                 │
-│                                                                  │
-│  SOLUTION: Store eth_block_height in consensus state             │
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │ Validator A          Validator B          Validator C   │    │
-│  │      │                    │                    │        │    │
-│  │      │ Read stored        │ Read stored        │ Read   │    │
-│  │      │ eth_block_height   │ eth_block_height   │ stored │    │
-│  │      ▼                    ▼                    ▼        │    │
-│  │  39060000             39060000             39060000     │    │
-│  │      │                    │                    │        │    │
-│  │      │ Query Ethereum     │ Query Ethereum     │ Query  │    │
-│  │      │ at block 39060000  │ at block 39060000  │ at     │    │
-│  │      │                    │                    │ 39060000    │
-│  │      ▼                    ▼                    ▼        │    │
-│  │  SAME DATA            SAME DATA            SAME DATA    │    │
-│  │      │                    │                    │        │    │
-│  │      │ Process deposit    │ Process deposit    │ Process│    │
-│  │      ▼                    ▼                    ▼        │    │
-│  │  SAME STATE           SAME STATE           SAME STATE   │    │
-│  │                                                          │    │
-│  │                    ✅ CONSENSUS!                         │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          DEPOSIT LIFECYCLE                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. USER ACTION (Base Chain)                                                 │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  User calls: CosmosBridge.depositUnderlying(1000000, "b52xyz...")      │ │
+│  │                                                                         │ │
+│  │  Contract:                                                              │ │
+│  │  - Transfers 1 USDC from user to contract                              │ │
+│  │  - depositCount++ (now 20)                                             │ │
+│  │  - deposits[20] = {account: "b52xyz...", amount: 1000000}              │ │
+│  │  - emit Deposited("b52xyz...", 1000000, 20)                            │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  2. AUTO-SYNC (Pokerchain - happens automatically)                           │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  EndBlock at height 1000:                                               │ │
+│  │  - lastIndex = 19, checking index 20                                    │ │
+│  │  - Query Ethereum: deposits(20) → {b52xyz, 1000000}                    │ │
+│  │  - Generate txHash: sha256("0xcc39...FE5B-20")                         │ │
+│  │  - Check not processed: ProcessedEthTxs.Has(txHash) → false            │ │
+│  │  - Mint 1000000 usdc to b52xyz...                                      │ │
+│  │  - ProcessedEthTxs.Set(txHash)                                         │ │
+│  │  - LastProcessedDepositIndex = 20                                       │ │
+│  │  - LastEthBlockHeight = 39063100                                        │ │
+│  │  - Emit event: deposit_synced{index: 20, recipient: b52xyz, ...}       │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  3. RESULT                                                                   │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  User b52xyz... now has 1 USDC on Pokerchain                           │ │
+│  │  Deposit is marked as processed (cannot be replayed)                    │ │
+│  │  All validators have identical state                                    │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## State Storage
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    CONSENSUS STATE (x/poker)                     │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  Key                           │ Type           │ Purpose        │
-│  ─────────────────────────────┼────────────────┼────────────────│
-│  last_processed_deposit_index │ Sequence[u64]  │ Track progress │
-│  last_eth_block_height        │ Sequence[u64]  │ Deterministic  │
-│                               │                │ Ethereum queries│
-│  processed_eth_txs            │ KeySet[string] │ Prevent double │
-│                               │                │ processing     │
-│                                                                  │
-│  Example state:                                                  │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │ last_processed_deposit_index: 5                         │    │
-│  │ last_eth_block_height: 39060000                         │    │
-│  │ processed_eth_txs: [                                    │    │
-│  │   "0x753cb5fb6ce6664d...",  // Deposit 1                │    │
-│  │   "0x8a4b2c3d4e5f6a7b...",  // Deposit 2                │    │
-│  │   ...                                                    │    │
-│  │ ]                                                        │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       CONSENSUS STATE (x/poker)                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Key                            │ Type           │ Description               │
+│  ──────────────────────────────┼────────────────┼───────────────────────────│
+│  last_processed_deposit_index  │ Sequence[u64]  │ Last processed index      │
+│  last_eth_block_height         │ Sequence[u64]  │ Ethereum block for queries│
+│  processed_eth_txs             │ KeySet[string] │ Processed tx hashes       │
+│                                                                              │
+│  Current State Example:                                                      │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │ last_processed_deposit_index: 18                                        │ │
+│  │ last_eth_block_height: 39063051                                         │ │
+│  │ processed_eth_txs: [                                                    │ │
+│  │   "0x753cb5fb6ce6664d6ac5e44ff0be1f790c68bfb1dea5dc825efe30ffef05f840", │ │
+│  │   "0x8a4b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b", │ │
+│  │   ... (one entry per processed deposit)                                 │ │
+│  │ ]                                                                        │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Error Handling
+
+### Invalid Deposit Address
+
+Deposits with invalid Cosmos addresses are skipped deterministically:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Query deposits(5) → {account: "0xabc123", amount: 1000000}                  │
+│                            ▲                                                 │
+│                            │ Invalid! Not a bech32 address                  │
+│                                                                              │
+│  All validators:                                                             │
+│  1. Try to process → fails with "invalid bech32 address"                    │
+│  2. Mark txHash as processed (prevent retry)                                 │
+│  3. Store eth_block_height                                                   │
+│  4. Increment LastProcessedDepositIndex to 5                                 │
+│  5. Emit "deposit_skipped" event with reason                                 │
+│  6. Move on to index 6                                                       │
+│                                                                              │
+│  Result: All validators skip the same deposit → CONSENSUS                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Deposit Doesn't Exist Yet
+
+When querying an index that doesn't exist:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Query deposits(25) → {account: "", amount: 0}                               │
+│                            ▲                                                 │
+│                            │ Empty = deposit not created yet                 │
+│                                                                              │
+│  All validators:                                                             │
+│  1. GetDepositByIndex returns error "deposit not found"                      │
+│  2. return false (no state change)                                           │
+│  3. Try again next block                                                     │
+│                                                                              │
+│  Result: All validators wait → CONSENSUS                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## File Structure
@@ -348,98 +371,63 @@ The key insight is that **all validators must produce identical state**. This is
 ```
 x/poker/
 ├── keeper/
-│   ├── keeper.go                    # Keeper with state collections
-│   ├── deposit_sync.go              # ProcessNextDeposit, state getters/setters
-│   ├── msg_server_process_deposit.go # MsgProcessDeposit handler
-│   ├── bridge_verifier.go           # Ethereum RPC queries
-│   └── bridge_keeper.go             # ProcessBridgeDeposit (minting)
+│   ├── keeper.go                     # Keeper with state collections
+│   ├── deposit_sync.go               # ProcessNextDeposit(), GetLastProcessedDepositIndex()
+│   ├── msg_server_process_deposit.go # Manual MsgProcessDeposit handler (optional)
+│   ├── bridge_verifier.go            # GetDepositByIndex() - Ethereum RPC
+│   └── bridge_keeper.go              # ProcessBridgeDeposit() - minting logic
 ├── module/
-│   └── module.go                    # EndBlock with auto-sync loop
+│   └── module.go                     # EndBlock() calls ProcessNextDeposit loop
 └── types/
-    ├── keys.go                      # Storage key prefixes
-    └── tx.pb.go                     # MsgProcessDeposit definition
+    └── keys.go                       # Storage key prefixes
 
-cmd/deposit-relayer/
-└── main.go                          # Off-chain relayer service
+Configuration in ~/.pokerchain/config/app.toml:
+[bridge]
+enabled = true
+ethereum_rpc_url = "https://base-mainnet.g.alchemy.com/v2/..."
+deposit_contract_address = "0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"
 ```
 
-## Running the System
-
-### 1. Start Pokerchain Validators
+## Monitoring
 
 ```bash
-# On each validator node
-systemctl start pokerchaind
+# Watch deposit processing in real-time
+journalctl -u pokerchaind -f | grep -E "(deposit|eth_block)"
+
+# Example output:
+# INF Checking for next deposit eth_block_height=39063051 next_index=19
+# INF Found deposit to process account=b52xyz... amount=1000000 index=19
+# INF Successfully processed deposit amount=1000000 index=19 recipient=b52xyz...
+
+# Check current sync status
+curl -s localhost:26657/status | jq '.result.sync_info.latest_block_height'
 ```
 
-### 2. Start Deposit Relayer (one instance)
+## Security Considerations
+
+1. **Double-Spending Prevention**: `ProcessedEthTxs` KeySet tracks all processed deposits by deterministic txHash
+2. **Deterministic txHash**: Generated from `sha256(contractAddress + "-" + depositIndex)` - same for all validators
+3. **Immutable Deposit Data**: Once written to Ethereum, deposit data never changes
+4. **Finalized Block Height**: Use 64 blocks behind current for reorg safety
+5. **No External Trust**: No relayer needed - validators query Ethereum directly
+
+## Optional: Deposit Relayer
+
+While not required for normal operation, a deposit relayer (`cmd/deposit-relayer/`) can be used to:
+- Process deposits faster (submit explicit transactions instead of waiting for EndBlock)
+- Monitor for deposit events and alert operators
+- Handle edge cases or stuck deposits
 
 ```bash
-# Environment setup
+# Run deposit relayer (optional)
 export ETH_RPC_URL="https://mainnet.base.org"
 export DEPOSIT_CONTRACT="0xcc391c8f1aFd6DB5D8b0e064BA81b1383b14FE5B"
 export COSMOS_NODE="http://localhost:26657"
 export RELAYER_KEY="relayer"
 
-# Run relayer
-cd cmd/deposit-relayer
-go run main.go
+cd cmd/deposit-relayer && go run main.go
 ```
-
-### 3. Monitor Deposits
-
-```bash
-# Check last processed index
-pokerchaind query poker params
-
-# Watch logs for deposit processing
-journalctl -u pokerchaind -f | grep -i deposit
-```
-
-## Error Handling
-
-### Invalid Deposit Address
-
-If a deposit has an invalid Cosmos address (e.g., hex instead of bech32):
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  1. ProcessNextDeposit queries deposit index N                   │
-│  2. GetDepositByIndex returns account="0xabc123..." (invalid)   │
-│  3. ProcessBridgeDeposit fails: "invalid bech32 address"        │
-│  4. CONSENSUS CRITICAL: Must handle deterministically!           │
-│     ┌─────────────────────────────────────────────────────────┐ │
-│     │ - Mark txHash as processed (prevent retry)              │ │
-│     │ - Increment LastProcessedDepositIndex                   │ │
-│     │ - Emit "deposit_skipped" event                          │ │
-│     │ - ALL validators skip the same deposit                  │ │
-│     └─────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Fresh Chain (No eth_block_height Set)
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  EndBlock runs...                                                │
-│  ProcessNextDeposit() called                                     │
-│  GetLastEthBlockHeight() returns 0                               │
-│  → Skip processing, log: "waiting for relayer to process first" │
-│  → Return false (no deposit processed)                           │
-│                                                                  │
-│  Once relayer submits first MsgProcessDeposit:                   │
-│  → eth_block_height stored in state                              │
-│  → Auto-sync kicks in for subsequent deposits                    │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## Security Considerations
-
-1. **Double-Spending Prevention**: `ProcessedEthTxs` KeySet tracks all processed deposits
-2. **Deterministic txHash**: Generated from `sha256(contractAddress-depositIndex)`
-3. **Block Height Finality**: Use height at least 64 blocks behind current (for reorg safety)
-4. **Relayer Trust**: Relayer only triggers processing; actual deposit data is verified on-chain
 
 ---
 
-*Last updated: v0.1.25 - Re-enabled auto-deposit sync with deterministic eth_block_height*
+*Last updated: v0.1.26 - Fully automatic deposit sync without relayer requirement*
