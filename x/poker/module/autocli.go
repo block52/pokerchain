@@ -100,9 +100,9 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 				},
 				{
 					RpcMethod:      "ProcessDeposit",
-					Use:            "process-deposit [deposit-index]",
+					Use:            "process-deposit [deposit-index] [eth-block-height]",
 					Short:          "Process an Ethereum bridge deposit by index",
-					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "deposit_index"}},
+					PositionalArgs: []*autocliv1.PositionalArgDescriptor{{ProtoField: "deposit_index"}, {ProtoField: "eth_block_height"}},
 				},
 				// this line is used by ignite scaffolding # autocli/tx
 			},

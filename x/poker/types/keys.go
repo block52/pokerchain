@@ -32,3 +32,6 @@ var WithdrawalRequestsKey = collections.NewPrefix("withdrawal_requests")
 
 // WithdrawalNonceKey is the prefix for withdrawal nonce sequence
 var WithdrawalNonceKey = collections.NewPrefix("withdrawal_nonce")
+
+// DepositSyncStateKey is the prefix for deposit sync state
+var DepositSyncStateKey = collections.NewPrefix("deposit_sync_state")
