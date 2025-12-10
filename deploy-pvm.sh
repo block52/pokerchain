@@ -339,14 +339,33 @@ build_docker_image() {
         # Remove any orphaned containers
         docker ps -aq --filter "status=exited" --filter "status=dead" | xargs -r docker rm
 
-        # Prune orphaned images and containers
-        docker system prune -f --filter "label!=keep" 2>/dev/null || true
+        # Save the current poker-vm image ID (if it exists) before building
+        OLD_IMAGE=\$(docker images -q poker-vm:latest 2>/dev/null || echo "")
+        if [ -n "\$OLD_IMAGE" ]; then
+            echo "📝 Current poker-vm:latest image ID: \$OLD_IMAGE"
+        fi
+
+        # Prune orphaned images and containers before build
+        docker system prune -f 2>/dev/null || true
 
         echo "🐳 Building Docker image with --no-cache (this may take several minutes)..."
         docker build --no-cache -t poker-vm:latest .
 
         if [ \$? -eq 0 ]; then
             echo "✅ Docker image built successfully"
+
+            # Remove old image if it exists and is now dangling
+            if [ -n "\$OLD_IMAGE" ]; then
+                echo "🧹 Removing old poker-vm image (\$OLD_IMAGE)..."
+                docker rmi "\$OLD_IMAGE" 2>/dev/null || true
+            fi
+
+            # Clean up any dangling images created during build
+            echo "🧹 Cleaning up dangling images..."
+            docker image prune -f
+
+            echo ""
+            echo "📦 Final poker-vm images:"
             docker images | grep poker-vm
         else
             echo "❌ Failed to build Docker image"
