@@ -92,6 +92,13 @@ service Msg {
     option (google.api.http).post = "/block52/pokerchain/poker/v1/update_eth_block_height";
     option (google.api.http).body = "*";
   }
+
+  // TopUp defines the TopUp RPC.
+  // Allows a player to add chips to their stack when not in an active hand.
+  rpc TopUp(MsgTopUp) returns (MsgTopUpResponse) {
+    option (google.api.http).post = "/block52/pokerchain/poker/v1/top_up";
+    option (google.api.http).body = "*";
+  }
 }
 
 // MsgUpdateParams is the Msg/UpdateParams request type.
@@ -270,4 +277,20 @@ message MsgUpdateEthBlockHeight {
 message MsgUpdateEthBlockHeightResponse {
   uint64 old_height = 1;  // The previous Ethereum block height
   uint64 new_height = 2;  // The new Ethereum block height
+}
+
+// MsgTopUp defines the MsgTopUp message.
+// Allows a player to add chips to their stack when not in an active hand.
+// Player must be in BUSTED, SITTING_OUT, or FOLDED status.
+// Total chips after top-up cannot exceed max_buy_in.
+message MsgTopUp {
+  option (cosmos.msg.v1.signer) = "player";
+  string player = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string game_id = 2;
+  uint64 amount = 3;  // Amount of chips to add (in micro-units, 6 decimals)
+}
+
+// MsgTopUpResponse defines the MsgTopUpResponse message.
+message MsgTopUpResponse {
+  uint64 new_stack = 1;  // Player's new stack after top-up
 }
