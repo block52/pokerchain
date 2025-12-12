@@ -11,26 +11,11 @@ import (
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	pokertypes "github.com/block52/pokerchain/x/poker/types"
 )
-
-// Config holds the WebSocket server configuration
-type Config struct {
-	Port            string // HTTP port for WebSocket server (e.g., ":8585")
-	TendermintWSURL string // Tendermint WebSocket URL (e.g., "ws://localhost:26657/websocket")
-	GRPCAddress     string // gRPC address for querying game state (e.g., "localhost:9090")
-}
-
-// DefaultConfig returns default configuration for local development
-func DefaultConfig() Config {
-	return Config{
-		Port:            ":8585",
-		TendermintWSURL: "ws://localhost:26657/websocket",
-		GRPCAddress:     "localhost:9090",
-	}
-}
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -739,13 +724,31 @@ func processBlockEvent(hub *Hub, response TendermintEventResponse) {
 // Start starts the WebSocket server with the given configuration
 // This function blocks, so call it in a goroutine if needed
 func Start(cfg Config) error {
-	log.Printf("[WS-Server] Starting WebSocket server on %s", cfg.Port)
+	// Log configuration
+	log.Println("[WS-Server] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Println("[WS-Server] Poker WebSocket Server Configuration")
+	log.Println("[WS-Server] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Printf("[WS-Server]   GRPC_URL:          %s", cfg.GRPCAddress)
+	log.Printf("[WS-Server]   ADDRESS_PREFIX:    %s", cfg.AddressPrefix)
+	log.Printf("[WS-Server]   TENDERMINT_WS_URL: %s", cfg.TendermintWSURL)
+	log.Printf("[WS-Server]   WS_SERVER_PORT:    %s", cfg.Port)
+	log.Printf("[WS-Server]   TLS:               %v", cfg.UseTLS)
+	log.Println("[WS-Server] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 	// Create gRPC connection (optional - for querying game state)
 	var grpcConn *grpc.ClientConn
 	var err error
 	if cfg.GRPCAddress != "" {
-		grpcConn, err = grpc.Dial(cfg.GRPCAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		var opts grpc.DialOption
+		if cfg.UseTLS {
+			log.Println("[WS-Server] Using TLS gRPC connection (production)")
+			opts = grpc.WithTransportCredentials(credentials.NewTLS(nil))
+		} else {
+			log.Println("[WS-Server] Using insecure gRPC connection (local development)")
+			opts = grpc.WithTransportCredentials(insecure.NewCredentials())
+		}
+
+		grpcConn, err = grpc.Dial(cfg.GRPCAddress, opts)
 		if err != nil {
 			log.Printf("[WS-Server] Warning: Failed to connect to gRPC at %s: %v (continuing without game state queries)", cfg.GRPCAddress, err)
 			grpcConn = nil
@@ -768,9 +771,11 @@ func Start(cfg Config) error {
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":       "ok",
-			"clients":      len(hub.clients),
-			"active_games": len(hub.games),
+			"status":        "ok",
+			"clients":       len(hub.clients),
+			"active_games":  len(hub.games),
+			"grpc_url":      cfg.GRPCAddress,
+			"tendermint_ws": cfg.TendermintWSURL,
 		})
 	})
 
