@@ -229,8 +229,62 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 
 	// Create JSON-RPC request with new params format:
 	// [from, to, action, value, index, gameStateJson, gameOptionsJson, data]
-	// Match PVM's getActionIndex() logic: actionCount + previousActions.length + 1
-	actionIndex := gameState.ActionCount + len(gameState.PreviousActions) + 1
+
+	// Step 1: Extract last action index from game state
+	// Get the last action index from previous actions (if any exist)
+	var lastActionIndex int = -1 // -1 means no previous actions
+	if len(gameState.PreviousActions) > 0 {
+		lastActionIndex = gameState.PreviousActions[len(gameState.PreviousActions)-1].Index
+	}
+
+	// Next action index should be lastActionIndex + 1
+	expectedActionIndex := lastActionIndex + 1
+
+	// Step 2: Validate against PVM legal actions
+	// Find the player in game state and verify the action index matches legal actions
+	var playerLegalActions []types.LegalActionDTO
+	for _, player := range gameState.Players {
+		if player.Address == playerId {
+			playerLegalActions = player.LegalActions
+			break
+		}
+	}
+
+	// Verify the action index matches legal actions
+	if len(playerLegalActions) > 0 {
+		// All legal actions for a player should have the same index
+		pvmExpectedIndex := playerLegalActions[0].Index
+
+		if expectedActionIndex != pvmExpectedIndex {
+			sdkCtx.Logger().Error("❌ Action index mismatch",
+				"gameId", gameId,
+				"player", playerId,
+				"action", action,
+				"cosmosCalculated", expectedActionIndex,
+				"pvmExpects", pvmExpectedIndex,
+				"lastActionIndex", lastActionIndex,
+				"previousActionsCount", len(gameState.PreviousActions))
+			return fmt.Errorf(
+				"action index mismatch: cosmos calculated %d but PVM expects %d (last action was %d, previousActions count: %d)",
+				expectedActionIndex,
+				pvmExpectedIndex,
+				lastActionIndex,
+				len(gameState.PreviousActions),
+			)
+		}
+	}
+
+	// Step 4: Log validated index for debugging
+	sdkCtx.Logger().Info("✅ Validated action index",
+		"gameId", gameId,
+		"player", playerId,
+		"action", action,
+		"lastIndex", lastActionIndex,
+		"previousActionsCount", len(gameState.PreviousActions),
+		"calculatedIndex", expectedActionIndex)
+
+	// Step 3: Use validated index
+	actionIndex := expectedActionIndex
 
 	// Format data parameter based on action type
 	var seatData string
@@ -347,6 +401,37 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 		var updatedGameState types.TexasHoldemStateDTO
 		if err := json.Unmarshal(dataBytes, &updatedGameState); err != nil {
 			return fmt.Errorf("failed to unmarshal updated game state: %v", err)
+		}
+
+		// Additional validation: Validate that PVM incremented the action index correctly
+		if len(updatedGameState.PreviousActions) > 0 {
+			lastIndex := updatedGameState.PreviousActions[len(updatedGameState.PreviousActions)-1].Index
+
+			// Should match what we sent
+			if lastIndex != actionIndex {
+				sdkCtx.Logger().Warn("⚠️ PVM returned different action index than expected",
+					"expected", actionIndex,
+					"received", lastIndex,
+					"gameId", gameId,
+					"action", action,
+					"player", playerId)
+			}
+		}
+
+		// Additional validation: Check for duplicate indices in previous actions
+		indexMap := make(map[int]bool)
+		for i, prevAction := range updatedGameState.PreviousActions {
+			if indexMap[prevAction.Index] {
+				sdkCtx.Logger().Error("🚨 Duplicate action index detected",
+					"gameId", gameId,
+					"index", prevAction.Index,
+					"position", i,
+					"action", prevAction.Action,
+					"playerId", prevAction.PlayerId,
+					"timestamp", prevAction.Timestamp)
+				// Don't fail the transaction, but log it for monitoring
+			}
+			indexMap[prevAction.Index] = true
 		}
 
 		// Store the updated game state
