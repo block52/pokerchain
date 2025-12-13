@@ -62,6 +62,14 @@ service Query {
   rpc ListWithdrawalRequests(QueryListWithdrawalRequestsRequest) returns (QueryListWithdrawalRequestsResponse) {
     option (google.api.http).get = "/block52/pokerchain/poker/v1/withdrawal_requests";
   }
+
+  // CalculateEquity calculates hand equity using Monte Carlo simulation
+  rpc CalculateEquity(QueryCalculateEquityRequest) returns (QueryCalculateEquityResponse) {
+    option (google.api.http) = {
+      post: "/block52/pokerchain/poker/v1/equity"
+      body: "*"
+    };
+  }
 }
 
 // QueryParamsRequest is request type for the Query/Params RPC method.
@@ -168,4 +176,42 @@ message QueryListWithdrawalRequestsRequest {
 message QueryListWithdrawalRequestsResponse {
   repeated WithdrawalRequest withdrawal_requests = 1;
   cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+// QueryCalculateEquityRequest defines the request for calculating hand equity
+message QueryCalculateEquityRequest {
+  // hands: Array of hole cards for each player, e.g., [["AS", "KS"], ["QH", "QD"]]
+  repeated HandCards hands = 1;
+  // board: Community cards (0=preflop, 3=flop, 4=turn, 5=river)
+  repeated string board = 2;
+  // dead: Dead/mucked cards (optional)
+  repeated string dead = 3;
+  // simulations: Number of Monte Carlo simulations (default: 10000, max: 100000)
+  int32 simulations = 4;
+}
+
+// HandCards represents hole cards for a single player
+message HandCards {
+  repeated string cards = 1;
+}
+
+// EquityResult represents the equity calculation result for a single hand
+message EquityResult {
+  int32 hand_index = 1;
+  repeated string hand = 2;
+  int32 wins = 3;
+  int32 ties = 4;
+  int32 losses = 5;
+  string equity = 6;      // Win probability as decimal string (0-1)
+  string tie_equity = 7;  // Equity from ties as decimal string
+  string total = 8;       // Total equity (wins + tie share) as decimal string
+}
+
+// QueryCalculateEquityResponse defines the response for calculating hand equity
+message QueryCalculateEquityResponse {
+  repeated EquityResult results = 1;
+  int32 simulations = 2;
+  string stage = 3;         // "Preflop", "Flop", "Turn", "River"
+  string duration_ms = 4;   // Duration in milliseconds
+  string hands_per_sec = 5; // Hands evaluated per second
 }
