@@ -230,18 +230,12 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 	// Create JSON-RPC request with new params format:
 	// [from, to, action, value, index, gameStateJson, gameOptionsJson, data]
 
-	// Step 1: Extract last action index from game state
-	// Get the last action index from previous actions (if any exist)
-	// PVM calculates: actionCount + previousActions.length + 1, which starts at 1 for first action
-	// So we use 0 as base (not -1) to match PVM's expectation that first action has index 1
-	var lastActionIndex int = 0 // 0 means no previous actions, first action will be index 1
-	if len(gameState.PreviousActions) > 0 {
-		lastActionIndex = gameState.PreviousActions[len(gameState.PreviousActions)-1].Index
-	}
-
-	// Next action index should be lastActionIndex + 1
-	// For first action: 0 + 1 = 1 (matches PVM's getActionIndex())
-	expectedActionIndex := lastActionIndex + 1
+	// Step 1: Calculate expected action index to match PVM's getActionIndex()
+	// PVM calculates: this._actionCount + this.getPreviousActions().length + 1
+	// - actionCount: persists across hands (total actions in the game session)
+	// - previousActions.length: actions in the current hand (resets on new-hand)
+	// This ensures action indices are globally unique and monotonically increasing
+	expectedActionIndex := gameState.ActionCount + len(gameState.PreviousActions) + 1
 
 	// Step 2: Validate against PVM legal actions
 	// Find the player in game state and verify the action index matches legal actions
@@ -265,13 +259,13 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 				"action", action,
 				"cosmosCalculated", expectedActionIndex,
 				"pvmExpects", pvmExpectedIndex,
-				"lastActionIndex", lastActionIndex,
+				"actionCount", gameState.ActionCount,
 				"previousActionsCount", len(gameState.PreviousActions))
 			return fmt.Errorf(
-				"action index mismatch: cosmos calculated %d but PVM expects %d (last action was %d, previousActions count: %d)",
+				"action index mismatch: cosmos calculated %d but PVM expects %d (actionCount: %d, previousActions: %d)",
 				expectedActionIndex,
 				pvmExpectedIndex,
-				lastActionIndex,
+				gameState.ActionCount,
 				len(gameState.PreviousActions),
 			)
 		}
@@ -282,7 +276,7 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 		"gameId", gameId,
 		"player", playerId,
 		"action", action,
-		"lastIndex", lastActionIndex,
+		"actionCount", gameState.ActionCount,
 		"previousActionsCount", len(gameState.PreviousActions),
 		"calculatedIndex", expectedActionIndex)
 
