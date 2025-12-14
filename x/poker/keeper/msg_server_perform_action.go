@@ -232,12 +232,15 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 
 	// Step 1: Extract last action index from game state
 	// Get the last action index from previous actions (if any exist)
-	var lastActionIndex int = -1 // -1 means no previous actions
+	// PVM calculates: actionCount + previousActions.length + 1, which starts at 1 for first action
+	// So we use 0 as base (not -1) to match PVM's expectation that first action has index 1
+	var lastActionIndex int = 0 // 0 means no previous actions, first action will be index 1
 	if len(gameState.PreviousActions) > 0 {
 		lastActionIndex = gameState.PreviousActions[len(gameState.PreviousActions)-1].Index
 	}
 
 	// Next action index should be lastActionIndex + 1
+	// For first action: 0 + 1 = 1 (matches PVM's getActionIndex())
 	expectedActionIndex := lastActionIndex + 1
 
 	// Step 2: Validate against PVM legal actions
