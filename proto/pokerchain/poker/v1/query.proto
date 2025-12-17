@@ -70,6 +70,11 @@ service Query {
       body: "*"
     };
   }
+
+  // Version returns chain version info and PVM health status
+  rpc Version(QueryVersionRequest) returns (QueryVersionResponse) {
+    option (google.api.http).get = "/block52/pokerchain/poker/v1/version";
+  }
 }
 
 // QueryParamsRequest is request type for the Query/Params RPC method.
@@ -214,4 +219,28 @@ message QueryCalculateEquityResponse {
   string stage = 3;         // "Preflop", "Flop", "Turn", "River"
   string duration_ms = 4;   // Duration in milliseconds
   string hands_per_sec = 5; // Hands evaluated per second
+}
+
+// QueryVersionRequest defines the request for getting version info
+message QueryVersionRequest {}
+
+// ChainVersion contains chain version information
+message ChainVersion {
+  string name = 1;
+  string version = 2;
+  uint64 consensus_version = 3;
+}
+
+// PvmStatus contains PVM health and version information
+message PvmStatus {
+  bool healthy = 1;
+  string version = 2;
+  string endpoint = 3;
+  string error = 4;  // populated if unhealthy
+}
+
+// QueryVersionResponse defines the response for getting version info
+message QueryVersionResponse {
+  ChainVersion chain = 1;
+  PvmStatus pvm = 2;
 }
