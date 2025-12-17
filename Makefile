@@ -30,15 +30,8 @@ ifeq ($(ARCH),)
 	ARCH := amd64
 endif
 
-# # do not override user values
-# ifeq (,$(VERSION))
-#   VERSION := $(shell git describe --exact-match 2>/dev/null)
-#   # if VERSION is empty, then populate it with branch name and raw commit hash
-#   ifeq (,$(VERSION))
-#     VERSION := $(BRANCH)-$(COMMIT)
-#   endif
-# endif
-VERSION := v0.1.32
+# Version is extracted from app/app.go (single source of truth)
+VERSION := v$(shell grep 'Version\s*=' app/app.go | head -1 | sed 's/.*"\(.*\)".*/\1/')
 
 # Update the ldflags with the app, client & server names
 ldflags = -X github.com/cosmos/cosmos-sdk/version.Name=$(APPNAME) \
