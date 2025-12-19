@@ -446,6 +446,65 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 				sdk.NewAttribute("amount", strconv.FormatUint(amount, 10)),
 			),
 		})
+
+		// Emit hand distribution events for indexer tracking
+		if action == "new-hand" {
+			// Emit hand_started event with deck seed for randomness verification
+			blockHash := sdkCtx.BlockHeader().AppHash
+			if len(blockHash) == 0 {
+				blockHash = sdkCtx.BlockHeader().LastCommitHash
+			}
+			sdkCtx.EventManager().EmitEvents(sdk.Events{
+				sdk.NewEvent(
+					"hand_started",
+					sdk.NewAttribute("game_id", gameId),
+					sdk.NewAttribute("hand_number", strconv.Itoa(updatedGameState.HandNumber)),
+					sdk.NewAttribute("block_height", strconv.FormatInt(sdkCtx.BlockHeight(), 10)),
+					sdk.NewAttribute("deck_seed", fmt.Sprintf("%x", blockHash)),
+					sdk.NewAttribute("deck", updatedGameState.Deck),
+				),
+			})
+		}
+
+		// Emit hand_completed event at showdown with revealed cards
+		if updatedGameState.Round == "showdown" && len(updatedGameState.Winners) > 0 {
+			// Collect all revealed hole cards from players who showed
+			var revealedCards []string
+			for _, player := range updatedGameState.Players {
+				if player.HoleCards != nil && len(*player.HoleCards) > 0 {
+					for _, card := range *player.HoleCards {
+						revealedCards = append(revealedCards, card)
+					}
+				}
+			}
+			// Serialize community cards
+			communityCardsStr := ""
+			for i, card := range updatedGameState.CommunityCards {
+				if i > 0 {
+					communityCardsStr += ","
+				}
+				communityCardsStr += card
+			}
+			// Serialize revealed hole cards
+			revealedCardsStr := ""
+			for i, card := range revealedCards {
+				if i > 0 {
+					revealedCardsStr += ","
+				}
+				revealedCardsStr += card
+			}
+			sdkCtx.EventManager().EmitEvents(sdk.Events{
+				sdk.NewEvent(
+					"hand_completed",
+					sdk.NewAttribute("game_id", gameId),
+					sdk.NewAttribute("hand_number", strconv.Itoa(updatedGameState.HandNumber)),
+					sdk.NewAttribute("block_height", strconv.FormatInt(sdkCtx.BlockHeight(), 10)),
+					sdk.NewAttribute("community_cards", communityCardsStr),
+					sdk.NewAttribute("revealed_hole_cards", revealedCardsStr),
+					sdk.NewAttribute("winner_count", strconv.Itoa(len(updatedGameState.Winners))),
+				),
+			})
+		}
 	} else {
 		return fmt.Errorf("no result returned from poker engine")
 	}
