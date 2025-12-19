@@ -60,7 +60,7 @@ const (
 	// Name is the name of the application.
 	Name = "pokerchain"
 	// Version is the version of the application. This is the single source of truth.
-	Version = "0.1.32"
+	Version = "0.1.33"
 	// AccountAddressPrefix is the prefix for accounts addresses.
 	AccountAddressPrefix = "b52"
 	// ChainCoinType is the coin type of the chain.
