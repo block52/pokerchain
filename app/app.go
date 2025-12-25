@@ -272,6 +272,11 @@ func New(
 	// See BRIDGE_DEPOSIT_FLOW.md for the new manual processing architecture
 	logger.Info("🌉 Bridge: Manual index-based processing enabled (no auto-sync)")
 
+	// Load and set PVM configuration
+	pvmConfig := loadPVMConfig(appOpts)
+	app.PokerKeeper.SetPVMConfig(pvmConfig.PVMURL)
+	logger.Info("🎰 PVM config set", "pvm_url", pvmConfig.PVMURL)
+
 	return app
 }
 
@@ -321,6 +326,20 @@ func loadBridgeConfig(appOpts servertypes.AppOptions) BridgeConfig {
 	}
 
 	return bridgeConfig
+}
+
+// loadPVMConfig loads PVM configuration from app options
+func loadPVMConfig(appOpts servertypes.AppOptions) PVMConfig {
+	pvmConfig := DefaultPVMConfig()
+
+	// Load from app config if available
+	if pvmURL := appOpts.Get("pvm.pvm_url"); pvmURL != nil {
+		if val, ok := pvmURL.(string); ok && val != "" {
+			pvmConfig.PVMURL = val
+		}
+	}
+
+	return pvmConfig
 }
 
 // GetSubspace returns a param subspace for a given module name.

@@ -277,7 +277,7 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 	}
 
 	// Make HTTP POST request to game engine
-	node := "http://localhost:8545"
+	node := k.Keeper.GetPVMURL()
 	resp, err := http.Post(node, "application/json", bytes.NewBuffer(requestBody))
 	if err != nil {
 		return fmt.Errorf("failed to make HTTP request to game engine at %s: %w", node, err)

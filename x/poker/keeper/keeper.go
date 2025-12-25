@@ -45,6 +45,9 @@ type Keeper struct {
 	ethRPCURL              string
 	depositContractAddr    string
 	validatorEthPrivateKey string // Hex-encoded Ethereum private key for withdrawal signing (without 0x prefix)
+
+	// PVM configuration
+	pvmURL string // URL of the Poker Virtual Machine RPC endpoint
 }
 
 func NewKeeper(
@@ -121,4 +124,17 @@ func (k *Keeper) SetBridgeConfig(ethRPCURL string, depositContractAddr string, v
 // GetValidatorEthPrivateKey returns the configured validator Ethereum private key
 func (k *Keeper) GetValidatorEthPrivateKey() string {
 	return k.validatorEthPrivateKey
+}
+
+// SetPVMConfig updates the PVM configuration
+func (k *Keeper) SetPVMConfig(pvmURL string) {
+	k.pvmURL = pvmURL
+}
+
+// GetPVMURL returns the configured PVM URL, defaulting to localhost if not set
+func (k *Keeper) GetPVMURL() string {
+	if k.pvmURL == "" {
+		return "http://localhost:8545"
+	}
+	return k.pvmURL
 }
