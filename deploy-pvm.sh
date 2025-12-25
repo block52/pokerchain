@@ -314,11 +314,51 @@ ENDSSH
     fi
 }
 
+# Clean up old Docker resources
+cleanup_docker() {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BLUE}Step 6: Cleaning up old Docker resources...${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    ssh "$remote_user@$remote_host" bash << 'ENDSSH'
+        echo "🧹 Stopping and removing existing poker-vm container..."
+        docker stop poker-vm 2>/dev/null || true
+        docker rm poker-vm 2>/dev/null || true
+
+        echo "🧹 Removing old poker-vm images..."
+        # Remove all poker-vm images (tagged and untagged)
+        docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' | grep poker-vm | awk '{print $2}' | xargs -r docker rmi -f 2>/dev/null || true
+
+        echo "🧹 Removing stopped containers..."
+        docker container prune -f 2>/dev/null || true
+
+        echo "🧹 Removing dangling images..."
+        docker image prune -f 2>/dev/null || true
+
+        echo "🧹 Removing unused volumes..."
+        docker volume prune -f 2>/dev/null || true
+
+        echo "🧹 Removing build cache..."
+        docker builder prune -f 2>/dev/null || true
+
+        echo "✅ Docker cleanup complete"
+        echo ""
+        echo "📊 Docker disk usage after cleanup:"
+        docker system df
+ENDSSH
+
+    if [ $? -ne 0 ]; then
+        echo -e "${YELLOW}⚠️  Some cleanup operations may have failed (this is usually OK)${NC}"
+    fi
+}
+
 # Build Docker image
 build_docker_image() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 6: Building Docker image...${NC}"
+    echo -e "${BLUE}Step 7: Building Docker image...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
@@ -335,33 +375,14 @@ build_docker_image() {
             exit 1
         fi
 
-        echo "🧹 Cleaning up old containers and images..."
-        # Remove any orphaned containers
-        docker ps -aq --filter "status=exited" --filter "status=dead" | xargs -r docker rm
-
-        # Save the current poker-vm image ID (if it exists) before building
-        OLD_IMAGE=\$(docker images -q poker-vm:latest 2>/dev/null || echo "")
-        if [ -n "\$OLD_IMAGE" ]; then
-            echo "📝 Current poker-vm:latest image ID: \$OLD_IMAGE"
-        fi
-
-        # Prune orphaned images and containers before build
-        docker system prune -f 2>/dev/null || true
-
         echo "🐳 Building Docker image with --no-cache (this may take several minutes)..."
         docker build --no-cache -t poker-vm:latest .
 
         if [ \$? -eq 0 ]; then
             echo "✅ Docker image built successfully"
 
-            # Remove old image if it exists and is now dangling
-            if [ -n "\$OLD_IMAGE" ]; then
-                echo "🧹 Removing old poker-vm image (\$OLD_IMAGE)..."
-                docker rmi "\$OLD_IMAGE" 2>/dev/null || true
-            fi
-
             # Clean up any dangling images created during build
-            echo "🧹 Cleaning up dangling images..."
+            echo "🧹 Cleaning up build artifacts..."
             docker image prune -f
 
             echo ""
@@ -383,7 +404,7 @@ ENDSSH
 setup_systemd_service() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${BLUE}Step 7: Setting up systemd service...${NC}"
+    echo -e "${BLUE}Step 8: Setting up systemd service...${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
@@ -547,6 +568,7 @@ main() {
     clone_repository
     setup_nodejs
     build_typescript
+    cleanup_docker
     build_docker_image
     setup_systemd_service
     check_pvm_health

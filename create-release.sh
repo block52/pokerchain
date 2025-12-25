@@ -47,20 +47,20 @@ while getopts "m:sh" opt; do
     esac
 done
 
-# Read version from Makefile
-if [ ! -f "Makefile" ]; then
-    echo -e "${RED}Error: Makefile not found${NC}"
+# Read version from app/app.go (same source as Makefile)
+if [ ! -f "app/app.go" ]; then
+    echo -e "${RED}Error: app/app.go not found${NC}"
     exit 1
 fi
 
-VERSION=$(grep "^VERSION :=" Makefile | awk '{print $3}')
+VERSION="v$(grep 'Version\s*=' app/app.go | head -1 | sed 's/.*"\(.*\)".*/\1/')"
 
-if [ -z "$VERSION" ]; then
-    echo -e "${RED}Error: Could not read VERSION from Makefile${NC}"
+if [ -z "$VERSION" ] || [ "$VERSION" = "v" ]; then
+    echo -e "${RED}Error: Could not read VERSION from app/app.go${NC}"
     exit 1
 fi
 
-echo "Read version from Makefile: $VERSION"
+echo "Read version from app/app.go: $VERSION"
 
 # Validate version format
 if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then

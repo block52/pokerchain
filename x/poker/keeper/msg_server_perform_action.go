@@ -229,8 +229,59 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 
 	// Create JSON-RPC request with new params format:
 	// [from, to, action, value, index, gameStateJson, gameOptionsJson, data]
-	// Match PVM's getActionIndex() logic: actionCount + previousActions.length + 1
-	actionIndex := gameState.ActionCount + len(gameState.PreviousActions) + 1
+
+	// Step 1: Calculate expected action index to match PVM's getActionIndex()
+	// PVM calculates: this._actionCount + this.getPreviousActions().length + 1
+	// - actionCount: persists across hands (total actions in the game session)
+	// - previousActions.length: actions in the current hand (resets on new-hand)
+	// This ensures action indices are globally unique and monotonically increasing
+	expectedActionIndex := gameState.ActionCount + len(gameState.PreviousActions) + 1
+
+	// Step 2: Validate against PVM legal actions
+	// Find the player in game state and verify the action index matches legal actions
+	var playerLegalActions []types.LegalActionDTO
+	for _, player := range gameState.Players {
+		if player.Address == playerId {
+			playerLegalActions = player.LegalActions
+			break
+		}
+	}
+
+	// Verify the action index matches legal actions
+	if len(playerLegalActions) > 0 {
+		// All legal actions for a player should have the same index
+		pvmExpectedIndex := playerLegalActions[0].Index
+
+		if expectedActionIndex != pvmExpectedIndex {
+			sdkCtx.Logger().Error("❌ Action index mismatch",
+				"gameId", gameId,
+				"player", playerId,
+				"action", action,
+				"cosmosCalculated", expectedActionIndex,
+				"pvmExpects", pvmExpectedIndex,
+				"actionCount", gameState.ActionCount,
+				"previousActionsCount", len(gameState.PreviousActions))
+			return fmt.Errorf(
+				"action index mismatch: cosmos calculated %d but PVM expects %d (actionCount: %d, previousActions: %d)",
+				expectedActionIndex,
+				pvmExpectedIndex,
+				gameState.ActionCount,
+				len(gameState.PreviousActions),
+			)
+		}
+	}
+
+	// Step 4: Log validated index for debugging
+	sdkCtx.Logger().Info("✅ Validated action index",
+		"gameId", gameId,
+		"player", playerId,
+		"action", action,
+		"actionCount", gameState.ActionCount,
+		"previousActionsCount", len(gameState.PreviousActions),
+		"calculatedIndex", expectedActionIndex)
+
+	// Step 3: Use validated index
+	actionIndex := expectedActionIndex
 
 	// Format data parameter based on action type
 	var seatData string
@@ -349,6 +400,37 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 			return fmt.Errorf("failed to unmarshal updated game state: %v", err)
 		}
 
+		// Additional validation: Validate that PVM incremented the action index correctly
+		if len(updatedGameState.PreviousActions) > 0 {
+			lastIndex := updatedGameState.PreviousActions[len(updatedGameState.PreviousActions)-1].Index
+
+			// Should match what we sent
+			if lastIndex != actionIndex {
+				sdkCtx.Logger().Warn("⚠️ PVM returned different action index than expected",
+					"expected", actionIndex,
+					"received", lastIndex,
+					"gameId", gameId,
+					"action", action,
+					"player", playerId)
+			}
+		}
+
+		// Additional validation: Check for duplicate indices in previous actions
+		indexMap := make(map[int]bool)
+		for i, prevAction := range updatedGameState.PreviousActions {
+			if indexMap[prevAction.Index] {
+				sdkCtx.Logger().Error("🚨 Duplicate action index detected",
+					"gameId", gameId,
+					"index", prevAction.Index,
+					"position", i,
+					"action", prevAction.Action,
+					"playerId", prevAction.PlayerId,
+					"timestamp", prevAction.Timestamp)
+				// Don't fail the transaction, but log it for monitoring
+			}
+			indexMap[prevAction.Index] = true
+		}
+
 		// Store the updated game state
 		if err := k.GameStates.Set(ctx, gameId, updatedGameState); err != nil {
 			return fmt.Errorf("failed to store updated game state: %w", err)
@@ -364,6 +446,65 @@ func (k msgServer) callGameEngine(ctx context.Context, playerId, gameId, action 
 				sdk.NewAttribute("amount", strconv.FormatUint(amount, 10)),
 			),
 		})
+
+		// Emit hand distribution events for indexer tracking
+		if action == "new-hand" {
+			// Emit hand_started event with deck seed for randomness verification
+			blockHash := sdkCtx.BlockHeader().AppHash
+			if len(blockHash) == 0 {
+				blockHash = sdkCtx.BlockHeader().LastCommitHash
+			}
+			sdkCtx.EventManager().EmitEvents(sdk.Events{
+				sdk.NewEvent(
+					"hand_started",
+					sdk.NewAttribute("game_id", gameId),
+					sdk.NewAttribute("hand_number", strconv.Itoa(updatedGameState.HandNumber)),
+					sdk.NewAttribute("block_height", strconv.FormatInt(sdkCtx.BlockHeight(), 10)),
+					sdk.NewAttribute("deck_seed", fmt.Sprintf("%x", blockHash)),
+					sdk.NewAttribute("deck", updatedGameState.Deck),
+				),
+			})
+		}
+
+		// Emit hand_completed event at showdown with revealed cards
+		if updatedGameState.Round == "showdown" && len(updatedGameState.Winners) > 0 {
+			// Collect all revealed hole cards from players who showed
+			var revealedCards []string
+			for _, player := range updatedGameState.Players {
+				if player.HoleCards != nil && len(*player.HoleCards) > 0 {
+					for _, card := range *player.HoleCards {
+						revealedCards = append(revealedCards, card)
+					}
+				}
+			}
+			// Serialize community cards
+			communityCardsStr := ""
+			for i, card := range updatedGameState.CommunityCards {
+				if i > 0 {
+					communityCardsStr += ","
+				}
+				communityCardsStr += card
+			}
+			// Serialize revealed hole cards
+			revealedCardsStr := ""
+			for i, card := range revealedCards {
+				if i > 0 {
+					revealedCardsStr += ","
+				}
+				revealedCardsStr += card
+			}
+			sdkCtx.EventManager().EmitEvents(sdk.Events{
+				sdk.NewEvent(
+					"hand_completed",
+					sdk.NewAttribute("game_id", gameId),
+					sdk.NewAttribute("hand_number", strconv.Itoa(updatedGameState.HandNumber)),
+					sdk.NewAttribute("block_height", strconv.FormatInt(sdkCtx.BlockHeight(), 10)),
+					sdk.NewAttribute("community_cards", communityCardsStr),
+					sdk.NewAttribute("revealed_hole_cards", revealedCardsStr),
+					sdk.NewAttribute("winner_count", strconv.Itoa(len(updatedGameState.Winners))),
+				),
+			})
+		}
 	} else {
 		return fmt.Errorf("no result returned from poker engine")
 	}
